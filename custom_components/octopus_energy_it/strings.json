@@ -1,0 +1,45 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Octopus Energy Italy",
+        "description": "Enter your Octopus Energy Italy credentials",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Octopus Energy Italy",
+        "description": "Update your Octopus Energy Italy credentials. Current email: {current_email}",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
+      "unknown": "[%key:common::config_flow::error::unknown%]",
+      "no_accounts": "No accounts found for this user"
+    },
+    "abort": {
+      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]",
+      "reconfigure_failed": "Reconfiguration failed",
+      "reconfigure_successful": "Reconfiguration successful"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Octopus Energy Italy Options",
+        "description": "Configure Octopus Energy Italy integration",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        }
+      }
+    }
+  }
+}

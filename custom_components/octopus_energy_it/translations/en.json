@@ -1,0 +1,46 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Device is already configured",
+      "reconfigure_failed": "Reconfiguration failed",
+      "reconfigure_successful": "Reconfiguration successful"
+    },
+    "error": {
+      "invalid_auth": "Email or password are invalid.",
+      "no_accounts": "No accounts found for this user",
+      "unknown": "Unexpected error occurred"
+    },
+    "step": {
+      "user": {
+        "title": "Octopus Energy Italy",
+        "description": "Enter your Octopus Energy Italy credentials",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Octopus Energy Italy",
+        "description": "Update your Octopus Energy Italy credentials. Current email: {current_email}",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        }
+      }
+    }
+  },
+  "options": {
+    "error": {
+      "invalid_auth": "Email or password are invalid."
+    },
+    "step": {
+      "init": {
+        "title": "Octopus Energy Italy.",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        }
+      }
+    }
+  }
+}

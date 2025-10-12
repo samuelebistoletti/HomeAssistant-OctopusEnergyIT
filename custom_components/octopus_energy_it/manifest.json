@@ -1,0 +1,16 @@
+{
+  "domain": "octopus_energy_it",
+  "name": "Octopus Energy Italy",
+  "codeowners": [
+    "@samuelebistoletti"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/samuelebistoletti/HomeAssistant-OctopusEnergyIT",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/samuelebistoletti/HomeAssistant-OctopusEnergyIT/issues",
+  "requirements": [
+    "python-graphql-client==0.4.3"
+  ],
+  "version": "1.0.0"
+}

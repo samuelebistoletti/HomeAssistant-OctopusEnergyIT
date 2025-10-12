@@ -1,0 +1,107 @@
+name: Bug report
+description: Create a report to help us improve
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        # Bug Report for the Octopus Energy Italy Integration
+
+        > [!IMPORTANT]
+        > **Before submitting an issue:**
+        > 
+        > ✅ Make sure you are using the latest version of the integration.
+        > ✅ Check your logs for error messages and attach them.
+        > ✅ Search existing [issues][issue] to see if your problem has already been reported.
+        > ✅ Search existing [discussions][df] to see if your problem has already been discussed, or to ask a question.
+        >
+        > Thank you for your report! 🚀
+        >
+        > [!NOTE]
+        > Due to the high number of issues, incomplete reports (unclear description, missing log files, unsupported platform) will be closed without further comment.
+        >
+        > [df]: https://github.com/samuelebistoletti/HomeAssistant-OctopusEnergyIT/discussions
+        > [issue]: https://github.com/samuelebistoletti/HomeAssistant-OctopusEnergyIT/issues?q=is%3Aissue
+
+  - type: input
+    id: tariff_name
+    attributes:
+      label: What is your current tariff?
+      description: Please provide the name of your current tariff.
+    validations:
+      required: true
+
+  - type: input
+    id: tariff_since
+    attributes:
+      label: Since when is this tariff active?
+      description: Please enter the start date of your tariff (e.g., 2024-01-01).
+    validations:
+      required: true
+
+  - type: dropdown
+    id: tariff_transition
+    attributes:
+      label: Is your tariff still in a transition phase?
+      options:
+        - "Yes"
+        - "No"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: ims_installed
+    attributes:
+      label: Is an IMS (Intelligent Metering System) already installed?
+      options:
+        - "Yes"
+        - "No"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: ims_readable
+    attributes:
+      label: Can the IMS already be read in the app for consumption data?
+      options:
+        - "Yes"
+        - "No"
+        - "Not applicable / No IMS installed"
+    validations:
+      required: true
+
+  - type: textarea
+    validations:
+      required: true
+    attributes:
+      label: Describe the bug
+      description: >-
+        Provide a clear and concise description of the issue.
+
+  - type: textarea
+    validations:
+      required: true
+    attributes:
+      value: |
+        1.
+        2.
+        3.
+        ...
+      label: Steps to reproduce
+      description: >-
+        List the steps to reproduce the behavior.
+
+  - type: textarea
+    validations:
+      required: true
+    attributes:
+      label: Log details
+      render: text
+      description: >
+        Attach relevant log output. See https://github.com/samuelebistoletti/HomeAssistant-OctopusEnergyIT/blob/main/README.md#debugging for instructions.
+
+  - type: input
+    attributes:
+      label: Version
+      description: >
+        State the installed version of the Octopus Energy Italy Integration.
