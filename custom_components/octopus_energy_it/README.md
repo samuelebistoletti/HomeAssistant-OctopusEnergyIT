@@ -322,8 +322,8 @@ After restarting HA the API-Responses and additional information will be in debu
 ## API Support
 
 For API-related questions, consult the official documentation:
-- REST API: https://developer.oeg-kraken.energy/
-- GraphQL API: https://developer.oeg-kraken.energy/graphql/
+- REST API: https://developer.oeit-kraken.energy/
+- GraphQL API: https://developer.oeit-kraken.energy/graphql/
 
 ## Support
 
