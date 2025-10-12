@@ -1,17 +1,19 @@
-"""Provide the OctopusEnergyIT class for interacting with the Octopus Energy API.
+"""
+Provide the OctopusEnergyIT class for interacting with the Octopus Energy API.
 
 Includes methods for authentication, fetching account details, managing devices, and retrieving
 various data related to electricity usage and tariffs.
 """
 
-import logging
-import json
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple, Union, cast
 import asyncio
+import json
+import logging
+from datetime import datetime
+
 import jwt
 from homeassistant.exceptions import ConfigEntryNotReady
 from python_graphql_client import GraphqlClient
+
 from .const import TOKEN_AUTO_REFRESH_INTERVAL, TOKEN_REFRESH_MARGIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -434,11 +436,13 @@ class TokenManager:
 
 class OctopusEnergyIT:
     def __init__(self, email: str, password: str):
-        """Initialize the OctopusEnergyIT API client.
+        """
+        Initialize the OctopusEnergyIT API client.
 
         Args:
             email: The email address for the Octopus Energy Italy account
             password: The password for the Octopus Energy Italy account
+
         """
         self._email = email
         self._password = password
@@ -554,17 +558,16 @@ class OctopusEnergyIT:
                                 delay * 2, max_delay
                             )  # Exponential backoff with max cap
                             continue
-                        else:
-                            _LOGGER.error(
-                                "Login failed: %s (attempt %s of %s)",
-                                error_message,
-                                attempt,
-                                retries,
-                            )
-                            # For other types of errors, continue with retries
-                            await asyncio.sleep(delay)
-                            delay = min(delay * 2, max_delay)
-                            continue
+                        _LOGGER.error(
+                            "Login failed: %s (attempt %s of %s)",
+                            error_message,
+                            attempt,
+                            retries,
+                        )
+                        # For other types of errors, continue with retries
+                        await asyncio.sleep(delay)
+                        delay = min(delay * 2, max_delay)
+                        continue
 
                     if "data" in response and "obtainKrakenToken" in response["data"]:
                         token_data = response["data"]["obtainKrakenToken"]
@@ -585,12 +588,11 @@ class OctopusEnergyIT:
                                 self._token_manager.set_token(token)
 
                             return True
-                        else:
-                            _LOGGER.error(
-                                "No token in response despite successful request (attempt %s of %s)",
-                                attempt,
-                                retries,
-                            )
+                        _LOGGER.error(
+                            "No token in response despite successful request (attempt %s of %s)",
+                            attempt,
+                            retries,
+                        )
                     else:
                         _LOGGER.error(
                             "Unexpected API response format at attempt %s: %s",
@@ -636,9 +638,8 @@ class OctopusEnergyIT:
 
                 # Return the accounts data
                 return accounts
-            else:
-                _LOGGER.error("Unexpected API response structure: %s", response)
-                return None
+            _LOGGER.error("Unexpected API response structure: %s", response)
+            return None
         except Exception as e:
             _LOGGER.error("Error fetching accounts with initial data: %s", e)
             return None
@@ -659,7 +660,8 @@ class OctopusEnergyIT:
 
     # Comprehensive data fetch in a single query
     async def fetch_all_data(self, account_number: str):
-        """Fetch all data for an account including devices, dispatches and account details.
+        """
+        Fetch all data for an account including devices, dispatches and account details.
 
         This comprehensive query consolidates multiple separate queries into one
         to minimize API calls and improve performance.
@@ -760,46 +762,61 @@ class OctopusEnergyIT:
                 # Fetch flex planned dispatches for all devices with the new API
                 result["plannedDispatches"] = []
                 if result["devices"]:
-                    _LOGGER.debug("Fetching flex planned dispatches for %d devices", len(result["devices"]))
+                    _LOGGER.debug(
+                        "Fetching flex planned dispatches for %d devices",
+                        len(result["devices"]),
+                    )
                     for device in result["devices"]:
                         device_id = device.get("id")
                         device_name = device.get("name", "Unknown")
                         if device_id:
                             try:
-                                flex_dispatches = await self.fetch_flex_planned_dispatches(device_id)
+                                flex_dispatches = (
+                                    await self.fetch_flex_planned_dispatches(device_id)
+                                )
                                 if flex_dispatches:
                                     # Transform the new API format to match the old format for backward compatibility
                                     for dispatch in flex_dispatches:
                                         # Map new fields to old field names where possible
                                         transformed_dispatch = {
                                             "start": dispatch.get("start"),
-                                            "startDt": dispatch.get("start"),  # Same as start
+                                            "startDt": dispatch.get(
+                                                "start"
+                                            ),  # Same as start
                                             "end": dispatch.get("end"),
                                             "endDt": dispatch.get("end"),  # Same as end
                                             "deltaKwh": dispatch.get("energyAddedKwh"),
-                                            "delta": dispatch.get("energyAddedKwh"),  # Same as deltaKwh
-                                            "type": dispatch.get("type", "UNKNOWN"),  # Add type as top-level attribute
+                                            "delta": dispatch.get(
+                                                "energyAddedKwh"
+                                            ),  # Same as deltaKwh
+                                            "type": dispatch.get(
+                                                "type", "UNKNOWN"
+                                            ),  # Add type as top-level attribute
                                             "meta": {
                                                 "source": "flex_api",
                                                 "type": dispatch.get("type", "UNKNOWN"),
-                                                "deviceId": device_id
-                                            }
+                                                "deviceId": device_id,
+                                            },
                                         }
-                                        result["plannedDispatches"].append(transformed_dispatch)
+                                        result["plannedDispatches"].append(
+                                            transformed_dispatch
+                                        )
                                     _LOGGER.debug(
                                         "Added %d flex planned dispatches from device %s (%s)",
                                         len(flex_dispatches),
                                         device_id,
-                                        device_name
+                                        device_name,
                                     )
                             except Exception as e:
                                 _LOGGER.warning(
                                     "Failed to fetch flex planned dispatches for device %s: %s",
                                     device_id,
-                                    e
+                                    e,
                                 )
                 else:
-                    _LOGGER.debug("No devices found, skipping flex planned dispatches fetch")
+                    _LOGGER.debug(
+                        "No devices found, skipping flex planned dispatches fetch"
+                    )
 
                 # Only log errors but don't fail the whole request if we got at least account data
                 if "errors" in response and result["account"]:
@@ -844,7 +861,7 @@ class OctopusEnergyIT:
                                     return await self.fetch_all_data(account_number)
 
                 return result
-            elif "errors" in response:
+            if "errors" in response:
                 # Handle critical errors that prevent any data from being returned
                 error = response.get("errors", [{}])[0]
                 error_code = error.get("extensions", {}).get("errorCode")
@@ -863,9 +880,8 @@ class OctopusEnergyIT:
                     response.get("errors"),
                 )
                 return None
-            else:
-                _LOGGER.error("API response contains neither data nor errors")
-                return None
+            _LOGGER.error("API response contains neither data nor errors")
+            return None
 
         except Exception as e:
             _LOGGER.error("Error fetching all data: %s", e)
@@ -926,7 +942,8 @@ class OctopusEnergyIT:
         target_percentage: int,
         target_time: str,
     ) -> bool:
-        """Set device charging preferences using the new setDevicePreferences API.
+        """
+        Set device charging preferences using the new setDevicePreferences API.
 
         Args:
             device_id: The device ID to set preferences for
@@ -935,11 +952,10 @@ class OctopusEnergyIT:
 
         Returns:
             True if successful, False otherwise
+
         """
         if not await self.ensure_token():
-            _LOGGER.error(
-                "Failed to ensure valid token for set_device_preferences"
-            )
+            _LOGGER.error("Failed to ensure valid token for set_device_preferences")
             return False
 
         # Validate percentage range (20-100% in 5% steps)
@@ -1052,13 +1068,15 @@ class OctopusEnergyIT:
             return False
 
     async def get_vehicle_devices(self, account_number: str):
-        """Get vehicle device details with preference settings.
+        """
+        Get vehicle device details with preference settings.
 
         Args:
             account_number: The account number
 
         Returns:
             List of vehicle devices with their settings or None if error
+
         """
         if not await self.ensure_token():
             _LOGGER.error("Failed to ensure valid token for get_vehicle_devices")
@@ -1104,7 +1122,8 @@ class OctopusEnergyIT:
 
                 # Filter for electric vehicle devices
                 vehicle_devices = [
-                    device for device in devices
+                    device
+                    for device in devices
                     if device.get("deviceType") == "ELECTRIC_VEHICLES"
                 ]
 
@@ -1113,25 +1132,28 @@ class OctopusEnergyIT:
                     len(vehicle_devices),
                 )
                 return vehicle_devices
-            else:
-                _LOGGER.error("Invalid response structure for vehicle devices")
-                return None
+            _LOGGER.error("Invalid response structure for vehicle devices")
+            return None
 
         except Exception as e:
             _LOGGER.error("Error fetching vehicle devices: %s", e)
             return None
 
     async def fetch_flex_planned_dispatches(self, device_id: str):
-        """Fetch planned dispatches for a specific device using the new flexPlannedDispatches API.
+        """
+        Fetch planned dispatches for a specific device using the new flexPlannedDispatches API.
 
         Args:
             device_id: The device ID to fetch planned dispatches for
 
         Returns:
             List of planned dispatches for the device or None if error
+
         """
         if not await self.ensure_token():
-            _LOGGER.error("Failed to ensure valid token for fetch_flex_planned_dispatches")
+            _LOGGER.error(
+                "Failed to ensure valid token for fetch_flex_planned_dispatches"
+            )
             return None
 
         # Use inline query with device ID as shown in the working example
@@ -1181,12 +1203,11 @@ class OctopusEnergyIT:
                         error_message,
                     )
                     return []
-                else:
-                    _LOGGER.error(
-                        "GraphQL errors in flex planned dispatches response: %s",
-                        response["errors"],
-                    )
-                    return None
+                _LOGGER.error(
+                    "GraphQL errors in flex planned dispatches response: %s",
+                    response["errors"],
+                )
+                return None
 
             if "data" in response and "flexPlannedDispatches" in response["data"]:
                 dispatches = response["data"]["flexPlannedDispatches"]
@@ -1199,16 +1220,16 @@ class OctopusEnergyIT:
                     device_id,
                 )
                 return dispatches
-            else:
-                _LOGGER.error("Invalid response structure for flex planned dispatches")
-                return None
+            _LOGGER.error("Invalid response structure for flex planned dispatches")
+            return None
 
         except Exception as e:
             _LOGGER.error("Error fetching flex planned dispatches: %s", e)
             return None
 
     def _format_time_to_hh_mm(self, time_str: str) -> str:
-        """Format time to HH:MM format required by the API.
+        """
+        Format time to HH:MM format required by the API.
 
         Handles various input formats like "HH:MM:SS", "HH:MM",
         or time selector values from Home Assistant.
@@ -1221,6 +1242,7 @@ class OctopusEnergyIT:
 
         Raises:
             ValueError: If time_str cannot be parsed or contains invalid hours/minutes
+
         """
         if not time_str:
             raise ValueError("Empty time value provided")
@@ -1251,37 +1273,36 @@ class OctopusEnergyIT:
 
                 return f"{hours:02d}:{minutes:02d}"
 
-            else:
-                # For other formats, try using datetime
-                from datetime import datetime
+            # For other formats, try using datetime
+            from datetime import datetime
 
-                # Try different common formats
-                formats = ["%H:%M:%S", "%H:%M", "%I:%M %p", "%I:%M:%S %p"]
+            # Try different common formats
+            formats = ["%H:%M:%S", "%H:%M", "%I:%M %p", "%I:%M:%S %p"]
 
-                for fmt in formats:
-                    try:
-                        dt = datetime.strptime(time_str, fmt)
-                        return f"{dt.hour:02d}:{dt.minute:02d}"
-                    except ValueError:
-                        continue
+            for fmt in formats:
+                try:
+                    dt = datetime.strptime(time_str, fmt)
+                    return f"{dt.hour:02d}:{dt.minute:02d}"
+                except ValueError:
+                    continue
 
-                # If we got here, none of the formats worked
-                raise ValueError(
-                    f"Could not parse time: '{time_str}'. Please use HH:MM format (e.g. '05:00')"
-                )
+            # If we got here, none of the formats worked
+            raise ValueError(
+                f"Could not parse time: '{time_str}'. Please use HH:MM format (e.g. '05:00')"
+            )
 
         except Exception as e:
             if isinstance(e, ValueError):
                 # Pass through ValueError with informative messages
                 raise
-            else:
-                # Wrap other exceptions
-                raise ValueError(f"Error processing time '{time_str}': {str(e)}")
+            # Wrap other exceptions
+            raise ValueError(f"Error processing time '{time_str}': {e!s}")
 
     # Remove redundant _fetch_account_and_devices method since fetch_all_data does the same thing
     # The method below is kept only for backward compatibility
     async def _fetch_account_and_devices(self, account_number: str):
-        """Fetch account and devices data using the comprehensive query.
+        """
+        Fetch account and devices data using the comprehensive query.
 
         This method is kept for backward compatibility but now uses the same
         comprehensive query as fetch_all_data.
@@ -1304,7 +1325,8 @@ class OctopusEnergyIT:
         }
 
     async def fetch_gas_meter_reading(self, account_number: str, meter_id: str):
-        """Fetch the latest gas meter reading for a specific meter.
+        """
+        Fetch the latest gas meter reading for a specific meter.
 
         Args:
             account_number: The account number
@@ -1312,6 +1334,7 @@ class OctopusEnergyIT:
 
         Returns:
             Dict containing the latest reading data or None if error
+
         """
         if not await self.ensure_token():
             _LOGGER.error("Failed to ensure valid token for fetch_gas_meter_reading")
@@ -1359,21 +1382,20 @@ class OctopusEnergyIT:
                         latest_reading.get("origin"),
                     )
                     return latest_reading
-                else:
-                    _LOGGER.warning(
-                        "No gas meter readings found for meter %s", meter_id
-                    )
-                    return None
-            else:
-                _LOGGER.error("Invalid response structure for gas meter reading")
+                _LOGGER.warning(
+                    "No gas meter readings found for meter %s", meter_id
+                )
                 return None
+            _LOGGER.error("Invalid response structure for gas meter reading")
+            return None
 
         except Exception as e:
             _LOGGER.error("Error fetching gas meter reading: %s", e)
             return None
 
     async def fetch_electricity_meter_reading(self, account_number: str, meter_id: str):
-        """Fetch the latest electricity meter reading for a specific meter.
+        """
+        Fetch the latest electricity meter reading for a specific meter.
 
         Args:
             account_number: The account number
@@ -1381,9 +1403,12 @@ class OctopusEnergyIT:
 
         Returns:
             Dict containing the latest reading data or None if error
+
         """
         if not await self.ensure_token():
-            _LOGGER.error("Failed to ensure valid token for fetch_electricity_meter_reading")
+            _LOGGER.error(
+                "Failed to ensure valid token for fetch_electricity_meter_reading"
+            )
             return None
 
         variables = {"accountNumber": account_number, "meterId": meter_id}
@@ -1400,7 +1425,9 @@ class OctopusEnergyIT:
             )
 
             if response is None:
-                _LOGGER.error("API returned None response for electricity meter reading")
+                _LOGGER.error(
+                    "API returned None response for electricity meter reading"
+                )
                 return None
 
             if "errors" in response:
@@ -1428,14 +1455,14 @@ class OctopusEnergyIT:
                         latest_reading.get("origin"),
                     )
                     return latest_reading
-                else:
-                    _LOGGER.warning(
-                        "No electricity meter readings found for meter %s", meter_id
-                    )
-                    return None
-            else:
-                _LOGGER.error("Invalid response structure for electricity meter reading")
+                _LOGGER.warning(
+                    "No electricity meter readings found for meter %s", meter_id
+                )
                 return None
+            _LOGGER.error(
+                "Invalid response structure for electricity meter reading"
+            )
+            return None
 
         except Exception as e:
             _LOGGER.error("Error fetching electricity meter reading: %s", e)

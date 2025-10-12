@@ -1,28 +1,27 @@
-"""Octopus Energy Italy Integration.
+"""
+Octopus Energy Italy Integration.
 
 This module provides integration with the Octopus Energy Italy API for Home Assistant.
 """
 
 from __future__ import annotations
 
-import logging
-from datetime import timedelta, datetime
 import inspect
+import logging
+from datetime import datetime, timedelta
 
+import aiohttp
+import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-from homeassistant.util.dt import utcnow, as_utc, parse_datetime
-
-from .const import DOMAIN, CONF_EMAIL, CONF_PASSWORD, UPDATE_INTERVAL, DEBUG_ENABLED
-from .octopus_energy_it import OctopusEnergyIT
-
-import voluptuous as vol
-from homeassistant.core import ServiceCall
+from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-import aiohttp
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.util.dt import as_utc, parse_datetime, utcnow
+
+from .const import CONF_EMAIL, CONF_PASSWORD, DEBUG_ENABLED, DOMAIN, UPDATE_INTERVAL
+from .octopus_energy_it import OctopusEnergyIT
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -572,8 +571,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
                                 # Extract the gross rate
                                 if (
-                                    "grossRateInformation" in rate
-                                    and rate["grossRateInformation"]
+                                    rate.get("grossRateInformation")
                                 ):
                                     if isinstance(rate["grossRateInformation"], dict):
                                         gross_rate = rate["grossRateInformation"].get(
@@ -958,7 +956,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     )
                 else:
                     _LOGGER.debug(
-                        "No electricity meter reading returned for meter %s", electricity_meter_id
+                        "No electricity meter reading returned for meter %s",
+                        electricity_meter_id,
                     )
 
             except Exception as e:
@@ -969,7 +968,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     str(e),
                 )
 
-        result_data[account_number]["electricity_latest_reading"] = electricity_latest_reading
+        result_data[account_number]["electricity_latest_reading"] = (
+            electricity_latest_reading
+        )
 
         return result_data
 
@@ -1026,6 +1027,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not device_id:
             _LOGGER.error("Device ID is required for set_device_preferences")
             from homeassistant.exceptions import ServiceValidationError
+
             raise ServiceValidationError(
                 "Device ID is required",
                 translation_domain=DOMAIN,
@@ -1037,6 +1039,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 f"Invalid target percentage: {target_percentage}. Must be between 20 and 100"
             )
             from homeassistant.exceptions import ServiceValidationError
+
             raise ServiceValidationError(
                 f"Invalid target percentage: {target_percentage}. Must be between 20 and 100",
                 translation_domain=DOMAIN,
@@ -1047,6 +1050,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 f"Invalid target percentage: {target_percentage}. Must be in 5% steps"
             )
             from homeassistant.exceptions import ServiceValidationError
+
             raise ServiceValidationError(
                 f"Invalid target percentage: {target_percentage}. Must be in 5% steps",
                 translation_domain=DOMAIN,
@@ -1058,8 +1062,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         except ValueError as time_error:
             _LOGGER.error("Time validation error: %s", time_error)
             from homeassistant.exceptions import ServiceValidationError
+
             raise ServiceValidationError(
-                f"Invalid time format: {str(time_error)}",
+                f"Invalid time format: {time_error!s}",
                 translation_domain=DOMAIN,
             )
 
@@ -1080,16 +1085,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if success:
                 _LOGGER.info("Successfully set device preferences")
                 return {"success": True}
-            else:
-                _LOGGER.error("Failed to set device preferences")
-                from homeassistant.exceptions import ServiceValidationError
-                raise ServiceValidationError(
-                    "Failed to set device preferences. Check the log for details.",
-                    translation_domain=DOMAIN,
-                )
+            _LOGGER.error("Failed to set device preferences")
+            from homeassistant.exceptions import ServiceValidationError
+
+            raise ServiceValidationError(
+                "Failed to set device preferences. Check the log for details.",
+                translation_domain=DOMAIN,
+            )
         except ValueError as e:
             _LOGGER.error("Validation error: %s", e)
             from homeassistant.exceptions import ServiceValidationError
+
             raise ServiceValidationError(
                 f"Invalid parameters: {e}",
                 translation_domain=DOMAIN,
@@ -1097,6 +1103,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         except Exception as e:
             _LOGGER.exception("Unexpected error setting device preferences: %s", e)
             from homeassistant.exceptions import HomeAssistantError
+
             raise HomeAssistantError(f"Error setting device preferences: {e}")
 
     hass.services.async_register(
@@ -1110,7 +1117,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         hass.data[DOMAIN].pop(entry.entry_id)
 
@@ -1124,4 +1130,3 @@ async def _async_update_options(hass: HomeAssistant, config_entry: ConfigEntry) 
         config_entry, data={**config_entry.data, **config_entry.options}
     )
     await hass.config_entries.async_reload(config_entry.entry_id)
-

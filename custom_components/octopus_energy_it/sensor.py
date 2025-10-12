@@ -6,16 +6,15 @@ electricity price information.
 """
 
 import logging
-from typing import Any, Dict, Optional
-from datetime import datetime, time, timezone
+from datetime import UTC, datetime, time
+from typing import Any
 
 from homeassistant.components.sensor import (
+    SensorDeviceClass,
     SensorEntity,
     SensorStateClass,
-    SensorDeviceClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import STATE_UNKNOWN
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -81,13 +80,17 @@ async def async_setup_entry(
                     )
 
             # Create electricity balance sensor if electricity ledger exists and account has electricity service
-            if "electricity_balance" in account_data and account_data.get("malo_number"):
+            if "electricity_balance" in account_data and account_data.get(
+                "malo_number"
+            ):
                 entities.append(OctopusElectricityBalanceSensor(acc_num, coordinator))
 
             # Create gas sensors if account has gas service
             if account_data.get("gas_malo_number"):
                 # Create gas balance sensor if gas ledger exists
-                if "gas_balance" in account_data and account_data.get("gas_malo_number"):
+                if "gas_balance" in account_data and account_data.get(
+                    "gas_malo_number"
+                ):
                     entities.append(OctopusGasBalanceSensor(acc_num, coordinator))
 
                 # Create gas tariff sensor if gas products exist
@@ -144,7 +147,10 @@ async def async_setup_entry(
                 entities.append(OctopusDeviceStatusSensor(acc_num, coordinator))
 
             # Create heat balance sensor if heat ledger exists and has non-zero balance
-            if "heat_balance" in account_data and account_data.get("heat_balance", 0) != 0:
+            if (
+                "heat_balance" in account_data
+                and account_data.get("heat_balance", 0) != 0
+            ):
                 entities.append(OctopusHeatBalanceSensor(acc_num, coordinator))
 
             # Create sensors for other ledgers
@@ -153,19 +159,18 @@ async def async_setup_entry(
                 entities.append(
                     OctopusLedgerBalanceSensor(acc_num, coordinator, ledger_type)
                 )
+        elif coordinator.data is None:
+            _LOGGER.error("No coordinator data available")
+        elif acc_num not in coordinator.data:
+            _LOGGER.warning("Account %s missing from coordinator data", acc_num)
+        elif "products" not in coordinator.data[acc_num]:
+            _LOGGER.warning(
+                "No 'products' key in coordinator data for account %s", acc_num
+            )
         else:
-            if coordinator.data is None:
-                _LOGGER.error("No coordinator data available")
-            elif acc_num not in coordinator.data:
-                _LOGGER.warning("Account %s missing from coordinator data", acc_num)
-            elif "products" not in coordinator.data[acc_num]:
-                _LOGGER.warning(
-                    "No 'products' key in coordinator data for account %s", acc_num
-                )
-            else:
-                _LOGGER.warning(
-                    "Unknown issue detecting products for account %s", acc_num
-                )
+            _LOGGER.warning(
+                "Unknown issue detecting products for account %s", acc_num
+            )
 
     # Only add entities if we have any
     if entities:
@@ -219,11 +224,10 @@ class OctopusElectricityPriceSensor(CoordinatorEntity, SensorEntity):
             # Otherwise, the slot is active from time_from until midnight, or from midnight until time_from
             return current_time >= time_from or current_time < time_to
         # Normal case: check if time is between start and end
-        elif time_from <= time_to:
+        if time_from <= time_to:
             return time_from <= current_time < time_to
         # Handle case where range crosses midnight
-        else:
-            return time_from <= current_time or current_time < time_to
+        return time_from <= current_time or current_time < time_to
 
     def _get_active_timeslot_rate(self, product):
         """Get the currently active timeslot rate for a time-of-use product."""
@@ -270,7 +274,7 @@ class OctopusElectricityPriceSensor(CoordinatorEntity, SensorEntity):
         if not unit_rate_forecast:
             return None
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Find the forecast entry that covers the current time
         for forecast_entry in unit_rate_forecast:
@@ -668,7 +672,7 @@ class OctopusElectricityPriceSensor(CoordinatorEntity, SensorEntity):
         self.async_write_ha_state()
 
     @property
-    def extra_state_attributes(self) -> Dict[str, Any]:
+    def extra_state_attributes(self) -> dict[str, Any]:
         """Return additional state attributes for the sensor."""
         return self._attributes
 
@@ -1000,7 +1004,7 @@ class OctopusGasTariffSensor(CoordinatorEntity, SensorEntity):
         self.async_write_ha_state()
 
     @property
-    def extra_state_attributes(self) -> Dict[str, Any]:
+    def extra_state_attributes(self) -> dict[str, Any]:
         """Return additional state attributes for the sensor."""
         return self._attributes
 
@@ -1169,7 +1173,7 @@ class OctopusGasMeterSensor(CoordinatorEntity, SensorEntity):
         self.async_write_ha_state()
 
     @property
-    def extra_state_attributes(self) -> Dict[str, Any]:
+    def extra_state_attributes(self) -> dict[str, Any]:
         """Return additional state attributes for the sensor."""
         return self._attributes
 
@@ -1298,7 +1302,7 @@ class OctopusGasLatestReadingSensor(CoordinatorEntity, SensorEntity):
         self.async_write_ha_state()
 
     @property
-    def extra_state_attributes(self) -> Dict[str, Any]:
+    def extra_state_attributes(self) -> dict[str, Any]:
         """Return additional state attributes for the sensor."""
         return self._attributes
 
@@ -1434,7 +1438,7 @@ class OctopusElectricityLatestReadingSensor(CoordinatorEntity, SensorEntity):
         self.async_write_ha_state()
 
     @property
-    def extra_state_attributes(self) -> Dict[str, Any]:
+    def extra_state_attributes(self) -> dict[str, Any]:
         """Return additional state attributes for the sensor."""
         return self._attributes
 
@@ -1526,10 +1530,9 @@ class OctopusGasSmartReadingSensor(CoordinatorEntity, SensorEntity):
 
         if smart_reading is None:
             return "Unknown"
-        elif smart_reading:
+        if smart_reading:
             return "Enabled"
-        else:
-            return "Disabled"
+        return "Disabled"
 
     @property
     def available(self) -> bool:
@@ -1781,7 +1784,7 @@ class OctopusDeviceStatusSensor(CoordinatorEntity, SensorEntity):
         self.async_write_ha_state()
 
     @property
-    def extra_state_attributes(self) -> Dict[str, Any]:
+    def extra_state_attributes(self) -> dict[str, Any]:
         """Return additional state attributes for the sensor."""
         return self._attributes
 
@@ -1800,5 +1803,6 @@ class OctopusDeviceStatusSensor(CoordinatorEntity, SensorEntity):
             and self._account_number in self.coordinator.data
             and self.coordinator.data[self._account_number].get("devices")
         )
+
 
 # Datei bereinigt - nur normale Sensoren

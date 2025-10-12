@@ -1,12 +1,11 @@
-# https://www.home-assistant.io/integrations/default_config/
+
+# Loads default set of integrations. Do not remove.
 default_config:
 
-# https://www.home-assistant.io/integrations/homeassistant/
-homeassistant:
-  debug: true
+# Load frontend themes from the themes folder
+frontend:
+  themes: !include_dir_merge_named themes
 
-# https://www.home-assistant.io/integrations/logger/
-logger:
-  default: info
-  logs:
-    custom_components.octopus_energy_it: debug
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml

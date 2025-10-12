@@ -1,7 +1,7 @@
 """Binary sensors for the Octopus Energy Italy integration."""
 
-from datetime import datetime
 import logging
+from datetime import datetime
 from typing import Any
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
@@ -93,7 +93,8 @@ class OctopusIntelligentDispatchingBinarySensor(CoordinatorEntity, BinarySensorE
 
     @property
     def is_on(self) -> bool:
-        """Determine if the binary sensor is currently active.
+        """
+        Determine if the binary sensor is currently active.
 
         The sensor is 'on' (true) when at least one planned dispatch
         exists that encompasses the current time.
@@ -162,24 +163,23 @@ class OctopusIntelligentDispatchingBinarySensor(CoordinatorEntity, BinarySensorE
                         now.isoformat(),
                     )
                     return True
-                else:
-                    time_to_start = (
-                        (start - now).total_seconds() if start > now else None
-                    )
-                    time_since_end = (now - end).total_seconds() if now > end else None
+                time_to_start = (
+                    (start - now).total_seconds() if start > now else None
+                )
+                time_since_end = (now - end).total_seconds() if now > end else None
 
-                    if time_to_start is not None:
-                        _LOGGER.debug(
-                            "Dispatch not yet active - starts in %d seconds (%s)",
-                            int(time_to_start),
-                            start.isoformat(),
-                        )
-                    elif time_since_end is not None:
-                        _LOGGER.debug(
-                            "Dispatch already ended - ended %d seconds ago (%s)",
-                            int(time_since_end),
-                            end.isoformat(),
-                        )
+                if time_to_start is not None:
+                    _LOGGER.debug(
+                        "Dispatch not yet active - starts in %d seconds (%s)",
+                        int(time_to_start),
+                        start.isoformat(),
+                    )
+                elif time_since_end is not None:
+                    _LOGGER.debug(
+                        "Dispatch already ended - ended %d seconds ago (%s)",
+                        int(time_since_end),
+                        end.isoformat(),
+                    )
 
             except (ValueError, TypeError) as e:
                 _LOGGER.error("Error parsing dispatch data: %s - %s", dispatch, str(e))

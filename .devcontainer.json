@@ -2,15 +2,6 @@
     "name": "samuelebistoletti/HomeAssistant-OctopusEnergyIT",
     "image": "mcr.microsoft.com/devcontainers/python:3.13",
     "postCreateCommand": "scripts/setup",
-    "forwardPorts": [
-        8123
-    ],
-    "portsAttributes": {
-        "8123": {
-            "label": "Home Assistant",
-            "onAutoForward": "notify"
-        }
-    },
     "customizations": {
         "vscode": {
             "extensions": [

@@ -1,8 +1,8 @@
 """Config flow for Octopus Energy Italy integration."""
 
 import logging
-import voluptuous as vol
 
+import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 
@@ -173,7 +173,9 @@ class OctopusEnergyITOptionsFlow(config_entries.OptionsFlow):
 
                 # Update the entry
                 self.hass.config_entries.async_update_entry(
-                    self.config_entry, data=new_data, title=f"Octopus Energy Italy ({email})"
+                    self.config_entry,
+                    data=new_data,
+                    title=f"Octopus Energy Italy ({email})",
                 )
 
                 # Return updated options (empty since we store in data)
