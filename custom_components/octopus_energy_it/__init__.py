@@ -205,12 +205,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         result_data = {
             account_number: {
                 "account_number": account_number,
+                "account": {},
                 "electricity_balance": 0,
                 "planned_dispatches": [],
+                "plannedDispatches": [],
                 "completed_dispatches": [],
+                "completedDispatches": [],
                 "property_ids": [],
+                "properties": [],
                 "devices": [],
+                "devices_raw": [],
                 "products": [],
+                "products_raw": [],
                 "gas_products": [],
                 "vehicle_battery_size_in_kwh": None,
                 "current_start": None,
@@ -224,6 +230,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "gas_malo_number": None,
                 "gas_melo_number": None,
                 "gas_meter": None,
+                "raw_response": {},
             }
         }
 
@@ -235,9 +242,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "Processing API data - fields available: %s",
             list(data.keys()) if data else [],
         )
+        result_data[account_number]["raw_response"] = data or {}
 
         # Only try to access account_data keys if it's not None and is a dictionary
         if account_data and isinstance(account_data, dict):
+            result_data[account_number]["account"] = account_data
+            result_data[account_number]["properties"] = account_data.get("properties", [])
             _LOGGER.debug("Account data fields: %s", list(account_data.keys()))
         else:
             _LOGGER.warning("Account data is missing or invalid: %s", account_data)
@@ -291,83 +301,60 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             len(other_ledgers),
         )
 
-        # Extract MALO and MELO numbers
-        malo_number = next(
+        # Extract supply point identifiers for electricity and gas
+        first_electricity_supply_point = next(
             (
-                malo.get("maloNumber")
-                for prop in account_data.get("allProperties", [])
-                for malo in prop.get("electricityMalos", [])
-                if malo.get("maloNumber")
+                supply_point
+                for prop in account_data.get("properties", [])
+                for supply_point in prop.get("electricitySupplyPoints", [])
             ),
             None,
         )
-        result_data[account_number]["malo_number"] = malo_number
 
-        melo_number = next(
-            (
-                malo.get("meloNumber")
-                for prop in account_data.get("allProperties", [])
-                for malo in prop.get("electricityMalos", [])
-                if malo.get("meloNumber")
-            ),
-            None,
-        )
-        result_data[account_number]["melo_number"] = melo_number
+        electricity_pod = None
+        electricity_supply_id = None
+        if first_electricity_supply_point:
+            electricity_pod = first_electricity_supply_point.get("pod")
+            electricity_supply_id = first_electricity_supply_point.get("id")
 
-        # Get meter data
+        result_data[account_number]["malo_number"] = electricity_pod
+        result_data[account_number]["melo_number"] = electricity_supply_id
+
+        # Meter identifiers are not currently exposed through the public schema
         meter = None
-        for prop in account_data.get("allProperties", []):
-            for malo in prop.get("electricityMalos", []):
-                if malo.get("meter"):
-                    meter = malo.get("meter")
-                    break
-            if meter:
-                break
         result_data[account_number]["meter"] = meter
 
-        # Extract gas MALO and MELO numbers
-        gas_malo_number = next(
+        first_gas_supply_point = next(
             (
-                malo.get("maloNumber")
-                for prop in account_data.get("allProperties", [])
-                for malo in prop.get("gasMalos", [])
-                if malo.get("maloNumber")
+                supply_point
+                for prop in account_data.get("properties", [])
+                for supply_point in prop.get("gasSupplyPoints", [])
             ),
             None,
         )
-        result_data[account_number]["gas_malo_number"] = gas_malo_number
 
-        gas_melo_number = next(
-            (
-                malo.get("meloNumber")
-                for prop in account_data.get("allProperties", [])
-                for malo in prop.get("gasMalos", [])
-                if malo.get("meloNumber")
-            ),
-            None,
-        )
-        result_data[account_number]["gas_melo_number"] = gas_melo_number
+        gas_pdr = None
+        gas_supply_id = None
+        if first_gas_supply_point:
+            gas_pdr = first_gas_supply_point.get("pdr")
+            gas_supply_id = first_gas_supply_point.get("id")
 
-        # Get gas meter data
+        result_data[account_number]["gas_malo_number"] = gas_pdr
+        result_data[account_number]["gas_melo_number"] = gas_supply_id
         gas_meter = None
-        for prop in account_data.get("allProperties", []):
-            for malo in prop.get("gasMalos", []):
-                if malo.get("meter"):
-                    gas_meter = malo.get("meter")
-                    break
-            if gas_meter:
-                break
         result_data[account_number]["gas_meter"] = gas_meter
 
         # Extract property IDs
         property_ids = [
-            prop.get("id") for prop in account_data.get("allProperties", [])
+            prop.get("id") for prop in account_data.get("properties", [])
         ]
         result_data[account_number]["property_ids"] = property_ids
+
 
         # Handle device-related data if it exists (may be missing with KT-CT-4301 error)
         devices = data.get("devices", [])
         result_data[account_number]["devices"] = devices
+        result_data[account_number]["devices_raw"] = devices
 
         # Extract vehicle battery size if available
         vehicle_battery_size = None
@@ -391,11 +378,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if planned_dispatches is None:  # Handle explicit None value (from API error)
             planned_dispatches = []
         result_data[account_number]["planned_dispatches"] = planned_dispatches
+        result_data[account_number]["plannedDispatches"] = planned_dispatches
 
         completed_dispatches = data.get("completedDispatches", [])
         if completed_dispatches is None:  # Handle explicit None value (from API error)
             completed_dispatches = []
         result_data[account_number]["completed_dispatches"] = completed_dispatches
+        result_data[account_number]["completedDispatches"] = completed_dispatches
 
         # Calculate current and next dispatches
         now = utcnow()  # Use timezone-aware UTC now
@@ -431,462 +420,126 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         result_data[account_number]["next_start"] = next_start
         result_data[account_number]["next_end"] = next_end
 
-        # Extract products - ensure we always have product data
-        products = []
-        direct_products = data.get("direct_products", [])
+        def select_current_product(products_list):
+            """Pick the most recent product that is currently valid."""
+            if not products_list:
+                return None
 
-        # Check if we have direct products data first
-        if direct_products:
-            _LOGGER.debug("Found %d direct products", len(direct_products))
-            for product in direct_products:
-                # Get the gross rate from the direct products data
-                gross_rate = "0"
-                if "grossRateInformation" in product:
-                    gross_info = product.get("grossRateInformation", {})
-                    if isinstance(gross_info, dict):
-                        gross_rate = gross_info.get("grossRate", "0")
-                    elif isinstance(gross_info, list) and gross_info:
-                        gross_rate = gross_info[0].get("grossRate", "0")
+            now_iso = datetime.now().isoformat()
+            valid_products = []
 
-                products.append(
-                    {
-                        "code": product.get("code", "Unknown"),
-                        "description": product.get("description", ""),
-                        "name": product.get("fullName", "Unknown"),
-                        "grossRate": gross_rate,
-                        "type": "Simple",  # Default type for direct products
-                        "validFrom": None,  # We don't have this info from direct products
-                        "validTo": None,  # We don't have this info from direct products
-                        "isTimeOfUse": product.get("isTimeOfUse", False),
-                    }
-                )
-
-        # If no direct products, try to extract from the account data
-        if not products:
-            _LOGGER.debug("Extracting products from account data")
-
-            # This tracks if we've found any gross rates to help with debugging
-            found_any_gross_rate = False
-
-            for prop in account_data.get("allProperties", []):
-                for malo in prop.get("electricityMalos", []):
-                    for agreement in malo.get("agreements", []):
-                        product = agreement.get("product", {})
-                        unit_rate_info = agreement.get("unitRateInformation", {})
-
-                        # Log what fields are available to help debug
-                        if unit_rate_info:
-                            _LOGGER.debug(
-                                "Unit rate info keys: %s", list(unit_rate_info.keys())
-                            )
-
-                        # Determine the product type
-                        product_type = "Simple"
-                        if "__typename" in unit_rate_info:
-                            product_type = (
-                                "Simple"
-                                if unit_rate_info["__typename"]
-                                == "SimpleProductUnitRateInformation"
-                                else "TimeOfUse"
-                            )
-
-                        # For Simple product types
-                        if product_type == "Simple":
-                            # Get the gross rate from various possible sources
-                            gross_rate = "0"
-
-                            # Check different possible sources for gross rate
-                            if "grossRateInformation" in unit_rate_info:
-                                found_any_gross_rate = True
-                                if isinstance(
-                                    unit_rate_info["grossRateInformation"], dict
-                                ):
-                                    gross_rate = unit_rate_info[
-                                        "grossRateInformation"
-                                    ].get("grossRate", "0")
-                                elif (
-                                    isinstance(
-                                        unit_rate_info["grossRateInformation"], list
-                                    )
-                                    and unit_rate_info["grossRateInformation"]
-                                ):
-                                    gross_rate = (
-                                        unit_rate_info["grossRateInformation"][0].get(
-                                            "grossRate", "0"
-                                        )
-                                        if unit_rate_info["grossRateInformation"]
-                                        else "0"
-                                    )
-                            elif "latestGrossUnitRateCentsPerKwh" in unit_rate_info:
-                                found_any_gross_rate = True
-                                gross_rate = unit_rate_info[
-                                    "latestGrossUnitRateCentsPerKwh"
-                                ]
-                            elif "unitRateGrossRateInformation" in agreement:
-                                found_any_gross_rate = True
-                                if isinstance(
-                                    agreement["unitRateGrossRateInformation"], dict
-                                ):
-                                    gross_rate = agreement[
-                                        "unitRateGrossRateInformation"
-                                    ].get("grossRate", "0")
-                                elif (
-                                    isinstance(
-                                        agreement["unitRateGrossRateInformation"], list
-                                    )
-                                    and agreement["unitRateGrossRateInformation"]
-                                ):
-                                    gross_rate = (
-                                        agreement["unitRateGrossRateInformation"][
-                                            0
-                                        ].get("grossRate", "0")
-                                        if agreement["unitRateGrossRateInformation"]
-                                        else "0"
-                                    )
-
-                            # Add unitRateForecast for TimeOfUse products
-                            unit_rate_forecast = agreement.get("unitRateForecast", [])
-
-                            products.append(
-                                {
-                                    "code": product.get("code", "Unknown"),
-                                    "description": product.get("description", ""),
-                                    "name": product.get("fullName", "Unknown"),
-                                    "grossRate": gross_rate,
-                                    "type": product_type,
-                                    "validFrom": agreement.get("validFrom"),
-                                    "validTo": agreement.get("validTo"),
-                                    "isTimeOfUse": product.get("isTimeOfUse", False),
-                                    "unitRateForecast": unit_rate_forecast,
-                                }
-                            )
-
-                        # For TimeOfUse product types
-                        elif product_type == "TimeOfUse" and "rates" in unit_rate_info:
-                            # Process time-of-use rates
-                            timeslots = []
-
-                            for rate in unit_rate_info["rates"]:
-                                gross_rate = "0"
-
-                                # Extract the gross rate
-                                if (
-                                    rate.get("grossRateInformation")
-                                ):
-                                    if isinstance(rate["grossRateInformation"], dict):
-                                        gross_rate = rate["grossRateInformation"].get(
-                                            "grossRate", "0"
-                                        )
-                                    elif (
-                                        isinstance(rate["grossRateInformation"], list)
-                                        and rate["grossRateInformation"]
-                                    ):
-                                        gross_rate = rate["grossRateInformation"][
-                                            0
-                                        ].get("grossRate", "0")
-                                elif "latestGrossUnitRateCentsPerKwh" in rate:
-                                    gross_rate = rate["latestGrossUnitRateCentsPerKwh"]
-
-                                # Create activation rules
-                                activation_rules = []
-                                if "timeslotActivationRules" in rate and isinstance(
-                                    rate["timeslotActivationRules"], list
-                                ):
-                                    for rule in rate["timeslotActivationRules"]:
-                                        activation_rules.append(
-                                            {
-                                                "from_time": rule.get(
-                                                    "activeFromTime", "00:00:00"
-                                                ),
-                                                "to_time": rule.get(
-                                                    "activeToTime", "00:00:00"
-                                                ),
-                                            }
-                                        )
-
-                                # Add timeslot data
-                                timeslots.append(
-                                    {
-                                        "name": rate.get("timeslotName", "Unknown"),
-                                        "rate": gross_rate,
-                                        "activation_rules": activation_rules,
-                                    }
-                                )
-
-                            # Add unitRateForecast for TimeOfUse products
-                            unit_rate_forecast = agreement.get("unitRateForecast", [])
-
-                            # Create a TimeOfUse product with timeslots
-                            products.append(
-                                {
-                                    "code": product.get("code", "Unknown"),
-                                    "description": product.get("description", ""),
-                                    "name": product.get("fullName", "Unknown"),
-                                    "type": product_type,
-                                    "validFrom": agreement.get("validFrom"),
-                                    "validTo": agreement.get("validTo"),
-                                    "timeslots": timeslots,
-                                    "isTimeOfUse": product.get("isTimeOfUse", False),
-                                    "unitRateForecast": unit_rate_forecast,
-                                }
-                            )
-
-                            _LOGGER.debug(
-                                "Found TimeOfUse product with %d timeslots: %s",
-                                len(timeslots),
-                                [ts.get("name") for ts in timeslots],
-                            )
-
-        # Log whether we found products
-        if products:
-            _LOGGER.debug(
-                "Found %d products for account %s", len(products), account_number
-            )
-            for idx, product in enumerate(products):
-                _LOGGER.debug(
-                    "Product %d: code=%s, grossRate=%s",
-                    idx + 1,
-                    product.get("code"),
-                    product.get("grossRate"),
-                )
-        else:
-            _LOGGER.warning("No products found for account %s", account_number)
-            # Add a test product so we at least get a sensor for testing
-            products.append(
-                {
-                    "code": "TEST_PRODUCT",
-                    "description": "Test Product for debugging",
-                    "name": "Test Product",
-                    "grossRate": "30",  # 30 cents as a reasonable default
-                    "type": "Simple",
-                    "validFrom": None,
-                    "validTo": None,
-                    "isTimeOfUse": False,
-                }
-            )
-
-        result_data[account_number]["products"] = products
-
-        # Extract gas products - similar process to electricity products
-        gas_products = []
-
-        for prop in account_data.get("allProperties", []):
-            for malo in prop.get("gasMalos", []):
-                for agreement in malo.get("agreements", []):
-                    product = agreement.get("product", {})
-                    unit_rate_info = agreement.get("unitRateInformation", {})
-
-                    # Determine the product type
-                    product_type = "Simple"
-                    if "__typename" in unit_rate_info:
-                        product_type = (
-                            "Simple"
-                            if unit_rate_info["__typename"]
-                            == "SimpleProductUnitRateInformation"
-                            else "TimeOfUse"
-                        )
-
-                    # For Simple product types
-                    if product_type == "Simple":
-                        # Get the gross rate from various possible sources
-                        gross_rate = "0"
-
-                        # Check different possible sources for gross rate
-                        if "grossRateInformation" in unit_rate_info:
-                            if isinstance(unit_rate_info["grossRateInformation"], dict):
-                                gross_rate = unit_rate_info["grossRateInformation"].get(
-                                    "grossRate", "0"
-                                )
-                            elif (
-                                isinstance(unit_rate_info["grossRateInformation"], list)
-                                and unit_rate_info["grossRateInformation"]
-                            ):
-                                gross_rate = (
-                                    unit_rate_info["grossRateInformation"][0].get(
-                                        "grossRate", "0"
-                                    )
-                                    if unit_rate_info["grossRateInformation"]
-                                    else "0"
-                                )
-                        elif "latestGrossUnitRateCentsPerKwh" in unit_rate_info:
-                            gross_rate = unit_rate_info[
-                                "latestGrossUnitRateCentsPerKwh"
-                            ]
-                        elif "unitRateGrossRateInformation" in agreement:
-                            if isinstance(
-                                agreement["unitRateGrossRateInformation"], dict
-                            ):
-                                gross_rate = agreement[
-                                    "unitRateGrossRateInformation"
-                                ].get("grossRate", "0")
-                            elif (
-                                isinstance(
-                                    agreement["unitRateGrossRateInformation"], list
-                                )
-                                and agreement["unitRateGrossRateInformation"]
-                            ):
-                                gross_rate = (
-                                    agreement["unitRateGrossRateInformation"][0].get(
-                                        "grossRate", "0"
-                                    )
-                                    if agreement["unitRateGrossRateInformation"]
-                                    else "0"
-                                )
-
-                        gas_products.append(
-                            {
-                                "code": product.get("code", "Unknown"),
-                                "description": product.get("description", ""),
-                                "name": product.get("fullName", "Unknown"),
-                                "grossRate": gross_rate,
-                                "type": product_type,
-                                "validFrom": agreement.get("validFrom"),
-                                "validTo": agreement.get("validTo"),
-                                "isTimeOfUse": product.get("isTimeOfUse", False),
-                            }
-                        )
-
-                    # For TimeOfUse product types (if gas supports it)
-                    elif product_type == "TimeOfUse" and "rates" in unit_rate_info:
-                        # Process time-of-use rates for gas
-                        timeslots = []
-
-                        for rate in unit_rate_info["rates"]:
-                            gross_rate = "0"
-
-                            # Get the gross rate for this timeslot
-                            if "grossRateInformation" in rate:
-                                if isinstance(rate["grossRateInformation"], dict):
-                                    gross_rate = rate["grossRateInformation"].get(
-                                        "grossRate", "0"
-                                    )
-                                elif (
-                                    isinstance(rate["grossRateInformation"], list)
-                                    and rate["grossRateInformation"]
-                                ):
-                                    gross_rate = (
-                                        rate["grossRateInformation"][0].get(
-                                            "grossRate", "0"
-                                        )
-                                        if rate["grossRateInformation"]
-                                        else "0"
-                                    )
-                            elif "latestGrossUnitRateCentsPerKwh" in rate:
-                                gross_rate = rate["latestGrossUnitRateCentsPerKwh"]
-
-                            # Process activation rules
-                            activation_rules = []
-                            for rule in rate.get("timeslotActivationRules", []):
-                                activation_rules.append(
-                                    {
-                                        "from_time": rule.get(
-                                            "activeFromTime", "00:00:00"
-                                        ),
-                                        "to_time": rule.get("activeToTime", "00:00:00"),
-                                    }
-                                )
-
-                            timeslots.append(
-                                {
-                                    "name": rate.get("timeslotName", "Unknown"),
-                                    "rate": gross_rate,
-                                    "activation_rules": activation_rules,
-                                }
-                            )
-
-                        gas_products.append(
-                            {
-                                "code": product.get("code", "Unknown"),
-                                "description": product.get("description", ""),
-                                "name": product.get("fullName", "Unknown"),
-                                "grossRate": "0",  # For TimeOfUse, this is not used
-                                "type": product_type,
-                                "validFrom": agreement.get("validFrom"),
-                                "validTo": agreement.get("validTo"),
-                                "timeslots": timeslots,
-                                "isTimeOfUse": product.get("isTimeOfUse", False),
-                            }
-                        )
-
-        # Log gas products found
-        if gas_products:
-            _LOGGER.debug(
-                "Found %d gas products for account %s",
-                len(gas_products),
-                account_number,
-            )
-            for idx, product in enumerate(gas_products):
-                _LOGGER.debug(
-                    "Gas Product %d: code=%s, grossRate=%s",
-                    idx + 1,
-                    product.get("code"),
-                    product.get("grossRate"),
-                )
-        else:
-            _LOGGER.debug("No gas products found for account %s", account_number)
-
-        result_data[account_number]["gas_products"] = gas_products
-
-        # Extract additional gas information
-        # Gas price from current valid gas product
-        gas_price = None
-        gas_contract_start = None
-        gas_contract_end = None
-
-        if gas_products:
-            # Find current valid gas product based on validity dates
-            now = datetime.now().isoformat()
-            valid_gas_products = []
-
-            for product in gas_products:
+            for product in products_list:
                 valid_from = product.get("validFrom")
                 valid_to = product.get("validTo")
 
                 if not valid_from:
                     continue
 
-                if valid_from <= now and (not valid_to or now <= valid_to):
-                    valid_gas_products.append(product)
+                if valid_from <= now_iso and (not valid_to or now_iso <= valid_to):
+                    valid_products.append(product)
 
-            if valid_gas_products:
-                # Sort by validFrom to get the most recent one
-                valid_gas_products.sort(
-                    key=lambda p: p.get("validFrom", ""), reverse=True
-                )
-                current_gas_product = valid_gas_products[0]
+            if not valid_products:
+                return None
 
-                # Extract gas price
+            valid_products.sort(key=lambda p: p.get("validFrom", ""), reverse=True)
+            return valid_products[0]
+
+        # Electricity products
+        products = data.get("products") or []
+        if products:
+            _LOGGER.debug(
+                "Found %d electricity products for account %s", len(products), account_number
+            )
+        else:
+            _LOGGER.warning(
+                "No electricity products returned for account %s; registering fallback tariff",
+                account_number,
+            )
+            products = [
+                {
+                    "code": "FALLBACK_ELECTRICITY",
+                    "description": "Fallback electricity tariff",
+                    "name": "Fallback Electricity Tariff",
+                    "displayName": "Fallback Electricity Tariff",
+                    "validFrom": None,
+                    "validTo": None,
+                    "agreementId": None,
+                    "productType": None,
+                    "isTimeOfUse": False,
+                    "type": "Simple",
+                    "timeslots": [],
+                    "termsAndConditionsUrl": None,
+                    "pricing": {
+                        "base": 0.30,
+                        "f2": None,
+                        "f3": None,
+                        "units": "EUR/kWh",
+                        "annualStandingCharge": None,
+                        "annualStandingChargeUnits": None,
+                    },
+                    "params": {},
+                    "rawPrices": {},
+                    "supplyPoint": {},
+                    "unitRateForecast": [],
+                    "grossRate": "30",
+                }
+            ]
+
+        result_data[account_number]["products"] = products
+        # Preserve the products list as is for consumers expecting camelCase keys
+        result_data[account_number]["products_raw"] = products
+
+        # Gas products
+        gas_products = data.get("gas_products") or []
+        if gas_products:
+            _LOGGER.debug(
+                "Found %d gas products for account %s", len(gas_products), account_number
+            )
+        else:
+            _LOGGER.debug("No gas products found for account %s", account_number)
+
+        result_data[account_number]["gas_products"] = gas_products
+
+        # Gas pricing and contract metadata
+        gas_price = None
+        gas_contract_start = None
+        gas_contract_end = None
+        gas_contract_days_until_expiry = None
+
+        current_gas_product = select_current_product(gas_products)
+        if current_gas_product:
+            base_rate = (
+                current_gas_product.get("pricing", {}).get("base")
+                if isinstance(current_gas_product.get("pricing"), dict)
+                else None
+            )
+            if base_rate is not None:
+                gas_price = base_rate
+            else:
+                gross_rate_str = current_gas_product.get("grossRate")
+                if gross_rate_str is not None:
+                    try:
+                        gas_price = float(gross_rate_str) / 100.0
+                    except (ValueError, TypeError):
+                        gas_price = None
+
+            gas_contract_start = current_gas_product.get("validFrom")
+            gas_contract_end = current_gas_product.get("validTo")
+
+            if gas_contract_end:
                 try:
-                    gross_rate_str = current_gas_product.get("grossRate", "0")
-                    gas_price = (
-                        float(gross_rate_str) / 100.0
-                    )  # Convert from cents to EUR
-                except (ValueError, TypeError):
-                    gas_price = None
-
-                # Extract contract dates
-                gas_contract_start = current_gas_product.get("validFrom")
-                gas_contract_end = current_gas_product.get("validTo")
+                    end_date = datetime.fromisoformat(
+                        gas_contract_end.replace("Z", "+00:00")
+                    )
+                    now_date = datetime.now(end_date.tzinfo)
+                    days_diff = (end_date - now_date).days
+                    gas_contract_days_until_expiry = max(0, days_diff)
+                except (ValueError, TypeError) as e:
+                    _LOGGER.warning("Error calculating gas contract expiry days: %s", e)
 
         result_data[account_number]["gas_price"] = gas_price
         result_data[account_number]["gas_contract_start"] = gas_contract_start
         result_data[account_number]["gas_contract_end"] = gas_contract_end
-
-        # Calculate days until contract expiry
-        gas_contract_days_until_expiry = None
-        if gas_contract_end:
-            try:
-                end_date = datetime.fromisoformat(
-                    gas_contract_end.replace("Z", "+00:00")
-                )
-                now_date = datetime.now(end_date.tzinfo)
-                days_diff = (end_date - now_date).days
-                gas_contract_days_until_expiry = max(
-                    0, days_diff
-                )  # Don't show negative days
-            except (ValueError, TypeError) as e:
-                _LOGGER.warning("Error calculating gas contract expiry days: %s", e)
-
         result_data[account_number]["gas_contract_days_until_expiry"] = (
             gas_contract_days_until_expiry
         )

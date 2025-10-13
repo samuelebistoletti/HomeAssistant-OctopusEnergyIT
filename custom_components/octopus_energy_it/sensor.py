@@ -229,41 +229,59 @@ class OctopusElectricityPriceSensor(CoordinatorEntity, SensorEntity):
         # Handle case where range crosses midnight
         return time_from <= current_time or current_time < time_to
 
+    def _convert_cents_to_eur(self, value) -> float | None:
+        """Convert a cent value to EUR, handling malformed inputs."""
+        if value is None:
+            return None
+        try:
+            return float(value) / 100.0
+        except (TypeError, ValueError):
+            return None
+
+    def _determine_time_of_use_band(self, current_dt: datetime) -> str:
+        """Approximate the Italian F1/F2/F3 band for the current time."""
+        day = current_dt.weekday()  # Monday = 0, Sunday = 6
+        minutes = current_dt.hour * 60 + current_dt.minute
+
+        if day < 5:  # Monday to Friday
+            if 480 <= minutes < 1140:  # 08:00-19:00
+                return "F1"
+            if 420 <= minutes < 480 or 1140 <= minutes < 1380:  # 07:00-08:00, 19:00-23:00
+                return "F2"
+            return "F3"
+
+        if day == 5:  # Saturday
+            if 420 <= minutes < 1380:  # 07:00-23:00
+                return "F2"
+            return "F3"
+
+        return "F3"  # Sunday and holidays fallback
+
     def _get_active_timeslot_rate(self, product):
-        """Get the currently active timeslot rate for a time-of-use product."""
+        """Determine the active rate for the supplied product."""
         if not product:
             return None
 
-        # For SimpleProductUnitRateInformation, just return the single rate
-        if product.get("type") == "Simple":
-            try:
-                # Convert to float but don't round - divide by 100 to convert from cents to euros
-                return float(product.get("grossRate", "0")) / 100.0
-            except (ValueError, TypeError):
-                return None
+        pricing = product.get("pricing") or {}
 
-        # For TimeOfUseProductUnitRateInformation, find the currently active timeslot
-        if product.get("type") == "TimeOfUse" and "timeslots" in product:
-            current_time = datetime.now().time()
+        if product.get("type") != "TimeOfUse":
+            base_rate = pricing.get("base")
+            if base_rate is not None:
+                return base_rate
+            return self._convert_cents_to_eur(product.get("grossRate"))
 
-            for timeslot in product["timeslots"]:
-                for rule in timeslot.get("activation_rules", []):
-                    from_time = self._parse_time(rule.get("from_time", "00:00:00"))
-                    to_time = self._parse_time(rule.get("to_time", "00:00:00"))
+        band = self._determine_time_of_use_band(datetime.now())
+        if band == "F1":
+            rate = pricing.get("base")
+        elif band == "F2":
+            rate = pricing.get("f2") or pricing.get("base")
+        else:  # F3
+            rate = pricing.get("f3") or pricing.get("f2") or pricing.get("base")
 
-                    if (
-                        from_time
-                        and to_time
-                        and self._is_time_between(current_time, from_time, to_time)
-                    ):
-                        try:
-                            # Convert to float but don't round - divide by 100 to convert from cents to euros
-                            return float(timeslot.get("rate", "0")) / 100.0
-                        except (ValueError, TypeError):
-                            continue
+        if rate is not None:
+            return rate
 
-        # If no active timeslot found or in case of errors, return None
-        return None
+        return self._convert_cents_to_eur(product.get("grossRate"))
 
     def _get_current_forecast_rate(self, product):
         """Get the current rate from unitRateForecast for dynamic pricing."""
@@ -276,7 +294,6 @@ class OctopusElectricityPriceSensor(CoordinatorEntity, SensorEntity):
 
         now = datetime.now(UTC)
 
-        # Find the forecast entry that covers the current time
         for forecast_entry in unit_rate_forecast:
             valid_from_str = forecast_entry.get("validFrom")
             valid_to_str = forecast_entry.get("validTo")
@@ -285,36 +302,38 @@ class OctopusElectricityPriceSensor(CoordinatorEntity, SensorEntity):
                 continue
 
             try:
-                # Parse the time stamps
-                valid_from = datetime.fromisoformat(
-                    valid_from_str.replace("Z", "+00:00")
-                )
+                valid_from = datetime.fromisoformat(valid_from_str.replace("Z", "+00:00"))
                 valid_to = datetime.fromisoformat(valid_to_str.replace("Z", "+00:00"))
 
-                # Check if current time is within this forecast period
                 if valid_from <= now < valid_to:
-                    # Extract the rate from unitRateInformation
                     unit_rate_info = forecast_entry.get("unitRateInformation", {})
 
-                    if (
-                        unit_rate_info.get("__typename")
-                        == "TimeOfUseProductUnitRateInformation"
-                    ):
+                    typename = unit_rate_info.get("__typename")
+                    if typename == "TimeOfUseProductUnitRateInformation":
                         rates = unit_rate_info.get("rates", [])
-                        if rates and len(rates) > 0:
+                        if rates:
                             rate_cents = rates[0].get("latestGrossUnitRateCentsPerKwh")
-                            if rate_cents is not None:
-                                try:
-                                    rate_eur = float(rate_cents) / 100.0
-                                    _LOGGER.debug(
-                                        "Found forecast rate: %.4f EUR/kWh for period %s - %s",
-                                        rate_eur,
-                                        valid_from_str,
-                                        valid_to_str,
-                                    )
-                                    return rate_eur
-                                except (ValueError, TypeError):
-                                    continue
+                            rate_eur = self._convert_cents_to_eur(rate_cents)
+                            if rate_eur is not None:
+                                _LOGGER.debug(
+                                    "Found forecast rate: %.4f EUR/kWh for period %s - %s",
+                                    rate_eur,
+                                    valid_from_str,
+                                    valid_to_str,
+                                )
+                                return rate_eur
+
+                    if typename == "SimpleProductUnitRateInformation":
+                        rate_cents = unit_rate_info.get("latestGrossUnitRateCentsPerKwh")
+                        rate_eur = self._convert_cents_to_eur(rate_cents)
+                        if rate_eur is not None:
+                            _LOGGER.debug(
+                                "Found forecast rate: %.4f EUR/kWh for period %s - %s",
+                                rate_eur,
+                                valid_from_str,
+                                valid_to_str,
+                            )
+                            return rate_eur
 
             except (ValueError, TypeError) as e:
                 _LOGGER.warning(
@@ -345,31 +364,22 @@ class OctopusElectricityPriceSensor(CoordinatorEntity, SensorEntity):
             _LOGGER.warning("No products found in coordinator data")
             return None
 
-        # Find the current valid product based on validity dates
-        now = datetime.now().isoformat()
-        valid_products = []
+        now_iso = datetime.now().isoformat()
+        valid_products = [
+            product
+            for product in products
+            if product.get("validFrom")
+            and product["validFrom"] <= now_iso
+            and (not product.get("validTo") or now_iso <= product["validTo"])
+        ]
 
-        # First filter products that are currently valid
-        for product in products:
-            valid_from = product.get("validFrom")
-            valid_to = product.get("validTo")
-
-            # Skip products without validity information
-            if not valid_from:
-                continue
-
-            # Check if product is currently valid
-            if valid_from <= now and (not valid_to or now <= valid_to):
-                valid_products.append(product)
-
-        # If we have valid products, use the one with the latest validFrom
         if valid_products:
-            # Sort by validFrom in descending order to get the most recent one
             valid_products.sort(key=lambda p: p.get("validFrom", ""), reverse=True)
             current_product = valid_products[0]
 
             product_code = current_product.get("code", "Unknown")
             product_type = current_product.get("type", "Unknown")
+            pricing = current_product.get("pricing") or {}
 
             _LOGGER.debug(
                 "Using product: %s, type: %s, valid from: %s",
@@ -379,7 +389,6 @@ class OctopusElectricityPriceSensor(CoordinatorEntity, SensorEntity):
             )
 
             if current_product.get("isTimeOfUse", False):
-                # For dynamic TimeOfUse tariffs, use unitRateForecast data
                 forecast_rate = self._get_current_forecast_rate(current_product)
                 if forecast_rate is not None:
                     _LOGGER.debug(
@@ -389,35 +398,40 @@ class OctopusElectricityPriceSensor(CoordinatorEntity, SensorEntity):
                     )
                     return forecast_rate
 
-                # Fallback to timeslot rate if no forecast available
-                if product_type == "TimeOfUse":
-                    active_rate = self._get_active_timeslot_rate(current_product)
-                    if active_rate is not None:
-                        _LOGGER.debug(
-                            "Fallback timeslot price: %.4f EUR/kWh for product %s",
-                            active_rate,
-                            product_code,
-                        )
-                        return active_rate
+                active_rate = self._get_active_timeslot_rate(current_product)
+                if active_rate is not None:
+                    _LOGGER.debug(
+                        "Calculated time-of-use price: %.4f EUR/kWh for product %s",
+                        active_rate,
+                        product_code,
+                    )
+                    return active_rate
 
-            # For simple tariffs or fallback, use the gross rate
-            try:
-                gross_rate_str = current_product.get("grossRate", "0")
-                gross_rate = float(gross_rate_str)
-                # Convert from cents to EUR without rounding
-                base_rate_eur = gross_rate / 100.0
-
+            base_rate = pricing.get("base")
+            if base_rate is not None:
                 _LOGGER.debug(
-                    "Price: %.4f EUR/kWh for product %s", base_rate_eur, product_code
-                )
-                return base_rate_eur
-            except (ValueError, TypeError) as e:
-                _LOGGER.warning(
-                    "Failed to convert price for product %s: %s - %s",
+                    "Base rate price: %.4f EUR/kWh for product %s",
+                    base_rate,
                     product_code,
-                    current_product.get("grossRate", "Unknown"),
-                    str(e),
                 )
+                return base_rate
+
+            fallback_rate = self._convert_cents_to_eur(
+                current_product.get("grossRate")
+            )
+            if fallback_rate is not None:
+                _LOGGER.debug(
+                    "Fallback gross rate: %.4f EUR/kWh for product %s",
+                    fallback_rate,
+                    product_code,
+                )
+                return fallback_rate
+
+            _LOGGER.warning(
+                "Failed to determine rate for product %s despite being current",
+                product_code,
+            )
+            return None
 
         _LOGGER.warning("No valid product found for current date")
         return None

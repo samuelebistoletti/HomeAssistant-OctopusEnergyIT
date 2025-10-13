@@ -33,134 +33,145 @@ query ComprehensiveDataQuery($accountNumber: String!) {
       balance
       ledgerType
     }
-    allProperties {
+    properties {
       id
-      electricityMalos {
-        agreements {
-          product {
+      electricitySupplyPoints {
+        id
+        pod
+        status
+        enrolmentStatus
+        enrolmentStartDate
+        supplyStartDate
+        cancellationReason
+        isSmartMeter
+        product {
+          __typename
+          ... on ElectricityProductType {
             code
             description
+            displayName
             fullName
-            isTimeOfUse
-          }
-          unitRateGrossRateInformation {
-            grossRate
-          }
-          unitRateInformation {
-            ... on SimpleProductUnitRateInformation {
-              __typename
-              grossRateInformation {
-                date
-                grossRate
-                rateValidToDate
-                vatRate
-              }
-              latestGrossUnitRateCentsPerKwh
-              netUnitRateCentsPerKwh
-            }
-            ... on TimeOfUseProductUnitRateInformation {
-              __typename
-              rates {
-                grossRateInformation {
-                  date
-                  grossRate
-                  rateValidToDate
-                  vatRate
-                }
-                latestGrossUnitRateCentsPerKwh
-                netUnitRateCentsPerKwh
-                timeslotActivationRules {
-                  activeFromTime
-                  activeToTime
-                }
-                timeslotName
-              }
-            }
-          }
-          unitRateForecast {
-            validFrom
+            termsAndConditionsUrl
             validTo
-            unitRateInformation {
-              __typename
-              ... on SimpleProductUnitRateInformation {
-                latestGrossUnitRateCentsPerKwh
-              }
-              ... on TimeOfUseProductUnitRateInformation {
-                rates {
-                  latestGrossUnitRateCentsPerKwh
+            params {
+              productType
+              annualStandingCharge
+              consumptionCharge
+              consumptionChargeF2
+              consumptionChargeF3
+            }
+            prices {
+              productType
+              annualStandingCharge
+              annualStandingChargeUnits
+              consumptionCharge
+              consumptionChargeF2
+              consumptionChargeF3
+              consumptionChargeUnits
+            }
+          }
+        }
+        agreements(first: 10) {
+          edges {
+            node {
+              id
+              validFrom
+              validTo
+              agreedAt
+              terminatedAt
+              isActive
+              product {
+                __typename
+                ... on ElectricityProductType {
+                  code
+                  description
+                  displayName
+                  fullName
+                  termsAndConditionsUrl
+                  validTo
+                  params {
+                    productType
+                    annualStandingCharge
+                    consumptionCharge
+                    consumptionChargeF2
+                    consumptionChargeF3
+                  }
+                  prices {
+                    productType
+                    annualStandingCharge
+                    annualStandingChargeUnits
+                    consumptionCharge
+                    consumptionChargeF2
+                    consumptionChargeF3
+                    consumptionChargeUnits
+                  }
                 }
               }
             }
           }
-          validFrom
-          validTo
         }
-        maloNumber
-        meloNumber
-        meter {
-          id
-          meterType
-          number
-          shouldReceiveSmartMeterData
-          submitMeterReadingUrl
-        }
-        referenceConsumption
       }
-      gasMalos {
-        agreements {
-          product {
+      gasSupplyPoints {
+        id
+        pdr
+        status
+        enrolmentStatus
+        enrolmentStartDate
+        supplyStartDate
+        cancellationReason
+        isSmartMeter
+        product {
+          __typename
+          ... on GasProductType {
             code
             description
+            displayName
             fullName
-            isTimeOfUse
-          }
-          unitRateGrossRateInformation {
-            grossRate
-          }
-          unitRateInformation {
-            ... on SimpleProductUnitRateInformation {
-              __typename
-              grossRateInformation {
-                date
-                grossRate
-                rateValidToDate
-                vatRate
-              }
-              latestGrossUnitRateCentsPerKwh
-              netUnitRateCentsPerKwh
+            termsAndConditionsUrl
+            validTo
+            params {
+              productType
+              annualStandingCharge
+              consumptionCharge
             }
-            ... on TimeOfUseProductUnitRateInformation {
-              __typename
-              rates {
-                grossRateInformation {
-                  date
-                  grossRate
-                  rateValidToDate
-                  vatRate
-                }
-                latestGrossUnitRateCentsPerKwh
-                netUnitRateCentsPerKwh
-                timeslotActivationRules {
-                  activeFromTime
-                  activeToTime
-                }
-                timeslotName
-              }
+            prices {
+              annualStandingCharge
+              consumptionCharge
             }
           }
-          validFrom
-          validTo
         }
-        maloNumber
-        meloNumber
-        meter {
-          id
-          meterType
-          number
-          shouldReceiveSmartMeterData
-          submitMeterReadingUrl
+        agreements(first: 10) {
+          edges {
+            node {
+              id
+              validFrom
+              validTo
+              agreedAt
+              terminatedAt
+              isActive
+              product {
+                __typename
+                ... on GasProductType {
+                  code
+                  description
+                  displayName
+                  fullName
+                  termsAndConditionsUrl
+                  validTo
+                  params {
+                    productType
+                    annualStandingCharge
+                    consumptionCharge
+                  }
+                  prices {
+                    annualStandingCharge
+                    consumptionCharge
+                  }
+                }
+              }
+            }
+          }
         }
-        referenceConsumption
       }
     }
   }
@@ -704,60 +715,37 @@ class OctopusEnergyIT:
                 "completedDispatches": [],
                 "devices": [],
                 "plannedDispatches": [],
+                "gas_products": [],
             }
 
-            # Now check for partial data availability - we'll continue even if there are some errors
+            # Process the GraphQL response, tolerate partial data when possible
             if "data" in response:
                 data = response["data"]
 
-                # Process available data fields
-                if "account" in data:
-                    result["account"] = data["account"]
+                account_payload = data.get("account")
+                if account_payload:
+                    self._normalise_account_properties(account_payload)
+                    result["account"] = account_payload
 
-                    # Extract product information from the account agreements if available
-                    # This helps maintain compatibility with code expecting the products field
-                    if (
-                        result["account"]
-                        and "allProperties" in result["account"]
-                        and result["account"]["allProperties"]
-                    ):
-                        try:
-                            # Try to extract products from electricityMalos agreements
-                            products = []
-                            for property_data in result["account"]["allProperties"]:
-                                if "electricityMalos" in property_data:
-                                    for malo in property_data["electricityMalos"]:
-                                        if "agreements" in malo:
-                                            for agreement in malo["agreements"]:
-                                                if "product" in agreement:
-                                                    products.append(
-                                                        agreement["product"]
-                                                    )
+                    electricity_products = self._extract_electricity_products(account_payload)
+                    if electricity_products:
+                        result["products"] = electricity_products
+                        _LOGGER.debug(
+                            "Extracted %d electricity products from account data",
+                            len(electricity_products),
+                        )
+                    gas_products = self._extract_gas_products(account_payload)
+                    if gas_products:
+                        result["gas_products"] = gas_products
+                        _LOGGER.debug(
+                            "Extracted %d gas products from account data",
+                            len(gas_products),
+                        )
+                else:
+                    _LOGGER.debug("No account payload returned in response")
 
-                            # Only update if we found products
-                            if products:
-                                result["products"] = products
-                                _LOGGER.debug(
-                                    "Extracted %d products from account data",
-                                    len(products),
-                                )
-                        except Exception as extract_error:
-                            _LOGGER.warning(
-                                "Error extracting products from account data: %s",
-                                extract_error,
-                            )
-
-                if "devices" in data:
-                    result["devices"] = (
-                        data["devices"] if data["devices"] is not None else []
-                    )
-
-                if "completedDispatches" in data:
-                    result["completedDispatches"] = (
-                        data["completedDispatches"]
-                        if data["completedDispatches"] is not None
-                        else []
-                    )
+                result["devices"] = data.get("devices") or []
+                result["completedDispatches"] = data.get("completedDispatches") or []
 
                 # Fetch flex planned dispatches for all devices with the new API
                 result["plannedDispatches"] = []
@@ -886,6 +874,279 @@ class OctopusEnergyIT:
         except Exception as e:
             _LOGGER.error("Error fetching all data: %s", e)
             return None
+
+    @staticmethod
+    def _flatten_connection(connection):
+        """Convert Relay-style connections to plain lists of nodes."""
+        if isinstance(connection, dict):
+            edges = connection.get("edges") or []
+            nodes = [edge.get("node") for edge in edges if edge and edge.get("node")]
+            return nodes
+        return connection if isinstance(connection, list) else []
+
+    def _normalise_account_properties(self, account_data):
+        """Ensure property collections are usable within Home Assistant."""
+        properties = account_data.get("properties") or []
+        account_data["properties"] = properties
+
+        for property_data in properties:
+            for key in ("electricitySupplyPoints", "gasSupplyPoints"):
+                supply_points = property_data.get(key) or []
+                property_data[key] = supply_points
+
+                for supply_point in supply_points:
+                    agreements = supply_point.get("agreements")
+                    supply_point["agreements"] = self._flatten_connection(agreements)
+
+    @staticmethod
+    def _to_float_or_none(value):
+        """Best-effort conversion of API decimal values to floats."""
+        if value is None:
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        try:
+            return float(str(value))
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _format_cents_from_eur(amount):
+        """Convert an amount in EUR/kWh to a string of cents for legacy consumers."""
+        if amount is None:
+            return "0"
+        try:
+            cents = float(amount) * 100.0
+            formatted = f"{cents:.6f}".rstrip("0").rstrip(".")
+            return formatted or "0"
+        except (TypeError, ValueError):
+            return "0"
+
+    def _build_electricity_product_entry(self, supply_point, agreement):
+        """Create a simplified product descriptor for electricity tariffs."""
+        product = {}
+        valid_from = None
+        valid_to = None
+        agreement_id = None
+
+        if agreement:
+            product = agreement.get("product") or {}
+            valid_from = agreement.get("validFrom")
+            valid_to = agreement.get("validTo")
+            agreement_id = agreement.get("id")
+        else:
+            product = supply_point.get("product") or {}
+
+        if not product:
+            return None
+
+        params = product.get("params") or {}
+        prices = product.get("prices") or {}
+
+        def pick_value(key):
+            if prices.get(key) is not None:
+                return prices.get(key)
+            if params.get(key) is not None:
+                return params.get(key)
+            return None
+
+        base_rate = self._to_float_or_none(pick_value("consumptionCharge"))
+        f2_rate = self._to_float_or_none(pick_value("consumptionChargeF2"))
+        f3_rate = self._to_float_or_none(pick_value("consumptionChargeF3"))
+        annual_charge = self._to_float_or_none(pick_value("annualStandingCharge"))
+        units = pick_value("consumptionChargeUnits")
+        annual_units = pick_value("annualStandingChargeUnits")
+
+        product_type = params.get("productType") or prices.get("productType") or ""
+        normalised_type = product_type.lower() if isinstance(product_type, str) else ""
+        is_time_of_use = any(rate is not None for rate in (f2_rate, f3_rate)) or normalised_type in {
+            "time_of_use",
+            "timeofuse",
+            "tou",
+        }
+
+        entry = {
+            "code": product.get("code"),
+            "description": product.get("description"),
+            "name": product.get("fullName") or product.get("displayName"),
+            "displayName": product.get("displayName"),
+            "validFrom": valid_from,
+            "validTo": valid_to,
+            "agreementId": agreement_id,
+            "productType": product_type,
+            "isTimeOfUse": is_time_of_use,
+            "type": "TimeOfUse" if is_time_of_use else "Simple",
+            "timeslots": [],
+            "termsAndConditionsUrl": product.get("termsAndConditionsUrl"),
+            "pricing": {
+                "base": base_rate,
+                "f2": f2_rate,
+                "f3": f3_rate,
+                "units": units,
+                "annualStandingCharge": annual_charge,
+                "annualStandingChargeUnits": annual_units,
+            },
+            "params": params,
+            "rawPrices": prices,
+            "supplyPoint": {
+                "id": supply_point.get("id"),
+                "pod": supply_point.get("pod"),
+                "status": supply_point.get("status"),
+                "enrolmentStatus": supply_point.get("enrolmentStatus"),
+                "enrolmentStartDate": supply_point.get("enrolmentStartDate"),
+                "supplyStartDate": supply_point.get("supplyStartDate"),
+                "isSmartMeter": supply_point.get("isSmartMeter"),
+                "cancellationReason": supply_point.get("cancellationReason"),
+            },
+            "unitRateForecast": [],
+        }
+
+        entry["grossRate"] = self._format_cents_from_eur(base_rate)
+
+        return entry
+
+    def _build_gas_product_entry(self, supply_point, agreement):
+        """Create a simplified product descriptor for gas tariffs."""
+        product = {}
+        valid_from = None
+        valid_to = None
+        agreement_id = None
+
+        if agreement:
+            product = agreement.get("product") or {}
+            valid_from = agreement.get("validFrom")
+            valid_to = agreement.get("validTo")
+            agreement_id = agreement.get("id")
+        else:
+            product = supply_point.get("product") or {}
+
+        if not product:
+            return None
+
+        params = product.get("params") or {}
+        prices = product.get("prices") or {}
+
+        def pick_value(key):
+            if prices.get(key) is not None:
+                return prices.get(key)
+            if params.get(key) is not None:
+                return params.get(key)
+            return None
+
+        base_rate = self._to_float_or_none(pick_value("consumptionCharge"))
+        annual_charge = self._to_float_or_none(pick_value("annualStandingCharge"))
+
+        entry = {
+            "code": product.get("code"),
+            "description": product.get("description"),
+            "name": product.get("fullName") or product.get("displayName"),
+            "displayName": product.get("displayName"),
+            "validFrom": valid_from,
+            "validTo": valid_to,
+            "agreementId": agreement_id,
+            "termsAndConditionsUrl": product.get("termsAndConditionsUrl"),
+            "pricing": {
+                "base": base_rate,
+                "units": params.get("consumptionChargeUnits"),
+                "annualStandingCharge": annual_charge,
+            },
+            "params": params,
+            "rawPrices": prices,
+            "supplyPoint": {
+                "id": supply_point.get("id"),
+                "pdr": supply_point.get("pdr"),
+                "status": supply_point.get("status"),
+                "enrolmentStatus": supply_point.get("enrolmentStatus"),
+                "enrolmentStartDate": supply_point.get("enrolmentStartDate"),
+                "supplyStartDate": supply_point.get("supplyStartDate"),
+                "isSmartMeter": supply_point.get("isSmartMeter"),
+                "cancellationReason": supply_point.get("cancellationReason"),
+            },
+        }
+
+        entry["grossRate"] = self._format_cents_from_eur(base_rate)
+
+        return entry
+
+    def _extract_gas_products(self, account_data):
+        """Collect gas products from the account payload."""
+        products = []
+        seen_keys = set()
+
+        for property_data in account_data.get("properties") or []:
+            for supply_point in property_data.get("gasSupplyPoints") or []:
+                agreements = supply_point.get("agreements") or []
+
+                if agreements:
+                    for agreement in agreements:
+                        entry = self._build_gas_product_entry(supply_point, agreement)
+                        if entry:
+                            key = (
+                                entry.get("code"),
+                                entry.get("validFrom"),
+                                entry.get("validTo"),
+                                entry.get("agreementId"),
+                                entry.get("supplyPoint", {}).get("id"),
+                            )
+                            if key not in seen_keys:
+                                seen_keys.add(key)
+                                products.append(entry)
+                else:
+                    entry = self._build_gas_product_entry(supply_point, None)
+                    if entry:
+                        key = (
+                            entry.get("code"),
+                            entry.get("validFrom"),
+                            entry.get("validTo"),
+                            entry.get("agreementId"),
+                            entry.get("supplyPoint", {}).get("id"),
+                        )
+                        if key not in seen_keys:
+                            seen_keys.add(key)
+                            products.append(entry)
+
+        return products
+
+    def _extract_electricity_products(self, account_data):
+        """Collect electricity products from the account payload."""
+        products = []
+        seen_keys = set()
+
+        for property_data in account_data.get("properties") or []:
+            for supply_point in property_data.get("electricitySupplyPoints") or []:
+                agreements = supply_point.get("agreements") or []
+
+                if agreements:
+                    for agreement in agreements:
+                        entry = self._build_electricity_product_entry(
+                            supply_point, agreement
+                        )
+                        if entry:
+                            key = (
+                                entry.get("code"),
+                                entry.get("validFrom"),
+                                entry.get("validTo"),
+                                entry.get("agreementId"),
+                                entry.get("supplyPoint", {}).get("id"),
+                            )
+                            if key not in seen_keys:
+                                seen_keys.add(key)
+                                products.append(entry)
+                else:
+                    entry = self._build_electricity_product_entry(supply_point, None)
+                    if entry:
+                        key = (
+                            entry.get("code"),
+                            entry.get("validFrom"),
+                            entry.get("validTo"),
+                            entry.get("agreementId"),
+                            entry.get("supplyPoint", {}).get("id"),
+                        )
+                        if key not in seen_keys:
+                            seen_keys.add(key)
+                            products.append(entry)
+
+        return products
 
     async def change_device_suspension(self, device_id: str, action: str):
         """Change device suspension state."""
