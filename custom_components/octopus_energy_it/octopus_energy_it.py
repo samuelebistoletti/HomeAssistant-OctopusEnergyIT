@@ -560,12 +560,19 @@ class OctopusEnergyIT:
                         continue
 
                     if "errors" in response:
-                        error_code = (
-                            response["errors"][0].get("extensions", {}).get("errorCode")
-                        )
-                        error_message = response["errors"][0].get(
-                            "message", "Unknown error"
-                        )
+                        first_error = response["errors"][0]
+                        extensions = first_error.get("extensions", {})
+                        error_code = extensions.get("errorCode")
+                        error_message = first_error.get("message", "Unknown error")
+
+                        if error_code == "KT-CT-1138":  # Invalid credentials
+                            _LOGGER.error(
+                                "Login failed: %s (attempt %s of %s). The credentials appear to be invalid; aborting further attempts.",
+                                error_message,
+                                attempt,
+                                retries,
+                            )
+                            return False
 
                         if error_code == "KT-CT-1199":  # Too many requests
                             _LOGGER.warning(

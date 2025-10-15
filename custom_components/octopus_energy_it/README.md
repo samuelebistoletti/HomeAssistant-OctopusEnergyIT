@@ -1,127 +1,140 @@
-# Octopus Energy Italy Integration for Home Assistant
+# Integrazione Octopus Energy Italia per Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
-![installation_badge](https://img.shields.io/badge/dynamic/json?color=41BDF5&logo=home-assistant&label=integration%20usage&suffix=%20installs&cacheSeconds=15600&url=https://analytics.home-assistant.io/custom_integrations.json&query=$.octopus_energy_it.total)
+![installation_badge](https://img.shields.io/badge/dynamic/json?color=41BDF5&logo=home-assistant&label=utenti&suffix=%20installs&cacheSeconds=15600&url=https://analytics.home-assistant.io/custom_integrations.json&query=$.octopus_energy_it.total)
 
-This custom component uses the Italian Octopus Energy Kraken GraphQL API to expose account, tariff, supply point and smart-charging data inside Home Assistant.
+Questa integrazione personalizzata utilizza le API GraphQL Kraken di Octopus Energy Italia per portare in Home Assistant saldi, tariffe, punti di fornitura, dispositivi SmartFlex e preferenze di ricarica.
 
-*Octopus Energy® is a registered trademark of Octopus Energy Group. This project is community maintained and not affiliated with the company.*
+*Octopus Energy® è un marchio registrato del gruppo Octopus Energy. Il progetto è mantenuto dalla community e non è affiliato all’azienda.*
 
 ---
 
-## Highlights
+## Caratteristiche principali
 
-- **Full Italian schema support** – pulls data from `account`, `ledgers`, `properties`, `supplyPoints`, `devices`, and flex dispatch GraphQL queries published at `https://api.oeit-kraken.energy/v1/graphql/`
-- **Multi-account aware** – automatically discovers each account number linked to the authenticated customer and keeps the entities separated
-- **Tariff intelligence** – surfaces current simple, time-of-use, or dynamic electricity products and active gas contracts with detailed pricing metadata
-- **Supply monitoring** – exposes electricity POD and gas PDR status, enrolment progress, smart-meter flags and cancellation reasons as dedicated sensors
-- **SmartFlex insights** – reports planned/active dispatch windows, device states and detected vehicle battery capacity for automations
-- **Home Assistant native** – integrates with the entity registry, supports config entry reloads, and honours a 1-minute coordinator refresh cadence (`UPDATE_INTERVAL`)
+- **Copertura completa dello schema italiano** – interrogazioni delle entità `account`, `ledgers`, `properties`, `supplyPoints`, `devices` e delle query Flex/dispatch pubblicate su `https://api.oeit-kraken.energy/v1/graphql/`.
+- **Supporto multi-account** – rilevamento automatico di tutti i conti collegati alle credenziali e separazione dei dati per ciascuno di essi.
+- **Tariffe con metadati arricchiti** – esposizione del prodotto attivo, prezzi base/F2/F3, oneri fissi, unità di misura, link ai termini di contratto e scadenze per elettricità e gas.
+- **Monitoraggio POD/PDR** – stato di fornitura, data di enrolment, flag contatore smart, motivazioni di cancellazione e contratti associati a ogni punto.
+- **SmartFlex avanzato** – pianificazione, finestre di dispatch correnti e future, stato dispositivi, target di ricarica preferiti e capacità batteria del veicolo.
+- **Integrazione nativa con HA** – utilizzo dell’Entity Registry, aggiornamenti coordinati ogni minuto (`UPDATE_INTERVAL`) e servizi dedicati per configurare le preferenze di ricarica.
 
-## Prerequisites
+## Prerequisiti
 
-- An active Octopus Energy Italy customer account with credentials that can log in to the Kraken customer portal
-- Home Assistant 2023.12 or newer (async config flows + `python_graphql_client` dependency)
-- Optional: enable debug logging in `configuration.yaml` to troubleshoot API responses:
+- Account cliente Octopus Energy Italia con accesso al portale Kraken.
+- Home Assistant 2023.12 o successivo (config flow asincrone e pacchetto `python_graphql_client`).
+- Facoltativo: abilita il debug in `configuration.yaml` per analizzare eventuali problemi API.
 
-  ```yaml
-  logger:
-    logs:
-      custom_components.octopus_energy_it: debug
-  ```
+```yaml
+logger:
+  logs:
+    custom_components.octopus_energy_it: debug
+```
 
-## Installation
+## Installazione
 
-### HACS (recommended)
+### HACS (consigliata)
 
-1. In HACS go to **Integrations → ⋮ → Custom repositories** and add `https://github.com/samuelebistoletti/octopus_energy_it` as type *Integration*
-2. Search for "Octopus Energy Italy" and install the integration
-3. Restart Home Assistant when prompted
-4. Add the integration from **Settings → Devices & Services → Add Integration**
+1. In HACS apri **Integrazioni → ⋮ → Custom repositories** e aggiungi `https://github.com/samuelebistoletti/octopus_energy_it` con tipo *Integration*.
+2. Cerca “Octopus Energy Italy” e installa l’integrazione.
+3. Riavvia Home Assistant quando richiesto.
+4. Configura l’integrazione da **Impostazioni → Dispositivi e Servizi → Aggiungi integrazione**.
 
-### Manual
+### Installazione manuale
 
-1. Copy the `custom_components/octopus_energy_it` folder into your Home Assistant `custom_components` directory
-2. Restart Home Assistant
-3. Configure the integration from **Settings → Devices & Services → Add Integration**
+1. Copia la cartella `custom_components/octopus_energy_it` nella directory `custom_components` della tua istanza HA.
+2. Riavvia Home Assistant.
+3. Segui la procedura guidata da **Impostazioni → Dispositivi e Servizi → Aggiungi integrazione**.
 
-## Configuration
+## Configurazione iniziale
 
-1. Select **Octopus Energy Italy** from the add-integration dialog
-2. Enter the email and password used on the Italian Kraken portal
-3. The flow validates the credentials, collects one or more account numbers and stores them in the config entry
-4. Entities are created after the first successful data refresh; the coordinator updates roughly every 60 seconds
+1. Seleziona **Octopus Energy Italy** tra le integrazioni disponibili.
+2. Inserisci e-mail e password usate sul portale Kraken italiano.
+3. La procedura convalida le credenziali, recupera uno o più numeri di conto e li memorizza nella config entry.
+4. Gli entity vengono creati dopo il primo aggiornamento del coordinatore (circa 60 secondi).
 
-## Data Model Overview
+## Modello dati gestito
 
-The integration reshapes the Italian Kraken schema into Home Assistant friendly structures:
+- **Accounts & Ledgers** – saldi per elettricità, gas, calore e altri ledger (es. canone TV).
+- **Properties & Supply Points** – POD/PDR, stato e data di enrolment, stato fornitura, smart meter e motivazioni di cancellazione.
+- **Products** – prodotti attivi e storici con prezzi dettagliati, oneri, unità, tipologia tariffaria, termini contrattuali e finestra di validità.
+- **Devices & Preferences** – dispositivi SmartFlex, stato di sospensione, programmi di ricarica e target percentuale.
+- **Dispatches** – finestre di carica pianificate e completate per l’automazione delle ricariche intelligenti.
 
-- **Accounts & Ledgers** – balance information for electricity, gas, heat and any additional ledgers
-- **Properties & Supply Points** – POD / PDR identifiers, supply status, enrolment state, smart-meter flags and cancellation reasons
-- **Products** – electricity and gas products with pricing, unit rates, standing charges and validity windows
-- **Devices & Preferences** – SmartFlex vehicles/charge points, suspension state and supported boost actions
-- **Dispatches** – current and upcoming charge windows (flex planned dispatches) plus historical results
+## Entità esposte
 
-## Entities
+### Sensori binari
 
-### Binary Sensor
+- `binary_sensor.octopus_<account>_intelligent_dispatching` – `on` se una finestra di dispatch è attiva.
 
-- `binary_sensor.octopus_<account>_intelligent_dispatching` – `on` while a planned dispatch window is active
+### Sensori
 
-### Sensors
+**Tariffe e prezzi**
+- `sensor.octopus_<account>_electricity_price`
+- `sensor.octopus_<account>_electricity_product`
+- `sensor.octopus_<account>_electricity_standing_charge`
+- `sensor.octopus_<account>_gas_tariff`
+- `sensor.octopus_<account>_gas_product`
+- `sensor.octopus_<account>_gas_price`
+- `sensor.octopus_<account>_gas_standing_charge`
 
-**Tariffs & Pricing**
-- `sensor.octopus_<account>_electricity_price` – current €/kWh based on active electricity product or forecast
-- `sensor.octopus_<account>_gas_tariff` – active gas product code with pricing metadata
-- `sensor.octopus_<account>_gas_price` – gas consumption price exposed as €/kWh
-
-**Ledger Balances**
+**Saldi ledger**
 - `sensor.octopus_<account>_electricity_balance`
 - `sensor.octopus_<account>_gas_balance`
 - `sensor.octopus_<account>_heat_balance`
-- `sensor.octopus_<account>_<ledger>_balance` – automatically created for every additional ledger returned by Kraken
+- `sensor.octopus_<account>_<ledger>_balance`
 
-**Supply Points**
-- `sensor.octopus_<account>_electricity_supply_status` – status, enrolment state, smart-meter flag and cancellation reason for the POD
-- `sensor.octopus_<account>_gas_supply_status` – status and metadata for the gas PDR
-- `sensor.octopus_<account>_gas_pdr` – exposed PDR identifier
-- `sensor.octopus_<account>_gas_supply_point_id` – internal gas supply point ID reported by Kraken
+**Punti di fornitura**
+- `sensor.octopus_<account>_electricity_supply_status`
+- `sensor.octopus_<account>_gas_supply_status`
+- `sensor.octopus_<account>_gas_pdr`
+- `sensor.octopus_<account>_gas_supply_point_id`
 
-**Gas Contracts**
+**Contratti elettricità**
+- `sensor.octopus_<account>_electricity_contract_start`
+- `sensor.octopus_<account>_electricity_contract_end`
+- `sensor.octopus_<account>_electricity_contract_days_until_expiry`
+
+**Contratti gas**
 - `sensor.octopus_<account>_gas_contract_start`
 - `sensor.octopus_<account>_gas_contract_end`
 - `sensor.octopus_<account>_gas_contract_days_until_expiry`
 
-**SmartFlex Windows**
+**Storico accordi**
+- `sensor.octopus_<account>_electricity_agreements`
+- `sensor.octopus_<account>_gas_agreements`
+
+**Finestre SmartFlex**
 - `sensor.octopus_<account>_dispatch_current_start`
 - `sensor.octopus_<account>_dispatch_current_end`
 - `sensor.octopus_<account>_dispatch_next_start`
 - `sensor.octopus_<account>_dispatch_next_end`
 
-**Devices & Vehicles**
-- `sensor.octopus_<account>_device_status` – current device smart-control state, suspension flag and metadata
-- `sensor.octopus_<account>_vehicle_battery_size` – detected battery capacity (kWh) for connected vehicles (disabled by default)
+**Dispositivi e veicoli**
+- `sensor.octopus_<account>_device_status`
+- `sensor.octopus_<account>_device_charge_target`
+- `sensor.octopus_<account>_device_target_time`
+- `sensor.octopus_<account>_vehicle_battery_size`
 
-> **Tip:** Dispatch window and vehicle battery sensors are created disabled in the entity registry. Enable only those you need.
+> I sensori di finestre SmartFlex, target di ricarica, orario target, informazioni prodotto e batteria veicolo sono creati disattivati: abilita solo quelli necessari dall’Entity Registry.
 
-### Switches
+### Switch
 
-- `switch.octopus_<account>_device_smart_control` – toggles smart control (suspension) for the primary device
-- `switch.octopus_<account>_<device_name>_boost_charge` – instant boost charge switch for devices that support the SmartFlex boost action
+- `switch.octopus_<account>_device_smart_control` – sospende/riattiva il controllo intelligente del dispositivo principale.
+- `switch.octopus_<account>_<device_name>_boost_charge` – attiva la ricarica immediata (solo dispositivi compatibili con il boost).
 
-### Service
+### Servizi
 
 - `octopus_energy_it.set_device_preferences`
-  - `device_id`: Device identifier from the sensor attributes (required)
-  - `target_percentage`: 20–100 value in 5% steps (required)
-  - `target_time`: Completion time (`HH:MM`, 04:00–17:00) (required)
+  - `device_id`: ID del dispositivo (obbligatorio)
+  - `target_percentage`: valore 20–100 con passi da 5 (obbligatorio)
+  - `target_time`: orario di conclusione (`HH:MM`, 04:00–17:00) (obbligatorio)
 
 ## Troubleshooting
 
-- Use Home Assistant **Developer Tools → Logs** to inspect warnings about token refresh or API errors
-- Set `LOG_API_RESPONSES` / `LOG_TOKEN_RESPONSES` in `custom_components/octopus_energy_it/const.py` to `True` for verbose output (only recommended temporarily)
-- If no entities appear, confirm that at least one account exposes electricity or gas products in the Italian Kraken portal
+- Verifica **Strumenti per sviluppatori → Log** per messaggi di errore o avviso.
+- Imposta `LOG_API_RESPONSES` o `LOG_TOKEN_RESPONSES` su `True` in `custom_components/octopus_energy_it/const.py` per log estesi (solo per debug temporaneo).
+- Se non compaiono entità, assicurati che almeno un POD o PDR sia attivo nel portale Kraken.
 
 ---
 
-Documentazione aggiornata per lo schema GraphQL di Octopus Energy Italia (Kraken).
+Documentazione aggiornata in base alle API GraphQL di Octopus Energy Italia.

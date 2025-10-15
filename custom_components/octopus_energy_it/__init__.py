@@ -231,16 +231,36 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "raw_response": {},
                 "electricity_supply_status": None,
                 "electricity_enrolment_status": None,
+                "electricity_enrolment_start": None,
                 "electricity_supply_start": None,
                 "electricity_is_smart_meter": None,
                 "electricity_cancellation_reason": None,
                 "electricity_supply_point": None,
+                "electricity_contract_start": None,
+                "electricity_contract_end": None,
+                "electricity_contract_days_until_expiry": None,
+                "electricity_terms_url": None,
+                "electricity_annual_standing_charge": None,
+                "electricity_consumption_charge": None,
+                "electricity_consumption_charge_f2": None,
+                "electricity_consumption_charge_f3": None,
+                "electricity_consumption_units": None,
+                "electricity_annual_standing_charge_units": None,
                 "gas_supply_status": None,
                 "gas_enrolment_status": None,
+                "gas_enrolment_start": None,
                 "gas_supply_start": None,
                 "gas_is_smart_meter": None,
                 "gas_cancellation_reason": None,
                 "gas_supply_point": None,
+                "gas_terms_url": None,
+                "gas_annual_standing_charge": None,
+                "gas_annual_standing_charge_units": None,
+                "gas_consumption_units": None,
+                "current_electricity_product": None,
+                "electricity_agreements": [],
+                "current_gas_product": None,
+                "gas_agreements": [],
             }
         }
 
@@ -331,9 +351,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             result_data[account_number]["electricity_supply_point"] = first_electricity_supply_point
             result_data[account_number]["electricity_supply_status"] = first_electricity_supply_point.get("status")
             result_data[account_number]["electricity_enrolment_status"] = first_electricity_supply_point.get("enrolmentStatus")
+            result_data[account_number]["electricity_enrolment_start"] = first_electricity_supply_point.get("enrolmentStartDate")
             result_data[account_number]["electricity_supply_start"] = first_electricity_supply_point.get("supplyStartDate")
             result_data[account_number]["electricity_is_smart_meter"] = first_electricity_supply_point.get("isSmartMeter")
             result_data[account_number]["electricity_cancellation_reason"] = first_electricity_supply_point.get("cancellationReason")
+            agreements = api._flatten_connection(first_electricity_supply_point.get("agreements"))
+            simplified_agreements = []
+            for agreement in agreements or []:
+                if not isinstance(agreement, dict):
+                    continue
+                product = agreement.get("product") or {}
+                simplified_agreements.append(
+                    {
+                        "id": agreement.get("id"),
+                        "valid_from": agreement.get("validFrom"),
+                        "valid_to": agreement.get("validTo"),
+                        "is_active": agreement.get("isActive"),
+                        "product_code": product.get("code"),
+                        "product_name": product.get("displayName") or product.get("fullName"),
+                    }
+                )
+            result_data[account_number]["electricity_agreements"] = simplified_agreements
 
         result_data[account_number]["electricity_pod"] = electricity_pod
         result_data[account_number]["electricity_supply_point_id"] = electricity_supply_id
@@ -355,9 +393,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             result_data[account_number]["gas_supply_point"] = first_gas_supply_point
             result_data[account_number]["gas_supply_status"] = first_gas_supply_point.get("status")
             result_data[account_number]["gas_enrolment_status"] = first_gas_supply_point.get("enrolmentStatus")
+            result_data[account_number]["gas_enrolment_start"] = first_gas_supply_point.get("enrolmentStartDate")
             result_data[account_number]["gas_supply_start"] = first_gas_supply_point.get("supplyStartDate")
             result_data[account_number]["gas_is_smart_meter"] = first_gas_supply_point.get("isSmartMeter")
             result_data[account_number]["gas_cancellation_reason"] = first_gas_supply_point.get("cancellationReason")
+            agreements = api._flatten_connection(first_gas_supply_point.get("agreements"))
+            simplified_agreements = []
+            for agreement in agreements or []:
+                if not isinstance(agreement, dict):
+                    continue
+                product = agreement.get("product") or {}
+                simplified_agreements.append(
+                    {
+                        "id": agreement.get("id"),
+                        "valid_from": agreement.get("validFrom"),
+                        "valid_to": agreement.get("validTo"),
+                        "is_active": agreement.get("isActive"),
+                        "product_code": product.get("code"),
+                        "product_name": product.get("displayName") or product.get("fullName"),
+                    }
+                )
+            result_data[account_number]["gas_agreements"] = simplified_agreements
 
         result_data[account_number]["gas_pdr"] = gas_pdr
         result_data[account_number]["gas_supply_point_id"] = gas_supply_id
@@ -507,6 +563,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # Preserve the products list as is for consumers expecting camelCase keys
         result_data[account_number]["products_raw"] = products
 
+        current_electricity_product = select_current_product(products)
+        result_data[account_number]["current_electricity_product"] = current_electricity_product
+        if current_electricity_product:
+            result_data[account_number]["electricity_contract_start"] = current_electricity_product.get("validFrom")
+            result_data[account_number]["electricity_contract_end"] = current_electricity_product.get("validTo")
+            pricing = current_electricity_product.get("pricing") or {}
+            result_data[account_number]["electricity_annual_standing_charge"] = pricing.get("annualStandingCharge")
+            result_data[account_number]["electricity_annual_standing_charge_units"] = pricing.get("annualStandingChargeUnits")
+            result_data[account_number]["electricity_consumption_charge"] = pricing.get("base")
+            result_data[account_number]["electricity_consumption_charge_f2"] = pricing.get("f2")
+            result_data[account_number]["electricity_consumption_charge_f3"] = pricing.get("f3")
+            result_data[account_number]["electricity_consumption_units"] = pricing.get("units")
+            result_data[account_number]["electricity_terms_url"] = current_electricity_product.get("termsAndConditionsUrl")
+
+            valid_to = current_electricity_product.get("validTo")
+            if valid_to:
+                try:
+                    end_date = datetime.fromisoformat(valid_to.replace("Z", "+00:00"))
+                    now_date = datetime.now(end_date.tzinfo)
+                    days_diff = (end_date - now_date).days
+                    result_data[account_number]["electricity_contract_days_until_expiry"] = max(0, days_diff)
+                except (ValueError, TypeError):
+                    pass
+
         # Gas products
         gas_products = data.get("gas_products") or []
         if gas_products:
@@ -525,10 +605,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         gas_contract_days_until_expiry = None
 
         current_gas_product = select_current_product(gas_products)
+        result_data[account_number]["current_gas_product"] = current_gas_product
         if current_gas_product:
+            pricing = current_gas_product.get("pricing") or {}
             base_rate = (
-                current_gas_product.get("pricing", {}).get("base")
-                if isinstance(current_gas_product.get("pricing"), dict)
+                pricing.get("base")
+                if isinstance(pricing, dict)
                 else None
             )
             if base_rate is not None:
@@ -540,6 +622,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         gas_price = float(gross_rate_str) / 100.0
                     except (ValueError, TypeError):
                         gas_price = None
+
+            result_data[account_number]["gas_terms_url"] = current_gas_product.get("termsAndConditionsUrl")
+            if isinstance(pricing, dict):
+                result_data[account_number]["gas_annual_standing_charge"] = pricing.get("annualStandingCharge")
+                result_data[account_number]["gas_annual_standing_charge_units"] = pricing.get("annualStandingChargeUnits")
+                result_data[account_number]["gas_consumption_units"] = pricing.get("units")
 
             gas_contract_start = current_gas_product.get("validFrom")
             gas_contract_end = current_gas_product.get("validTo")
