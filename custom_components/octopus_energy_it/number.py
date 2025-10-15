@@ -1,0 +1,209 @@
+"""Number entities per Octopus Energy Italia."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from homeassistant.components.number import NumberEntity, NumberMode
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+
+from .const import DOMAIN
+
+
+def _get_account_data(coordinator, account_number: str) -> dict | None:
+    """Recupera i dati dell'account dal coordinatore condiviso."""
+    data = getattr(coordinator, "data", None)
+    if isinstance(data, dict):
+        return data.get(account_number)
+    return None
+
+
+def _first_device_schedule(device: dict) -> dict | None:
+    schedules = (device.get("preferences") or {}).get("schedules") or []
+    if not schedules:
+        return None
+    return schedules[0]
+
+
+def _schedule_setting(device: dict) -> dict | None:
+    settings = (device.get("preferenceSetting") or {}).get("scheduleSettings") or []
+    if not settings:
+        return None
+    return settings[0]
+
+
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+) -> None:
+    """Configura le entità number."""
+    data = hass.data[DOMAIN][entry.entry_id]
+    coordinator = data["coordinator"]
+    api = data["api"]
+
+    account_numbers = data.get("account_numbers") or []
+    if not account_numbers:
+        primary = data.get("account_number")
+        if primary:
+            account_numbers = [primary]
+
+    entities: list[OctopusDeviceChargeTargetNumber] = []
+
+    for account_number in account_numbers:
+        account_data = _get_account_data(coordinator, account_number)
+        if not account_data:
+            continue
+
+        for device in account_data.get("devices", []):
+            device_id = device.get("id")
+            schedule = _first_device_schedule(device)
+            if not device_id or not schedule:
+                continue
+
+            entities.append(
+                OctopusDeviceChargeTargetNumber(
+                    account_number=account_number,
+                    device_id=device_id,
+                    coordinator=coordinator,
+                    api=api,
+                )
+            )
+
+    if entities:
+        async_add_entities(entities)
+
+
+class OctopusDeviceChargeTargetNumber(CoordinatorEntity, NumberEntity):
+    """Numero per modificare la percentuale di carica SmartFlex."""
+
+    _attr_native_unit_of_measurement = "%"
+    _attr_mode = NumberMode.SLIDER
+    _attr_entity_registry_enabled_default = True
+
+    def __init__(self, account_number: str, device_id: str, coordinator, api) -> None:
+        super().__init__(coordinator)
+        self._account_number = account_number
+        self._device_id = device_id
+        self._api = api
+
+        self._attr_name = f"Octopus {account_number} Charge Target"
+        self._attr_unique_id = (
+            f"octopus_{account_number}_{device_id}_charge_target"
+        )
+        self._attr_has_entity_name = False
+
+    # Helpers --------------------------------------------------------------
+    def _current_device(self) -> dict | None:
+        account = _get_account_data(self.coordinator, self._account_number)
+        if not account:
+            return None
+        for device in account.get("devices", []):
+            if device.get("id") == self._device_id:
+                return device
+        return None
+
+    def _current_schedule(self) -> dict | None:
+        device = self._current_device()
+        if not device:
+            return None
+        return _first_device_schedule(device)
+
+    def _schedule_setting(self) -> dict | None:
+        device = self._current_device()
+        if not device:
+            return None
+        return _schedule_setting(device)
+
+    def _parse_float(self, value: Any, default: float) -> float:
+        try:
+            if value is None:
+                return default
+            return float(str(value))
+        except (TypeError, ValueError):
+            return default
+
+    def _current_target_time(self) -> str | None:
+        schedule = self._current_schedule()
+        if not schedule:
+            return None
+        time_value = schedule.get("time")
+        if not time_value:
+            return None
+        return str(time_value)[:5]
+
+    def _current_target_percentage(self) -> int | None:
+        schedule = self._current_schedule()
+        if not schedule:
+            return None
+        try:
+            value = schedule.get("max")
+            if value is None:
+                return None
+            return int(float(value))
+        except (TypeError, ValueError):
+            return None
+
+    def _update_local_schedule(self, *, target_percentage: int | None = None, target_time: str | None = None) -> None:
+        account = _get_account_data(self.coordinator, self._account_number)
+        if not account:
+            return
+        for device in account.get("devices", []):
+            if device.get("id") == self._device_id:
+                preferences = device.setdefault("preferences", {})
+                schedules = preferences.setdefault("schedules", [])
+                if schedules:
+                    schedule = schedules[0]
+                    if target_percentage is not None:
+                        schedule["max"] = target_percentage
+                    if target_time is not None:
+                        stored_time = target_time if len(target_time) > 5 else f"{target_time}:00"
+                        schedule["time"] = stored_time
+                break
+        self.coordinator.async_set_updated_data(dict(self.coordinator.data))
+
+    # NumberEntity API ----------------------------------------------------
+    @property
+    def native_value(self) -> float | None:
+        return self._current_target_percentage()
+
+    @property
+    def native_min_value(self) -> float:
+        setting = self._schedule_setting()
+        if setting:
+            return self._parse_float(setting.get("min"), 20)
+        return 20
+
+    @property
+    def native_max_value(self) -> float:
+        setting = self._schedule_setting()
+        if setting:
+            return self._parse_float(setting.get("max"), 100)
+        return 100
+
+    @property
+    def native_step(self) -> float:
+        return 5
+
+    async def async_set_native_value(self, value: float) -> None:
+        target_time = self._current_target_time()
+        if not target_time:
+            setting = self._schedule_setting()
+            target_time = str(setting.get("timeFrom", "06:00"))[:5] if setting else "06:00"
+
+        step = self.native_step or 5
+        target_percentage = int(round(value / step) * step)
+        target_percentage = max(self.native_min_value, min(self.native_max_value, target_percentage))
+
+        success = await self._api.set_device_preferences(
+            self._device_id,
+            target_percentage,
+            target_time,
+        )
+        if not success:
+            raise HomeAssistantError("Impossibile aggiornare il target di carica")
+
+        self._update_local_schedule(target_percentage=target_percentage, target_time=f"{target_time}:00")
+        await self.coordinator.async_request_refresh()

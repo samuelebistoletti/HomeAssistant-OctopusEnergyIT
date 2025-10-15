@@ -1,6 +1,5 @@
 """Switch platform for Octopus Energy Italy."""
 
-import asyncio
 import logging
 from datetime import datetime, timedelta
 from typing import Any
@@ -280,10 +279,9 @@ class OctopusSwitch(CoordinatorEntity, SwitchEntity):
                 _LOGGER.debug(
                     "Successfully turned on device: device_id=%s", self._device_id
                 )
-                # We maintain pending state until API confirms
-
-                # Trigger a coordinator refresh after a delay to get updated data
-                await asyncio.sleep(3)  # Wait 3 seconds to give API time
+                self._is_switching = False
+                self._pending_state = None
+                self._pending_until = None
                 await self.coordinator.async_request_refresh()
             else:
                 _LOGGER.error("Failed to turn on device: device_id=%s", self._device_id)
@@ -323,10 +321,9 @@ class OctopusSwitch(CoordinatorEntity, SwitchEntity):
                 _LOGGER.debug(
                     "Successfully turned off device: device_id=%s", self._device_id
                 )
-                # We maintain pending state until API confirms
-
-                # Trigger a coordinator refresh after a delay to get updated data
-                await asyncio.sleep(3)  # Wait 3 seconds to give API time
+                self._is_switching = False
+                self._pending_state = None
+                self._pending_until = None
                 await self.coordinator.async_request_refresh()
             else:
                 _LOGGER.error(

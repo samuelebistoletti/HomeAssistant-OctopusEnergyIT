@@ -25,7 +25,13 @@ from .octopus_energy_it import OctopusEnergyIT
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.SENSOR, Platform.SWITCH]
+PLATFORMS: list[Platform] = [
+    Platform.BINARY_SENSOR,
+    Platform.SENSOR,
+    Platform.SWITCH,
+    Platform.NUMBER,
+    Platform.SELECT,
+]
 
 API_URL = "https://api.octopus.energy/v1/graphql/"
 
@@ -711,7 +717,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 translation_domain=DOMAIN,
             )
 
-        # Validate percentage (20-100% in 5% steps)
+        original_target_percentage = target_percentage
+        target_percentage = max(20, min(100, int(round(target_percentage / 5) * 5)))
+        if original_target_percentage != target_percentage:
+            _LOGGER.debug(
+                "Adjusted target percentage from %s to %s for service call",
+                original_target_percentage,
+                target_percentage,
+            )
+
         if not 20 <= target_percentage <= 100:
             _LOGGER.error(
                 f"Invalid target percentage: {target_percentage}. Must be between 20 and 100"
@@ -762,6 +776,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             if success:
                 _LOGGER.info("Successfully set device preferences")
+                formatted_time = api._format_time_to_hh_mm(target_time)
+                for acc_number, acc_data in coordinator.data.items():
+                    for device in acc_data.get("devices", []):
+                        if device.get("id") == device_id:
+                            preferences = device.setdefault("preferences", {})
+                            schedules = preferences.setdefault("schedules", [])
+                            if schedules:
+                                schedules[0]["max"] = target_percentage
+                                schedules[0]["time"] = f"{formatted_time}:00"
+                            break
+                    else:
+                        continue
+                    break
+                coordinator.async_set_updated_data(dict(coordinator.data))
+                await coordinator.async_request_refresh()
                 return {"success": True}
             _LOGGER.error("Failed to set device preferences")
             from homeassistant.exceptions import ServiceValidationError

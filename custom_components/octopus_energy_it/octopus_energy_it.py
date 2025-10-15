@@ -1236,7 +1236,16 @@ class OctopusEnergyIT:
             _LOGGER.error("Failed to ensure valid token for set_device_preferences")
             return False
 
-        # Validate percentage range (20-100% in 5% steps)
+        # Sanitize and validate the target percentage
+        original_percentage = target_percentage
+        target_percentage = max(20, min(100, int(round(target_percentage / 5) * 5)))
+        if target_percentage != original_percentage:
+            _LOGGER.debug(
+                "Adjusted target percentage from %s to %s to satisfy 5%% step requirement",
+                original_percentage,
+                target_percentage,
+            )
+
         if not 20 <= target_percentage <= 100:
             _LOGGER.error(
                 "Invalid target percentage: %s. Must be between 20 and 100.",

@@ -115,7 +115,11 @@ logger:
 - `sensor.octopus_<account>_device_target_time`
 - `sensor.octopus_<account>_vehicle_battery_size`
 
-> I sensori di finestre SmartFlex, target di ricarica, orario target, informazioni prodotto e batteria veicolo sono creati disattivati: abilita solo quelli necessari dall’Entity Registry.
+**Controlli**
+- `number.octopus_<account>_<device>_charge_target` – slider per impostare la percentuale di carica SmartFlex
+- `select.octopus_<account>_<device>_target_time_select` – menu per scegliere l’orario di completamento
+
+> I sensori e i controlli dedicati a SmartFlex (finestre, target, orario, informazioni prodotto e batteria veicolo) sono creati disattivati: abilita solo quelli necessari dall’Entity Registry.
 
 ### Switch
 
