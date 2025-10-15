@@ -224,13 +224,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "next_start": None,
                 "next_end": None,
                 "ledgers": [],
-                "malo_number": None,
-                "melo_number": None,
-                "meter": None,
-                "gas_malo_number": None,
-                "gas_melo_number": None,
-                "gas_meter": None,
+                "electricity_pod": None,
+                "electricity_supply_point_id": None,
+                "gas_pdr": None,
+                "gas_supply_point_id": None,
                 "raw_response": {},
+                "electricity_supply_status": None,
+                "electricity_enrolment_status": None,
+                "electricity_supply_start": None,
+                "electricity_is_smart_meter": None,
+                "electricity_cancellation_reason": None,
+                "electricity_supply_point": None,
+                "gas_supply_status": None,
+                "gas_enrolment_status": None,
+                "gas_supply_start": None,
+                "gas_is_smart_meter": None,
+                "gas_cancellation_reason": None,
+                "gas_supply_point": None,
             }
         }
 
@@ -270,11 +280,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             balance_cents = ledger.get("balance", 0)
             balance_eur = balance_cents / 100
 
-            if ledger_type == "ELECTRICITY_LEDGER":
+            normalized_type = (ledger_type or "").upper()
+
+            if normalized_type.endswith("ELECTRICITY_LEDGER"):
                 electricity_balance_eur = balance_eur
-            elif ledger_type == "GAS_LEDGER":
+            elif normalized_type.endswith("GAS_LEDGER"):
                 gas_balance_eur = balance_eur
-            elif ledger_type == "HEAT_LEDGER":
+            elif normalized_type.endswith("HEAT_LEDGER"):
                 heat_balance_eur = balance_eur
             else:
                 # Store any other ledger types we might encounter
@@ -316,13 +328,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if first_electricity_supply_point:
             electricity_pod = first_electricity_supply_point.get("pod")
             electricity_supply_id = first_electricity_supply_point.get("id")
+            result_data[account_number]["electricity_supply_point"] = first_electricity_supply_point
+            result_data[account_number]["electricity_supply_status"] = first_electricity_supply_point.get("status")
+            result_data[account_number]["electricity_enrolment_status"] = first_electricity_supply_point.get("enrolmentStatus")
+            result_data[account_number]["electricity_supply_start"] = first_electricity_supply_point.get("supplyStartDate")
+            result_data[account_number]["electricity_is_smart_meter"] = first_electricity_supply_point.get("isSmartMeter")
+            result_data[account_number]["electricity_cancellation_reason"] = first_electricity_supply_point.get("cancellationReason")
 
-        result_data[account_number]["malo_number"] = electricity_pod
-        result_data[account_number]["melo_number"] = electricity_supply_id
-
-        # Meter identifiers are not currently exposed through the public schema
-        meter = None
-        result_data[account_number]["meter"] = meter
+        result_data[account_number]["electricity_pod"] = electricity_pod
+        result_data[account_number]["electricity_supply_point_id"] = electricity_supply_id
 
         first_gas_supply_point = next(
             (
@@ -338,11 +352,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if first_gas_supply_point:
             gas_pdr = first_gas_supply_point.get("pdr")
             gas_supply_id = first_gas_supply_point.get("id")
+            result_data[account_number]["gas_supply_point"] = first_gas_supply_point
+            result_data[account_number]["gas_supply_status"] = first_gas_supply_point.get("status")
+            result_data[account_number]["gas_enrolment_status"] = first_gas_supply_point.get("enrolmentStatus")
+            result_data[account_number]["gas_supply_start"] = first_gas_supply_point.get("supplyStartDate")
+            result_data[account_number]["gas_is_smart_meter"] = first_gas_supply_point.get("isSmartMeter")
+            result_data[account_number]["gas_cancellation_reason"] = first_gas_supply_point.get("cancellationReason")
 
-        result_data[account_number]["gas_malo_number"] = gas_pdr
-        result_data[account_number]["gas_melo_number"] = gas_supply_id
-        gas_meter = None
-        result_data[account_number]["gas_meter"] = gas_meter
+        result_data[account_number]["gas_pdr"] = gas_pdr
+        result_data[account_number]["gas_supply_point_id"] = gas_supply_id
 
         # Extract property IDs
         property_ids = [
@@ -542,87 +560,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         result_data[account_number]["gas_contract_end"] = gas_contract_end
         result_data[account_number]["gas_contract_days_until_expiry"] = (
             gas_contract_days_until_expiry
-        )
-
-        # Gas meter smart reading capability
-        gas_meter_smart_reading = None
-        if gas_meter and isinstance(gas_meter, dict):
-            gas_meter_smart_reading = gas_meter.get("shouldReceiveSmartMeterData", None)
-
-        result_data[account_number]["gas_meter_smart_reading"] = gas_meter_smart_reading
-
-        # Fetch latest gas meter reading if gas meter exists
-        gas_latest_reading = None
-        if gas_meter and gas_meter.get("id"):
-            try:
-                gas_meter_id = gas_meter.get("id")
-                _LOGGER.debug(
-                    "Attempting to fetch gas meter reading for account %s, meter %s",
-                    account_number,
-                    gas_meter_id,
-                )
-                gas_latest_reading = await api.fetch_gas_meter_reading(
-                    account_number, gas_meter_id
-                )
-
-                if gas_latest_reading:
-                    _LOGGER.debug(
-                        "Successfully fetched gas meter reading: %s %s at %s",
-                        gas_latest_reading.get("value"),
-                        gas_latest_reading.get("units"),
-                        gas_latest_reading.get("intervalEnd"),
-                    )
-                else:
-                    _LOGGER.debug(
-                        "No gas meter reading returned for meter %s", gas_meter_id
-                    )
-
-            except Exception as e:
-                _LOGGER.warning(
-                    "Failed to fetch gas meter reading for account %s, meter %s: %s",
-                    account_number,
-                    gas_meter_id,
-                    str(e),
-                )
-
-        result_data[account_number]["gas_latest_reading"] = gas_latest_reading
-
-        # Fetch latest electricity meter reading if electricity meter exists
-        electricity_latest_reading = None
-        if meter and meter.get("id"):
-            try:
-                electricity_meter_id = meter.get("id")
-                _LOGGER.debug(
-                    "Attempting to fetch electricity meter reading for account %s, meter %s",
-                    account_number,
-                    electricity_meter_id,
-                )
-                electricity_latest_reading = await api.fetch_electricity_meter_reading(
-                    account_number, electricity_meter_id
-                )
-
-                if electricity_latest_reading:
-                    _LOGGER.debug(
-                        "Successfully fetched electricity meter reading: %s at %s",
-                        electricity_latest_reading.get("value"),
-                        electricity_latest_reading.get("readAt"),
-                    )
-                else:
-                    _LOGGER.debug(
-                        "No electricity meter reading returned for meter %s",
-                        electricity_meter_id,
-                    )
-
-            except Exception as e:
-                _LOGGER.warning(
-                    "Failed to fetch electricity meter reading for account %s, meter %s: %s",
-                    account_number,
-                    electricity_meter_id,
-                    str(e),
-                )
-
-        result_data[account_number]["electricity_latest_reading"] = (
-            electricity_latest_reading
         )
 
         return result_data

@@ -528,26 +528,36 @@ class OctopusEnergyIT:
                         import copy
 
                         safe_response = copy.deepcopy(response)
-                        # Check if we have a token in the response and mask most of it for logging
-                        if (
-                            "data" in safe_response
-                            and "obtainKrakenToken" in safe_response["data"]
-                            and "token" in safe_response["data"]["obtainKrakenToken"]
-                        ):
-                            token = safe_response["data"]["obtainKrakenToken"]["token"]
-                            if token and len(token) > 10:
-                                # Keep first 5 and last 5 chars, mask the rest
-                                mask_length = len(token) - 10
-                                masked_token = (
-                                    token[:5] + "*" * mask_length + token[-5:]
-                                )
-                                safe_response["data"]["obtainKrakenToken"]["token"] = (
-                                    masked_token
-                                )
+                        if isinstance(safe_response, dict):
+                            # Check if we have a token in the response and mask most of it for logging
+                            token_container = (
+                                safe_response.get("data", {}).get("obtainKrakenToken")
+                            )
+                            if isinstance(token_container, dict) and "token" in (
+                                token_container
+                            ):
+                                token = token_container["token"]
+                                if token and len(token) > 10:
+                                    # Keep first 5 and last 5 chars, mask the rest
+                                    mask_length = len(token) - 10
+                                    masked_token = (
+                                        token[:5] + "*" * mask_length + token[-5:]
+                                    )
+                                    token_container["token"] = masked_token
                         _LOGGER.info(
                             "Token response (partial): %s",
                             json.dumps(safe_response, indent=2),
                         )
+
+                    if not isinstance(response, dict):
+                        _LOGGER.error(
+                            "Unexpected login response type at attempt %s: %s",
+                            attempt,
+                            response,
+                        )
+                        await asyncio.sleep(delay)
+                        delay = min(delay * 2, max_delay)
+                        continue
 
                     if "errors" in response:
                         error_code = (

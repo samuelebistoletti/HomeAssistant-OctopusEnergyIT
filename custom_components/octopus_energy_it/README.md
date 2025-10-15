@@ -3,358 +3,125 @@
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 ![installation_badge](https://img.shields.io/badge/dynamic/json?color=41BDF5&logo=home-assistant&label=integration%20usage&suffix=%20installs&cacheSeconds=15600&url=https://analytics.home-assistant.io/custom_integrations.json&query=$.octopus_energy_it.total)
 
-This custom component integrates Octopus Energy Italy services with Home Assistant, providing access to your energy account data, electricity prices, device control, and vehicle charging preferences.
+This custom component uses the Italian Octopus Energy Kraken GraphQL API to expose account, tariff, supply point and smart-charging data inside Home Assistant.
 
-*This integration is in no way affiliated with Octopus Energy.*
+*Octopus Energy® is a registered trademark of Octopus Energy Group. This project is community maintained and not affiliated with the company.*
 
 ---
 
-**⚡ New to Octopus Energy Italy?**
-[![Octopus Energy Referral](Use this link))](https://octopusenergy.it/octo-friends/airy-queen-959)
+## Highlights
 
-## Features- **Account Information**: Electricity and gas balance tracking across multiple accounts
-- **Energy Pricing**: Real-time electricity tariff prices with support for:
-  - Simple tariffs (fixed rate)
-  - Time of Use tariffs (GO, STANDARD rates)
-  - Dynamic tariffs (with real-time pricing using unit rate forecasts)
-  - Heat tariffs (for heat pumps)
-- **Multi-Ledger Support**: Electricity, Gas, Heat, and other ledger types
-- **Device Control**: Smart charging control for electric vehicles and charge points
-- **Boost Charging**: Instant charge boost functionality (requires smart charging enabled)
-- **Intelligent Dispatching**: Real-time status of Octopus Intelligent charge scheduling
-- **Multi-Account**: Support for multiple Octopus accounts under one integration
-- **Gas infrastructure monitoring** (MALO/MELO numbers, meters, readings)
-- **Latest Electricity meter reading**
-- **Gas contract tracking** with expiry countdown
-- **[octopus-energy-rates-card](https://github.com/lozzd/octopus-energy-rates-card) compatibility** for dynamic tariff visualization
+- **Full Italian schema support** – pulls data from `account`, `ledgers`, `properties`, `supplyPoints`, `devices`, and flex dispatch GraphQL queries published at `https://api.oeit-kraken.energy/v1/graphql/`
+- **Multi-account aware** – automatically discovers each account number linked to the authenticated customer and keeps the entities separated
+- **Tariff intelligence** – surfaces current simple, time-of-use, or dynamic electricity products and active gas contracts with detailed pricing metadata
+- **Supply monitoring** – exposes electricity POD and gas PDR status, enrolment progress, smart-meter flags and cancellation reasons as dedicated sensors
+- **SmartFlex insights** – reports planned/active dispatch windows, device states and detected vehicle battery capacity for automations
+- **Home Assistant native** – integrates with the entity registry, supports config entry reloads, and honours a 1-minute coordinator refresh cadence (`UPDATE_INTERVAL`)
+
+## Prerequisites
+
+- An active Octopus Energy Italy customer account with credentials that can log in to the Kraken customer portal
+- Home Assistant 2023.12 or newer (async config flows + `python_graphql_client` dependency)
+- Optional: enable debug logging in `configuration.yaml` to troubleshoot API responses:
+
+  ```yaml
+  logger:
+    logs:
+      custom_components.octopus_energy_it: debug
+  ```
 
 ## Installation
 
-### HACS (Home Assistant Community Store)
+### HACS (recommended)
 
-1. Add this repository as a custom repository in HACS
-2. Search for ["Octopus Energy Italy"](https://my.home-assistant.io/redirect/hacs_repository/?owner=samuelebistoletti&repository=octopus_energy_it&category=integration) in the HACS integrations
-3. Install the integration
-4. Restart Home Assistant
-5. Add the integration via the UI under **Settings** > **Devices & Services** > **Add Integration**
+1. In HACS go to **Integrations → ⋮ → Custom repositories** and add `https://github.com/samuelebistoletti/octopus_energy_it` as type *Integration*
+2. Search for "Octopus Energy Italy" and install the integration
+3. Restart Home Assistant when prompted
+4. Add the integration from **Settings → Devices & Services → Add Integration**
 
-### Manual Installation
+### Manual
 
-1. Copy the `octopus_energy_it` directory to your Home Assistant `custom_components` directory
+1. Copy the `custom_components/octopus_energy_it` folder into your Home Assistant `custom_components` directory
 2. Restart Home Assistant
-3. Add the integration via the UI under **Settings** > **Devices & Services** > **Add Integration**
+3. Configure the integration from **Settings → Devices & Services → Add Integration**
 
 ## Configuration
 
-The integration is configured via the Home Assistant UI:
+1. Select **Octopus Energy Italy** from the add-integration dialog
+2. Enter the email and password used on the Italian Kraken portal
+3. The flow validates the credentials, collects one or more account numbers and stores them in the config entry
+4. Entities are created after the first successful data refresh; the coordinator updates roughly every 60 seconds
 
-1. Navigate to **Settings** > **Devices & Services**
-2. Click **+ ADD INTEGRATION** and search for "Octopus Energy Italy"
-3. Enter your Octopus Energy Italy email and password
-4. The integration will automatically fetch your account number and set up the entities
+## Data Model Overview
+
+The integration reshapes the Italian Kraken schema into Home Assistant friendly structures:
+
+- **Accounts & Ledgers** – balance information for electricity, gas, heat and any additional ledgers
+- **Properties & Supply Points** – POD / PDR identifiers, supply status, enrolment state, smart-meter flags and cancellation reasons
+- **Products** – electricity and gas products with pricing, unit rates, standing charges and validity windows
+- **Devices & Preferences** – SmartFlex vehicles/charge points, suspension state and supported boost actions
+- **Dispatches** – current and upcoming charge windows (flex planned dispatches) plus historical results
 
 ## Entities
 
-### Binary Sensors
+### Binary Sensor
 
-#### Intelligent Dispatching
-- **Entity ID**: `binary_sensor.octopus_<account_number>_intelligent_dispatching`
-- **Description**: Shows whether Octopus Intelligent is currently dispatching (active charging schedule)
-- **State**: `on` when dispatching is active, `off` when inactive
-- **Attributes**:
-  - `account_number`: Your Octopus Energy account number
-  - `electricity_balance`: Current account balance in EUR
-  - `planned_dispatches`: List of upcoming charging sessions
-  - `completed_dispatches`: List of completed charging sessions
-  - `devices`: Information about connected smart devices
-  - `provider`: Energy provider information
-  - `vehicle_battery_size_in_kwh`: Vehicle battery capacity (if available)
-  - `current_start`: Start time of current dispatch
-  - `current_end`: End time of current dispatch
-  - `products`: Energy product details
-  - `malo_number`: Electricity meter point number
-  - `melo_number`: Electricity meter number
-  - `meter`: Meter information
+- `binary_sensor.octopus_<account>_intelligent_dispatching` – `on` while a planned dispatch window is active
 
 ### Sensors
 
-#### Electricity Price Sensor
+**Tariffs & Pricing**
+- `sensor.octopus_<account>_electricity_price` – current €/kWh based on active electricity product or forecast
+- `sensor.octopus_<account>_gas_tariff` – active gas product code with pricing metadata
+- `sensor.octopus_<account>_gas_price` – gas consumption price exposed as €/kWh
 
-- **Entity ID**: `sensor.octopus_<account_number>_electricity_price`
-- **Description**: Shows the current electricity price in €/kWh
-- **Tariff support**:
-  - **Simple tariffs**: Displays the fixed rate
-  - **Time of Use tariffs**: Automatically updates to show the currently active rate based on the time of day
-  - **Dynamic tariffs**: Uses real-time pricing data from unit rate forecasts for the most accurate current price
-  - **Heat tariffs**: Supports specific heat pump tariffs like Heat Light and shows the applicable rate
-- **Attributes**:
-  - `code`: Product code
-  - `name`: Product name
-  - `description`: Product description
-  - `type`: Product type (Simple or TimeOfUse)
-  - `valid_from`: Start date of validity
-  - `valid_to`: End date of validity
-  - `meter_id`: ID of your meter
-  - `meter_number`: Number of your meter
-  - `meter_type`: Type of your meter (MME, iMSys, etc.)
-  - `account_number`: Your Octopus Energy account number
-  - `malo_number`: Your electricity meter point number
-  - `melo_number`: Your electricity meter number
-  - `electricity_balance`: Your current account balance in EUR
-  - `timeslots`: (For TimeOfUse tariffs) List of all time slots with their rates and activation times
-  - `active_timeslot`: (For TimeOfUse tariffs) Currently active time slot name (e.g., "GO", "STANDARD")
-  - `rates`: (For Dynamic tariffs) Rate data formatted for octopus-energy-rates-card compatibility
-  - `rates_count`: (For Dynamic tariffs) Number of available rates
-  - `unit_rate_forecast`: (For Dynamic tariffs) Native German API unit rate forecast data
+**Ledger Balances**
+- `sensor.octopus_<account>_electricity_balance`
+- `sensor.octopus_<account>_gas_balance`
+- `sensor.octopus_<account>_heat_balance`
+- `sensor.octopus_<account>_<ledger>_balance` – automatically created for every additional ledger returned by Kraken
 
-#### Electricity Latest Reading Sensor
+**Supply Points**
+- `sensor.octopus_<account>_electricity_supply_status` – status, enrolment state, smart-meter flag and cancellation reason for the POD
+- `sensor.octopus_<account>_gas_supply_status` – status and metadata for the gas PDR
+- `sensor.octopus_<account>_gas_pdr` – exposed PDR identifier
+- `sensor.octopus_<account>_gas_supply_point_id` – internal gas supply point ID reported by Kraken
 
-- **Entity ID**: `sensor.octopus_<account_number>_electricity_latest_reading`
-- **Description**: Latest electricity meter reading with timestamp and origin information
-- **Unit**: kWh
-- **Attributes**:
-  - `reading_value`: Reading value in kWh
-  - `reading_units`: Reading units (kWh)
-  - `reading_date`: Date of the reading (formatted)
-  - `reading_origin`: Origin of the reading (CUSTOMER, ESTIMATED, etc.)
-  - `reading_type`: Type of reading (ACTUAL, ESTIMATED, etc.)
+**Gas Contracts**
+- `sensor.octopus_<account>_gas_contract_start`
+- `sensor.octopus_<account>_gas_contract_end`
+- `sensor.octopus_<account>_gas_contract_days_until_expiry`
 
-#### Electricity Balance Sensor
+**SmartFlex Windows**
+- `sensor.octopus_<account>_dispatch_current_start`
+- `sensor.octopus_<account>_dispatch_current_end`
+- `sensor.octopus_<account>_dispatch_next_start`
+- `sensor.octopus_<account>_dispatch_next_end`
 
-- **Entity ID**: `sensor.octopus_<account_number>_electricity_balance`
-- **Description**: Shows the current electricity account balance in EUR
-- **Unit**: €
-- **Note**: Only available for accounts with electricity service (MALO number present)
+**Devices & Vehicles**
+- `sensor.octopus_<account>_device_status` – current device smart-control state, suspension flag and metadata
+- `sensor.octopus_<account>_vehicle_battery_size` – detected battery capacity (kWh) for connected vehicles (disabled by default)
 
-#### Gas Sensors
-
-##### Gas Tariff Sensor
-- **Entity ID**: `sensor.octopus_<account_number>_gas_tariff`
-- **Description**: Shows the current gas product code and tariff details
-- **Attributes**:
-  - `code`: Product code
-  - `name`: Product name
-  - `description`: Product description
-  - `type`: Product type
-  - `valid_from`: Start date of validity
-  - `valid_to`: End date of validity
-  - `account_number`: Your Octopus Energy account number
-
-##### Gas Balance Sensor
-- **Entity ID**: `sensor.octopus_<account_number>_gas_balance`
-- **Description**: Shows the current gas account balance in EUR
-- **Unit**: €
-- **Note**: Only available for accounts with gas service (gas MALO number present)
-
-##### Gas Infrastructure Sensors
-- **Entity ID**: `sensor.octopus_<account_number>_gas_malo_number`
-- **Description**: Market location identifier for gas supply
-
-- **Entity ID**: `sensor.octopus_<account_number>_gas_melo_number`
-- **Description**: Meter location identifier for gas supply
-
-- **Entity ID**: `sensor.octopus_<account_number>_gas_meter`
-- **Description**: Current gas meter information with ID, number, and type
-- **Attributes**:
-  - `meter_id`: ID of your gas meter
-  - `meter_number`: Number of your gas meter
-  - `meter_type`: Type of your gas meter
-  - `account_number`: Your Octopus Energy account number
-
-##### Gas Reading and Price Sensors
-- **Entity ID**: `sensor.octopus_<account_number>_gas_latest_reading`
-- **Description**: Latest gas meter reading with timestamp and origin information
-- **Unit**: m³
-- **Attributes**:
-  - `reading_value`: Reading value
-  - `reading_units`: Reading units (m³)
-  - `reading_date`: Date of the reading
-  - `reading_origin`: Origin of the reading
-  - `reading_type`: Type of reading
-  - `register_obis_code`: OBIS code for the register
-  - `meter_id`: ID of the meter
-  - `account_number`: Your Octopus Energy account number
-
-- **Entity ID**: `sensor.octopus_<account_number>_gas_price`
-- **Description**: Current gas tariff rate from valid contracts
-- **Unit**: €/kWh
-
-- **Entity ID**: `sensor.octopus_<account_number>_gas_smart_reading`
-- **Description**: Smart meter capability status (Enabled/Disabled)
-
-##### Gas Contract Sensors
-- **Entity ID**: `sensor.octopus_<account_number>_gas_contract_start`
-- **Description**: Contract validity start date
-
-- **Entity ID**: `sensor.octopus_<account_number>_gas_contract_end`
-- **Description**: Contract validity end date
-
-- **Entity ID**: `sensor.octopus_<account_number>_gas_contract_days_until_expiry`
-- **Description**: Contract expiration countdown in days
-
-#### Device Status Sensor
-
-- **Entity ID**: `sensor.octopus_<account_number>_device_status`
-- **Description**: Current status of your smart charging device (e.g., "PLUGGED_IN", "CHARGING", "FINISHED", etc.)
-- **Attributes**:
-  - `device_id`: Internal ID of the connected device
-  - `device_name`: Name of the device
-  - `device_model`: Vehicle model (if available)
-  - `device_provider`: Device provider
-  - `battery_size`: Battery capacity (if available)
-  - `is_suspended`: Whether smart charging is currently suspended
-  - `account_number`: Your Octopus Energy account number
-  - `last_updated`: Timestamp of the last update
+> **Tip:** Dispatch window and vehicle battery sensors are created disabled in the entity registry. Enable only those you need.
 
 ### Switches
 
-#### Smart Charging Control
-- **Entity ID**: `switch.octopus_<account_number>_device_smart_control`
-- **Description**: Controls smart charging functionality for electric vehicles/charge points
-- **Requirements**: Device must be connected and capable of smart control
-- **Actions**:
-  - Turn **ON** to enable smart charging (unsuspend device)
-  - Turn **OFF** to disable smart charging (suspend device)
-- **Attributes**:
-  - `device_id`: Internal device identifier
-  - `name`: Device name
-  - `model`: Vehicle/charger model
-  - `provider`: Device provider
-  - `current_status`: Current device status
-  - `is_suspended`: Whether device is suspended
+- `switch.octopus_<account>_device_smart_control` – toggles smart control (suspension) for the primary device
+- `switch.octopus_<account>_<device_name>_boost_charge` – instant boost charge switch for devices that support the SmartFlex boost action
 
-#### Boost Charge
-- **Entity ID**: `switch.octopus_<account_number>_<device_name>_boost_charge`
-- **Description**: Instant charge boost for immediate charging needs
-- **Requirements**:
-  - **Smart charging must be enabled** (Smart Charging Control switch = ON)
-  - Device must support boost charging
-  - Device must be in LIVE status
-- **Availability**: Only appears when smart charging is active and device supports boost
-- **Actions**:
-  - Turn **ON** to start immediate boost charging
-  - Turn **OFF** to cancel boost charging
-- **Attributes**:
-  - `device_id`: Internal device identifier
-  - `boost_charge_active`: Whether boost charging is currently active
-  - `boost_charge_available`: Whether boost charging is available
-  - `current_state`: Current device state
-  - `device_type`: Type of device (ELECTRIC_VEHICLES, CHARGE_POINTS)
-  - `account_number`: Associated account
+### Service
 
-**Important**: The Boost Charge switch will only be available in Home Assistant when:
-1. Smart charging is enabled for the device
-2. The device supports smart control capabilities
-3. The device is online and not suspended
+- `octopus_energy_it.set_device_preferences`
+  - `device_id`: Device identifier from the sensor attributes (required)
+  - `target_percentage`: 20–100 value in 5% steps (required)
+  - `target_time`: Completion time (`HH:MM`, 04:00–17:00) (required)
 
-## Services
+## Troubleshooting
 
-### set_device_preferences
-- **Service ID**: `octopus_energy_it.set_device_preferences`
-- **Description**: Configure charging preferences for an electric vehicle or charge point
-- **Parameters**:
-  - `device_id` (required): The device ID (available in device attributes)
-  - `target_percentage` (required): Target state of charge (20-100% in 5% steps)
-  - `target_time` (required): Target completion time (04:00-17:00)
+- Use Home Assistant **Developer Tools → Logs** to inspect warnings about token refresh or API errors
+- Set `LOG_API_RESPONSES` / `LOG_TOKEN_RESPONSES` in `custom_components/octopus_energy_it/const.py` to `True` for verbose output (only recommended temporarily)
+- If no entities appear, confirm that at least one account exposes electricity or gas products in the Italian Kraken portal
 
-**Example:**
-```yaml
-service: octopus_energy_it.set_device_preferences
-data:
-  device_id: "00000000-0002-4000-803c-0000000021c7"
-  target_percentage: 80
-  target_time: "07:00"
-```
+---
 
-**Note**: The old `set_vehicle_charge_preferences` service has been removed. Use `set_device_preferences` instead with specific device IDs.
-## Automation
-
-[Octopus Intelligent Go mit EVCC](https://github.com/ha-puzzles/homeassistant-puzzlepieces/blob/main/use-cases/stromtarife/octopus-intelligent-go/README.md)
-
-## Debugging
-
-If you encounter issues, you can enable debug logging by adding the following to your `configuration.yaml`:
-
-```yaml
-logger:
-  logs:
-    custom_components.octopus_energy_it: debug
-    custom_components.octopus_energy_it.octopus_energy_it: debug
-    custom_components.octopus_energy_it.switch: debug
-```
-
-### Common Issues
-
-#### Boost Charge Switch Not Available
-- **Cause**: Smart charging is not enabled or device doesn't support boost charging
-- **Solution**:
-  1. Ensure the Smart Charging Control switch is turned ON
-  2. Check that your device supports smart control (appears in device attributes)
-  3. Verify device is in LIVE status and not suspended
-
-#### Token/Authentication Errors
-- **Cause**: API token has expired or login credentials are invalid
-- **Solution**: The integration automatically handles token refresh. If issues persist, try reloading the integration or re-entering credentials
-
-#### No Devices Found
-- **Cause**: No smart-capable devices connected to your Octopus account
-- **Solution**: Ensure your electric vehicle or charge point is properly connected to Octopus Intelligent
-
-### Debug Information
-When reporting issues, please include:
-- Home Assistant version
-- Integration version
-- Debug logs with sensitive information removed
-- Device type and model (if applicable)
-
-### API-Debug
-
-If you need more information for API debug set in const:
-
-`/config/custom_components/octopus_energy_it/const.py`
-
-```yaml
-LOG_API_RESPONSES = True
-```
-After restarting HA the API-Responses and additional information will be in debug log.
-
-
-## API Support
-
-For API-related questions, consult the official documentation:
-- REST API: https://developer.oeit-kraken.energy/
-- GraphQL API: https://developer.oeit-kraken.energy/graphql/
-
-## Support
-
-For bug reports and feature requests, please open an issue on the GitHub repository.
-Before raising anything, please read through the [discussion](https://github.com/samuelebistoletti/HomeAssistant-OctopusEnergyIT/discussions).
-If you have found a bug or have a feature request please [raise it](https://github.com/samuelebistoletti/HomeAssistant-OctopusEnergyIT/issues) using the appropriate report template.
-
-## DeepWiki
-
-[https://deepwiki.com/samuelebistoletti/HomeAssistant-OctopusEnergyIT](https://deepwiki.com/samuelebistoletti/HomeAssistant-OctopusEnergyIT)
-
-## Sponsorship & Support
-
-### ☕ Show Your Appreciation
-This integration is developed and maintained in my free time. If you find it valuable and want to support its continued development, consider:
-
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/K3K71LPRM2)
-
-Your support helps cover development time, testing infrastructure, and keeps the project actively maintained with new features and bug fixes.
-
-### 🚀 Join the Community
-- **Contributing**: Pull requests are welcome! Whether it's bug fixes, new features, or documentation improvements
-- **New to Octopus Energy?**: Get 100€ bonus with my [referral link](https://octopusenergy.de/empfehlungen?referralCode=free-cat-744) when signing up
-- **Found a bug or have an idea?**: Check the [discussions](https://github.com/samuelebistoletti/HomeAssistant-OctopusEnergyIT/discussions) or [open an issue](https://github.com/samuelebistoletti/HomeAssistant-OctopusEnergyIT/issues)
-
-Every contribution, whether code, feedback, or financial support, helps make this integration better for everyone!
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Disclaimer
-
-This integration is not officially affiliated with Octopus Energy Italy. Use at your own risk.
+Documentazione aggiornata per lo schema GraphQL di Octopus Energy Italia (Kraken).
