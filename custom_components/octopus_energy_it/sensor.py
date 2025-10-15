@@ -801,7 +801,7 @@ class OctopusElectricityStandingChargeSensor(CoordinatorEntity, SensorEntity):
         self._attr_name = f"Octopus {account_number} Electricity Standing Charge"
         self._attr_unique_id = f"octopus_{account_number}_electricity_standing_charge"
         self._attr_device_class = SensorDeviceClass.MONETARY
-        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_state_class = SensorStateClass.TOTAL
         self._attr_has_entity_name = False
         self._attr_entity_registry_enabled_default = True
 
@@ -966,7 +966,7 @@ class OctopusElectricityContractExpiryDaysSensor(CoordinatorEntity, SensorEntity
         self._attr_name = f"Octopus {account_number} Electricity Contract Days Until Expiry"
         self._attr_unique_id = f"octopus_{account_number}_electricity_contract_expiry_days"
         self._attr_native_unit_of_measurement = "days"
-        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_state_class = SensorStateClass.TOTAL
         self._attr_has_entity_name = False
 
     @property
@@ -1536,7 +1536,7 @@ class OctopusGasContractExpiryDaysSensor(CoordinatorEntity, SensorEntity):
         self._attr_name = f"Octopus {account_number} Gas Contract Days Until Expiry"
         self._attr_unique_id = f"octopus_{account_number}_gas_contract_expiry_days"
         self._attr_native_unit_of_measurement = "days"
-        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_state_class = SensorStateClass.TOTAL
         self._attr_has_entity_name = False
 
     @property
@@ -1667,7 +1667,7 @@ class OctopusGasStandingChargeSensor(CoordinatorEntity, SensorEntity):
         self._attr_name = f"Octopus {account_number} Gas Standing Charge"
         self._attr_unique_id = f"octopus_{account_number}_gas_standing_charge"
         self._attr_device_class = SensorDeviceClass.MONETARY
-        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_state_class = SensorStateClass.TOTAL
         self._attr_has_entity_name = False
         self._attr_entity_registry_enabled_default = True
 
@@ -1865,7 +1865,7 @@ class OctopusDeviceChargeLimitSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"octopus_{account_number}_device_charge_target"
         self._attr_device_class = SensorDeviceClass.BATTERY
         self._attr_native_unit_of_measurement = "%"
-        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_state_class = SensorStateClass.TOTAL
         self._attr_has_entity_name = False
         self._attr_entity_registry_enabled_default = True
 
@@ -1995,7 +1995,7 @@ class OctopusVehicleBatterySizeSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"octopus_{account_number}_vehicle_battery_size"
         self._attr_device_class = SensorDeviceClass.ENERGY
         self._attr_native_unit_of_measurement = "kWh"
-        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_state_class = SensorStateClass.TOTAL
         self._attr_has_entity_name = False
         self._attr_entity_registry_enabled_default = True
 
