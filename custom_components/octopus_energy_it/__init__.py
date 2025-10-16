@@ -233,7 +233,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "electricity_pod": None,
                 "electricity_supply_point_id": None,
                 "gas_pdr": None,
-                "gas_supply_point_id": None,
                 "raw_response": {},
                 "electricity_supply_status": None,
                 "electricity_enrolment_status": None,
@@ -392,10 +391,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
 
         gas_pdr = None
-        gas_supply_id = None
         if first_gas_supply_point:
             gas_pdr = first_gas_supply_point.get("pdr")
-            gas_supply_id = first_gas_supply_point.get("id")
             result_data[account_number]["gas_supply_point"] = first_gas_supply_point
             result_data[account_number]["gas_supply_status"] = first_gas_supply_point.get("status")
             result_data[account_number]["gas_enrolment_status"] = first_gas_supply_point.get("enrolmentStatus")
@@ -422,7 +419,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             result_data[account_number]["gas_agreements"] = simplified_agreements
 
         result_data[account_number]["gas_pdr"] = gas_pdr
-        result_data[account_number]["gas_supply_point_id"] = gas_supply_id
 
         # Extract property IDs
         property_ids = [
