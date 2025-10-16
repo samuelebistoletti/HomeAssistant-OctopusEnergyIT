@@ -7,6 +7,8 @@ Questa integrazione personalizzata utilizza le API GraphQL di Octopus Energy Ita
 
 *Octopus Energy® è un marchio registrato del gruppo Octopus Energy. Il progetto è mantenuto dalla community e non è affiliato all’azienda.*
 
+Ti piace l'integrazione? Puoi sostenere il progetto con una donazione una tantum o mensile tramite [GitHub sponsorship](https://github.com/sponsors/samuelebistoletti) oppure usare il [link di riferimento Octopus Energy](https://octopusenergy.it/octo-friends/airy-queen-959) per attivare un nuovo abbonamento Octopus Energy, otterrai uno sconto fino a 50€.
+
 ---
 
 ## Caratteristiche principali
