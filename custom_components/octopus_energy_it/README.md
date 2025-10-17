@@ -7,7 +7,9 @@ Questa integrazione personalizzata utilizza le API GraphQL di Octopus Energy Ita
 
 *Il progetto è mantenuto dalla community e non è affiliato in alcun modo ad Octopus Energy*
 
-Se utilizzi **Intelligent Octopus** con una **wallbox V2C** ([https://v2charge.com/it/](https://v2charge.com/it/)), questa integrazione ti permette di monitorare e controllare la ricarica del tuo veicolo direttamente da Home Assistant, inclusa la gestione intelligente degli orari e la funzione boost.
+Se utilizzi **Intelligent Octopus** con una **wallbox V2C** ([https://v2charge.com/it/](https://v2charge.com/it/)), questa integrazione ti consente di collegare **Home Assistant** al servizio **Octopus Energy Italia**, delegando a **Intelligent Octopus** la gestione ottimizzata delle ricariche in base agli orari energetici più convenienti e ai target di ricarica impostati direttamente nel servizio.
+
+A differenza dell’integrazione nativa tra V2C e Home Assistant, questa soluzione utilizza **Intelligent Octopus** come motore di ottimizzazione, permettendo di monitorare e controllare da Home Assistant i target di ricarica e le sessioni gestite automaticamente da Octopus.
 
 Ti piace l'integrazione? Puoi sostenere il progetto con una donazione una tantum o mensile tramite [GitHub sponsorship](https://github.com/sponsors/samuelebistoletti) oppure usare il [link di riferimento Octopus Energy](https://octopusenergy.it/octo-friends/airy-queen-959) per attivare un nuovo abbonamento Octopus Energy, otterrai uno sconto fino a 50€.
 
