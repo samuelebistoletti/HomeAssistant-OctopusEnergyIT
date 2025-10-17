@@ -7,7 +7,7 @@ Questa integrazione personalizzata utilizza le API GraphQL di Octopus Energy Ita
 
 *Il progetto è mantenuto dalla community e non è affiliato in alcun modo ad Octopus Energy*
 
-:car: :charging_station: Se utilizzi **Intelligent Octopus** con una **wallbox V2C** ([https://v2charge.com/it/](https://v2charge.com/it/)), questa integrazione ti consente di collegare **Home Assistant** :house: al servizio **Octopus Energy Italia** :octopus:, delegando a **Intelligent Octopus** la gestione ottimizzata delle ricariche :battery: in base agli orari energetici più convenienti :alarm_clock: e ai target di ricarica impostati direttamente nel servizio.
+:car: :electric_plug: Se utilizzi **Intelligent Octopus** con una **wallbox V2C** ([https://v2charge.com/it/](https://v2charge.com/it/)), questa integrazione ti consente di collegare **Home Assistant** :house: al servizio **Octopus Energy Italia** :octopus:, delegando a **Intelligent Octopus** la gestione ottimizzata delle ricariche :battery: in base agli orari energetici più convenienti :alarm_clock: e ai target di ricarica impostati direttamente nel servizio.
 
 :zap: A differenza dell’integrazione nativa tra V2C e Home Assistant, questa soluzione utilizza **Intelligent Octopus** come motore di ottimizzazione :robot:, permettendo di monitorare e controllare da Home Assistant i target di ricarica :dart: e le sessioni gestite automaticamente da Octopus :gear:.
 
