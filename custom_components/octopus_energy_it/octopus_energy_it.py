@@ -248,40 +248,73 @@ query ComprehensiveDataQuery($accountNumber: String!) {
 
 # Query to get latest gas meter readings
 GAS_METER_READINGS_QUERY = """
-query GasMeterReadings($accountNumber: String!, $meterId: ID!) {
-  gasMeterReadings(accountNumber: $accountNumber, meterId: $meterId, first: 1) {
+query GasMeterReadings(
+  $accountNumber: String!
+  $pdr: String!
+  $dateFrom: Date
+  $dateTo: Date
+  $first: Int
+  $last: Int
+) {
+  gasMeterReadings(
+    accountNumber: $accountNumber
+    pdr: $pdr
+    dateFrom: $dateFrom
+    dateTo: $dateTo
+    first: $first
+    last: $last
+  ) {
     edges {
       node {
-        value
-        readAt
-        registerObisCode
-        typeOfRead
-        origin
-        meterId
+        readingDate
+        readingType
+        readingSource
+        consumptionValue
       }
     }
   }
 }
 """
 
-# Query to get latest electricity meter readings
-ELECTRICITY_METER_READINGS_QUERY = """
-query ElectricityMeterReadings($accountNumber: String!, $meterId: ID!) {
-  electricityMeterReadings(accountNumber: $accountNumber, meterId: $meterId, first: 1) {
-    edges {
-      node {
-        value
-        readAt
-        registerObisCode
-        typeOfRead
-        origin
-        meterId
-        registerType
+# Query to get electricity measurements for a supply point
+PROPERTY_ELECTRICITY_MEASUREMENTS_QUERY = """
+query ElectricityMeasurements(
+  $propertyId: ID!
+  $pod: String!
+  $startOn: Date
+  $endOn: Date
+  $first: Int
+  $last: Int
+) {
+  property(id: $propertyId) {
+    measurements(
+      startOn: $startOn
+      endOn: $endOn
+      first: $first
+      last: $last
+      utilityFilters: [
+        {
+          electricityFilters: {
+            marketSupplyPointId: $pod
+            readingFrequencyType: POINT_IN_TIME
+            readingDirection: CONSUMPTION
+          }
+        }
+      ]
+    ) {
+      edges {
+        node {
+          value
+          unit
+          readAt
+          source
+        }
       }
     }
   }
 }
 """
+
 
 # Query to get vehicle device details with preference settings
 VEHICLE_DETAILS_QUERY = """
@@ -1611,146 +1644,198 @@ class OctopusEnergyIT:
             "devices": all_data["devices"],
         }
 
-    async def fetch_gas_meter_reading(self, account_number: str, meter_id: str):
-        """
-        Fetch the latest gas meter reading for a specific meter.
-
-        Args:
-            account_number: The account number
-            meter_id: The gas meter ID
-
-        Returns:
-            Dict containing the latest reading data or None if error
-
-        """
+    async def fetch_gas_meter_readings(
+        self,
+        account_number: str,
+        pdr: str,
+        *,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        first: int | None = None,
+        last: int | None = None,
+    ) -> list[dict]:
+        """Fetch gas meter readings for the specified PDR."""
         if not await self.ensure_token():
-            _LOGGER.error("Failed to ensure valid token for fetch_gas_meter_reading")
-            return None
+            _LOGGER.error("Failed to ensure valid token for fetch_gas_meter_readings")
+            return []
 
-        variables = {"accountNumber": account_number, "meterId": meter_id}
+        variables = {
+            "accountNumber": account_number,
+            "pdr": pdr,
+            "dateFrom": date_from,
+            "dateTo": date_to,
+            "first": first,
+            "last": last,
+        }
+
         client = self._get_graphql_client()
 
         try:
             _LOGGER.debug(
-                "Fetching gas meter reading for account %s, meter %s",
+                "Fetching gas meter readings for account %s, PDR %s (first=%s, last=%s, date_from=%s, date_to=%s)",
                 account_number,
-                meter_id,
+                pdr,
+                first,
+                last,
+                date_from,
+                date_to,
             )
             response = await client.execute_async(
-                query=GAS_METER_READINGS_QUERY, variables=variables
+                query=GAS_METER_READINGS_QUERY,
+                variables=variables,
             )
 
             if response is None:
-                _LOGGER.error("API returned None response for gas meter reading")
-                return None
+                _LOGGER.error("API returned None response for gas meter readings")
+                return []
 
             if "errors" in response:
                 _LOGGER.error(
-                    "GraphQL errors in gas meter reading response: %s",
+                    "GraphQL errors in gas meter readings response: %s",
                     response["errors"],
                 )
-                return None
+                return []
 
-            if "data" in response and "gasMeterReadings" in response["data"]:
-                readings_data = response["data"]["gasMeterReadings"]
-
-                if (
-                    readings_data
-                    and "edges" in readings_data
-                    and readings_data["edges"]
-                ):
-                    # Get the first (latest) reading
-                    latest_reading = readings_data["edges"][0]["node"]
-                    _LOGGER.debug(
-                        "Got gas meter reading: %s at %s (type: %s, origin: %s)",
-                        latest_reading.get("value"),
-                        latest_reading.get("readAt"),
-                        latest_reading.get("typeOfRead"),
-                        latest_reading.get("origin"),
-                    )
-                    return latest_reading
-                _LOGGER.warning(
-                    "No gas meter readings found for meter %s", meter_id
+            readings_data = response.get("data", {}).get("gasMeterReadings")
+            if not readings_data:
+                _LOGGER.debug(
+                    "No gas meter readings returned for account %s, PDR %s",
+                    account_number,
+                    pdr,
                 )
-                return None
-            _LOGGER.error("Invalid response structure for gas meter reading")
-            return None
+                return []
 
-        except Exception as e:
-            _LOGGER.error("Error fetching gas meter reading: %s", e)
-            return None
+            edges = readings_data.get("edges") or []
+            readings: list[dict] = []
+            for edge in edges:
+                node = (edge or {}).get("node") or {}
+                if not node:
+                    continue
+                reading = {
+                    "readingDate": node.get("readingDate"),
+                    "readingType": node.get("readingType"),
+                    "readingSource": node.get("readingSource"),
+                    "value": self._to_float_or_none(node.get("consumptionValue")),
+                    "unit": "m3",
+                    "raw": node,
+                }
+                readings.append(reading)
 
-    async def fetch_electricity_meter_reading(self, account_number: str, meter_id: str):
-        """
-        Fetch the latest electricity meter reading for a specific meter.
+            if readings:
+                latest = readings[0]
+                _LOGGER.debug(
+                    "Fetched gas meter reading: %s on %s (type: %s, source: %s)",
+                    latest.get("value"),
+                    latest.get("readingDate"),
+                    latest.get("readingType"),
+                    latest.get("readingSource"),
+                )
+            else:
+                _LOGGER.debug(
+                    "No gas meter readings found for account %s, PDR %s",
+                    account_number,
+                    pdr,
+                )
 
-        Args:
-            account_number: The account number
-            meter_id: The electricity meter ID
+            return readings
 
-        Returns:
-            Dict containing the latest reading data or None if error
+        except Exception as exc:
+            _LOGGER.error("Error fetching gas meter readings: %s", exc)
+            return []
 
-        """
+    async def fetch_electricity_measurements(
+        self,
+        property_id: str,
+        pod: str,
+        *,
+        start_on: str | None = None,
+        end_on: str | None = None,
+        first: int | None = None,
+        last: int | None = None,
+    ) -> list[dict]:
+        """Fetch electricity measurements for the given property/POD."""
         if not await self.ensure_token():
-            _LOGGER.error(
-                "Failed to ensure valid token for fetch_electricity_meter_reading"
-            )
-            return None
+            _LOGGER.error("Failed to ensure valid token for fetch_electricity_measurements")
+            return []
 
-        variables = {"accountNumber": account_number, "meterId": meter_id}
+        variables = {
+            "propertyId": property_id,
+            "pod": pod,
+            "startOn": start_on,
+            "endOn": end_on,
+            "first": first,
+            "last": last,
+        }
+
         client = self._get_graphql_client()
 
         try:
             _LOGGER.debug(
-                "Fetching electricity meter reading for account %s, meter %s",
-                account_number,
-                meter_id,
+                "Fetching electricity measurements for property %s, POD %s (first=%s, last=%s, start_on=%s, end_on=%s)",
+                property_id,
+                pod,
+                first,
+                last,
+                start_on,
+                end_on,
             )
             response = await client.execute_async(
-                query=ELECTRICITY_METER_READINGS_QUERY, variables=variables
+                query=PROPERTY_ELECTRICITY_MEASUREMENTS_QUERY,
+                variables=variables,
             )
 
             if response is None:
-                _LOGGER.error(
-                    "API returned None response for electricity meter reading"
-                )
-                return None
+                _LOGGER.error("API returned None response for electricity measurements")
+                return []
 
             if "errors" in response:
                 _LOGGER.error(
-                    "GraphQL errors in electricity meter reading response: %s",
+                    "GraphQL errors in electricity measurements response: %s",
                     response["errors"],
                 )
-                return None
+                return []
 
-            if "data" in response and "electricityMeterReadings" in response["data"]:
-                readings_data = response["data"]["electricityMeterReadings"]
+            property_data = response.get("data", {}).get("property") or {}
+            measurements_data = property_data.get("measurements") or {}
+            edges = measurements_data.get("edges") or []
 
-                if (
-                    readings_data
-                    and "edges" in readings_data
-                    and readings_data["edges"]
-                ):
-                    # Get the first (latest) reading
-                    latest_reading = readings_data["edges"][0]["node"]
-                    _LOGGER.debug(
-                        "Got electricity meter reading: %s at %s (type: %s, origin: %s)",
-                        latest_reading.get("value"),
-                        latest_reading.get("readAt"),
-                        latest_reading.get("typeOfRead"),
-                        latest_reading.get("origin"),
-                    )
-                    return latest_reading
-                _LOGGER.warning(
-                    "No electricity meter readings found for meter %s", meter_id
+            measurements: list[dict] = []
+            for edge in edges:
+                node = (edge or {}).get("node") or {}
+                if not node:
+                    continue
+                unit = node.get("unit") or "kWh"
+                if isinstance(unit, str):
+                    if unit.lower() == "kwh":
+                        unit = "kWh"
+
+                measurement = {
+                    "readAt": node.get("readAt"),
+                    "value": self._to_float_or_none(node.get("value")),
+                    "unit": unit,
+                    "source": node.get("source"),
+                    "raw": node,
+                }
+                measurements.append(measurement)
+
+            if measurements:
+                latest = measurements[-1] if last else measurements[0]
+                _LOGGER.debug(
+                    "Fetched electricity measurement: %s %s at %s (source: %s)",
+                    latest.get("value"),
+                    latest.get("unit"),
+                    latest.get("readAt"),
+                    latest.get("source"),
                 )
-                return None
-            _LOGGER.error(
-                "Invalid response structure for electricity meter reading"
-            )
-            return None
+            else:
+                _LOGGER.debug(
+                    "No electricity measurements found for property %s, POD %s",
+                    property_id,
+                    pod,
+                )
 
-        except Exception as e:
-            _LOGGER.error("Error fetching electricity meter reading: %s", e)
-            return None
+            return measurements
+
+        except Exception as exc:
+            _LOGGER.error("Error fetching electricity measurements: %s", exc)
+            return []

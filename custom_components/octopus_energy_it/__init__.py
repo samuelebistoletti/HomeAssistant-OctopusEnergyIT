@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import inspect
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import aiohttp
 import voluptuous as vol
@@ -232,7 +232,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "ledgers": [],
                 "electricity_pod": None,
                 "electricity_supply_point_id": None,
+                "electricity_property_id": None,
                 "gas_pdr": None,
+                "gas_property_id": None,
                 "raw_response": {},
                 "electricity_supply_status": None,
                 "electricity_enrolment_status": None,
@@ -266,8 +268,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "electricity_agreements": [],
                 "current_gas_product": None,
                 "gas_agreements": [],
+                "electricity_last_reading": None,
+                "gas_last_reading": None,
             }
         }
+
+        # Determine the previous calendar month boundaries for consumption metrics
+        today = datetime.now(tz=UTC).date()
+        first_day_this_month = today.replace(day=1)
+        last_day_previous_month = first_day_this_month - timedelta(days=1)
+        first_day_previous_month = last_day_previous_month.replace(day=1)
+
+        last_month_start = first_day_previous_month.isoformat()
+        last_month_end = last_day_previous_month.isoformat()
 
         # Extract account data - this should be available even if device-related endpoints fail
         account_data = data.get("account", {})
@@ -339,14 +352,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
 
         # Extract supply point identifiers for electricity and gas
-        first_electricity_supply_point = next(
-            (
-                supply_point
-                for prop in account_data.get("properties", [])
-                for supply_point in prop.get("electricitySupplyPoints", [])
-            ),
-            None,
-        )
+        electricity_property_id = None
+        first_electricity_supply_point = None
+        for property_data in account_data.get("properties", []) or []:
+            supply_points = property_data.get("electricitySupplyPoints") or []
+            if supply_points:
+                first_electricity_supply_point = supply_points[0]
+                electricity_property_id = property_data.get("id")
+                break
 
         electricity_pod = None
         electricity_supply_id = None
@@ -380,15 +393,58 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         result_data[account_number]["electricity_pod"] = electricity_pod
         result_data[account_number]["electricity_supply_point_id"] = electricity_supply_id
+        result_data[account_number]["electricity_property_id"] = electricity_property_id
 
-        first_gas_supply_point = next(
-            (
-                supply_point
-                for prop in account_data.get("properties", [])
-                for supply_point in prop.get("gasSupplyPoints", [])
-            ),
-            None,
-        )
+        if electricity_property_id and electricity_pod:
+            def _parse_read_at(entry: dict) -> datetime | None:
+                timestamp = entry.get("readAt")
+                if not timestamp:
+                    return None
+                try:
+                    return datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+                except ValueError:
+                    return None
+
+            latest_measurements = await api.fetch_electricity_measurements(
+                electricity_property_id,
+                electricity_pod,
+                last=2,
+            )
+            if latest_measurements:
+                sorted_latest = sorted(
+                    latest_measurements,
+                    key=lambda item: _parse_read_at(item) or datetime.min.replace(tzinfo=UTC),
+                )
+                latest = sorted_latest[-1]
+                previous = sorted_latest[-2] if len(sorted_latest) > 1 else None
+
+                latest_entry = {
+                    "value": None,
+                    "start": previous.get("readAt") if previous else None,
+                    "end": latest.get("readAt"),
+                    "unit": latest.get("unit") or "kWh",
+                    "source": latest.get("source"),
+                    "start_register_value": previous.get("value") if previous else None,
+                    "end_register_value": latest.get("value"),
+                }
+                if (
+                    previous
+                    and previous.get("value") is not None
+                    and latest.get("value") is not None
+                ):
+                    latest_entry["value"] = latest["value"] - previous["value"]
+
+                result_data[account_number]["electricity_last_reading"] = latest_entry
+
+
+        gas_property_id = None
+        first_gas_supply_point = None
+        for property_data in account_data.get("properties", []) or []:
+            supply_points = property_data.get("gasSupplyPoints") or []
+            if supply_points:
+                first_gas_supply_point = supply_points[0]
+                gas_property_id = property_data.get("id")
+                break
 
         gas_pdr = None
         if first_gas_supply_point:
@@ -419,6 +475,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             result_data[account_number]["gas_agreements"] = simplified_agreements
 
         result_data[account_number]["gas_pdr"] = gas_pdr
+        result_data[account_number]["gas_property_id"] = gas_property_id
+
+        if gas_pdr:
+            latest_gas_readings = await api.fetch_gas_meter_readings(
+                account_number,
+                gas_pdr,
+                first=1,
+            )
+            if latest_gas_readings:
+                result_data[account_number]["gas_last_reading"] = latest_gas_readings[0]
 
         # Extract property IDs
         property_ids = [
