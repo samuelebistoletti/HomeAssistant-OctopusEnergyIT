@@ -41,10 +41,34 @@ jobs:
           git tag "v${VERSION}"
           git push origin "v${VERSION}"
 
-      - name: Create GitHub Release with auto-generated notes
+      - name: Prepare release notes from changelog
+        if: env.EXISTS == 'false'
+        run: |
+          python <<'PY'
+          import os
+          import pathlib
+          import re
+          import sys
+
+          version = os.environ["VERSION"]
+          changelog_path = pathlib.Path("CHANGELOG.md")
+          if not changelog_path.exists():
+              sys.exit("CHANGELOG.md not found")
+
+          text = changelog_path.read_text(encoding="utf-8")
+          pattern = rf"^## \[{re.escape(version)}\].*?(?=^## \[|\Z)"
+          match = re.search(pattern, text, flags=re.MULTILINE | re.DOTALL)
+          if not match:
+              sys.exit(f"Release notes for version {version} not found in CHANGELOG.md")
+
+          section = match.group(0).strip()
+          pathlib.Path("release_body.md").write_text(section, encoding="utf-8")
+          PY
+
+      - name: Create GitHub Release
         if: env.EXISTS == 'false'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.VERSION }}
           name: v${{ env.VERSION }}
-          generate_release_notes: true
+          body_path: release_body.md

@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.0.2] - 2025-10-20
+## [1.0.3] - 2025-10-20
 
 ### Added
 - SmartFlex charge target number entity to manage the desired SOC directly from Home Assistant.
