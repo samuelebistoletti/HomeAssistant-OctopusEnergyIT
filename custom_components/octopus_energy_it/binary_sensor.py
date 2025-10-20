@@ -75,20 +75,18 @@ async def async_setup_entry(
 
 
 class OctopusIntelligentDispatchingBinarySensor(CoordinatorEntity, BinarySensorEntity):
-    """Binary sensor for Octopus Intelligent Dispatching."""
+    """Binary sensor for Octopus EV Charge Intelligent Dispatching."""
 
     def __init__(self, account_number, coordinator) -> None:
         """Initialize the binary sensor for intelligent dispatching."""
         super().__init__(coordinator)
 
         self._account_number = account_number
-        self._attr_name = f"Octopus {account_number} Intelligent Dispatching"
+        self._attr_name = f"Octopus {account_number} EV Charge Intelligent Dispatching"
         self._attr_unique_id = f"octopus_{account_number}_intelligent_dispatching"
         self._attr_device_class = None
         self._attr_has_entity_name = False
         self._attributes = {}
-
-        # Initialize attributes right after creation
         self._update_attributes()
 
     @property
@@ -273,148 +271,8 @@ class OctopusIntelligentDispatchingBinarySensor(CoordinatorEntity, BinarySensorE
         return processed_prefs
 
     def _update_attributes(self) -> None:
-        """Update the internal attributes dictionary."""
-        # Default empty attributes
-        default_attributes = {
-            "planned_dispatches": [],
-            "completed_dispatches": [],
-            "devices": [],
-            "current_state": "Unknown",
-        }
-
-        # Check if coordinator has valid data
-        if (
-            not self.coordinator
-            or not self.coordinator.data
-            or not isinstance(self.coordinator.data, dict)
-        ):
-            _LOGGER.debug("No valid data structure in coordinator")
-            self._attributes = default_attributes
-            return
-
-        # Check if account number exists in the data
-        if self._account_number not in self.coordinator.data:
-            _LOGGER.debug(
-                "Account %s not found in coordinator data", self._account_number
-            )
-            self._attributes = default_attributes
-            return
-
-        # Process data from the coordinator
-        account_data = self.coordinator.data[self._account_number]
-        if not account_data:
-            self._attributes = default_attributes
-            return
-
-        _LOGGER.debug(
-            "Available keys in account_data: %s",
-            list(account_data.keys())
-            if isinstance(account_data, dict)
-            else "Not a dict",
-        )
-
-        # Extract all required data with consistent field names
-        # First try camelCase names (API response format)
-        planned_dispatches = account_data.get("plannedDispatches", [])
-        if not planned_dispatches:
-            # Try snake_case as a fallback (processed data format)
-            planned_dispatches = account_data.get("planned_dispatches", [])
-
-        completed_dispatches = account_data.get("completedDispatches", [])
-        if not completed_dispatches:
-            completed_dispatches = account_data.get("completed_dispatches", [])
-
-        devices = account_data.get("devices", [])
-
-        _LOGGER.debug(
-            "Found %d planned dispatches, %d completed dispatches, %d devices",
-            len(planned_dispatches),
-            len(completed_dispatches),
-            len(devices),
-        )
-
-        # Get current state from devices if available
-        current_state = "Unknown"
-        if devices and devices[0].get("status"):
-            current_state = devices[0]["status"].get("currentState", "Unknown")
-
-        # Format dispatches for display
-        formatted_planned_dispatches = []
-        for dispatch in planned_dispatches:
-            formatted = self._format_dispatch(dispatch)
-            if formatted:
-                formatted_planned_dispatches.append(formatted)
-
-        formatted_completed_dispatches = []
-        for dispatch in completed_dispatches:
-            formatted = self._format_dispatch(dispatch)
-            if formatted:
-                formatted_completed_dispatches.append(formatted)
-
-        _LOGGER.debug(
-            "Formatted %d planned dispatches, %d completed dispatches for attributes",
-            len(formatted_planned_dispatches),
-            len(formatted_completed_dispatches),
-        )
-
-        # Simplify device data to ensure it's serializable
-        simplified_devices = []
-        for device in devices:
-            if not isinstance(device, dict):
-                continue
-
-            simple_device = {
-                "id": device.get("id", ""),
-                "name": device.get("name", "Unknown"),
-                "device_type": device.get("deviceType", "Unknown"),
-                "provider": device.get("provider", "Unknown"),
-                "status": device.get("status", {}).get("currentState", "Unknown")
-                if isinstance(device.get("status"), dict)
-                else "Unknown",
-                "is_suspended": device.get("status", {}).get("isSuspended", True)
-                if isinstance(device.get("status"), dict)
-                else True,
-            }
-
-            # Add preferences if available
-            if "preferences" in device:
-                # Use the existing _process_device_preferences method
-                preferences = self._process_device_preferences(device)
-                if preferences:
-                    simple_device["preferences"] = preferences
-                else:
-                    # If our processor didn't extract anything useful, use the raw preferences
-                    simple_device["preferences"] = device.get("preferences", {})
-
-            # Add vehicle-specific info if available
-            if "vehicleVariant" in device and isinstance(
-                device["vehicleVariant"], dict
-            ):
-                simple_device["model"] = device["vehicleVariant"].get(
-                    "model", "Unknown"
-                )
-                simple_device["battery_size"] = device["vehicleVariant"].get(
-                    "batterySize", "Unknown"
-                )
-
-            simplified_devices.append(simple_device)
-
-        # Build and update attributes
-        self._attributes = {
-            "planned_dispatches": formatted_planned_dispatches,
-            "completed_dispatches": formatted_completed_dispatches,
-            "devices": simplified_devices,
-            "current_state": current_state,
-            "last_updated": datetime.now().isoformat(),
-        }
-
-        # Special log to confirm attributes are correctly set
-        _LOGGER.debug(
-            "Binary sensor attributes updated with %d planned dispatches, %d completed dispatches, %d devices",
-            len(formatted_planned_dispatches),
-            len(formatted_completed_dispatches),
-            len(simplified_devices),
-        )
+        """No custom attributes exposed."""
+        self._attributes = {}
 
     @callback
     def _handle_coordinator_update(self) -> None:

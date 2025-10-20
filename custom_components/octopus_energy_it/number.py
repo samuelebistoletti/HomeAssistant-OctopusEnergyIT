@@ -89,7 +89,7 @@ class OctopusDeviceChargeTargetNumber(CoordinatorEntity, NumberEntity):
         self._device_id = device_id
         self._api = api
 
-        self._attr_name = f"Octopus {account_number} Charge Target"
+        self._attr_name = f"Octopus {account_number} EV Charge Target"
         self._attr_unique_id = (
             f"octopus_{account_number}_{device_id}_charge_target"
         )

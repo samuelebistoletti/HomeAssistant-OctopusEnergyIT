@@ -26,6 +26,14 @@ oppure usare il [link di riferimento Octopus Energy](https://octopusenergy.it/oc
 - :battery: **Funzionalità SmartFlex** – stato dispositivi, limiti di carica, finestre di dispatch correnti/future e capacità della batteria del veicolo.
 - :arrows_clockwise: **Aggiornamenti integrati in Home Assistant** – utilizzo del DataUpdateCoordinator, registrazione automatica delle entità e servizi dedicati per aggiornare le preferenze di ricarica.
 
+## :new: Novità dell'ultima refactor
+
+- **Client GraphQL unificato** con gestione token asincrona, retry automatico e logging centralizzato per ridurre gli errori di autenticazione.
+- **Sensori tariffari arricchiti**: prezzi luce/gas e informazioni prodotto espongono metadati completi (codici, periodi di validità, oneri, link ai termini contrattuali).
+- **Letture e stato dei contatori** includono ora da subito metadati su POD/PDR, stato smart meter, date di enrolment e motivazioni di cancellazione.
+- **Compatibilità con le state class di Home Assistant**: i sensori monetari e le letture cumulative rispettano le combinazioni supportate (`TOTAL`, `TOTAL_INCREASING`).
+- **Documentazione aggiornata** con il dettaglio degli attributi esposti da ciascun sensore e dei servizi disponibili.
+
 ## :gear: Prerequisiti
 
 - Account cliente Octopus Energy Italia con accesso al portale clienti.
@@ -76,59 +84,45 @@ logger:
 
 ### :satellite: Sensori
 
-**Tariffe e prezzi**
-- `sensor.octopus_<account>_electricity_price`
-- `sensor.octopus_<account>_electricity_tariff`
-- `sensor.octopus_<account>_electricity_product`
-- `sensor.octopus_<account>_electricity_standing_charge`
-- `sensor.octopus_<account>_gas_tariff`
-- `sensor.octopus_<account>_gas_product`
-- `sensor.octopus_<account>_gas_price` *(espresso in €/m³)*
-- `sensor.octopus_<account>_gas_standing_charge`
+**Tariffe e prodotti**
 
-**Saldi**
-- `sensor.octopus_<account>_electricity_balance`
-- `sensor.octopus_<account>_gas_balance`
-- `sensor.octopus_<account>_heat_balance`
-- `sensor.octopus_<account>_<ledger>_balance`
+| Entità | Unità | Attributi principali |
+| --- | --- | --- |
+| `sensor.octopus_<account>_electricity_price` | €/kWh | `code`, `description`, `product_type`, `agreement_id`, `valid_from`, `valid_to`, `is_time_of_use`, `terms_url`, `pricing_base`, `pricing_f2`, `pricing_f3`, `pricing_units`, `annual_standing_charge`, `annual_standing_charge_units`, `agreements` |
+| `sensor.octopus_<account>_electricity_price_f2` | €/kWh | Come sopra. |
+| `sensor.octopus_<account>_electricity_price_f3` | €/kWh | Come sopra. |
+| `sensor.octopus_<account>_electricity_product` | testo | Come sopra più `account_number`. |
+| `sensor.octopus_<account>_electricity_standing_charge` | €/anno | Unità ricavata da `electricity_annual_standing_charge_units`. |
+| `sensor.octopus_<account>_gas_price` | €/m³ | — |
+| `sensor.octopus_<account>_gas_product` | testo | `code`, `description`, `product_type`, `agreement_id`, `valid_from`, `valid_to`, `terms_url`, `pricing_base`, `pricing_units`, `annual_standing_charge`, `annual_standing_charge_units`, `agreements`. |
+| `sensor.octopus_<account>_gas_standing_charge` | €/anno | Unità ricavata da `gas_annual_standing_charge_units`. |
 
-**Punti di fornitura**
-- `sensor.octopus_<account>_electricity_pod`
-- `sensor.octopus_<account>_electricity_supply_status`
-- `sensor.octopus_<account>_gas_pdr`
-- `sensor.octopus_<account>_gas_supply_status`
+**Letture e stato dei contatori**
 
-**Contratti elettricità**
-- `sensor.octopus_<account>_electricity_contract_start`
-- `sensor.octopus_<account>_electricity_contract_end`
-- `sensor.octopus_<account>_electricity_contract_days_until_expiry`
+| Entità | Unità | Attributi principali |
+| --- | --- | --- |
+| `sensor.octopus_<account>_electricity_last_reading` | kWh | `period_start`, `period_end`, `source`, `unit`, `start_register_value`, `end_register_value` |
+| `sensor.octopus_<account>_electricity_last_reading_date` | data | — |
+| `sensor.octopus_<account>_gas_last_reading` | m³ | `reading_date`, `reading_type`, `reading_source`, `unit` |
+| `sensor.octopus_<account>_electricity_meter_status` | testo | `enrolment_status`, `enrolment_start`, `supply_start`, `is_smart_meter`, `cancellation_reason`, `pod`, `supply_point_id` |
+| `sensor.octopus_<account>_gas_meter_status` | testo | `enrolment_status`, `enrolment_start`, `supply_start`, `is_smart_meter`, `cancellation_reason`, `pdr` |
 
-**Contratti gas**
-- `sensor.octopus_<account>_gas_contract_start`
-- `sensor.octopus_<account>_gas_contract_end`
-- `sensor.octopus_<account>_gas_contract_days_until_expiry`
+**Saldi e contratti**
 
-**Storico accordi**
-- `sensor.octopus_<account>_electricity_agreements`
-- `sensor.octopus_<account>_gas_agreements`
+- `sensor.octopus_<account>_electricity_balance`, `sensor.octopus_<account>_gas_balance`, `sensor.octopus_<account>_heat_balance` e `sensor.octopus_<account>_<ledger>_balance` riportano i saldi in euro dei ledger disponibili.
+- I sensori di contratto (`_contract_start`, `_contract_end`, `_contract_days_until_expiry`) espongono le date formattate `DD/MM/AAAA` e i giorni residui alla scadenza per luce e gas.
+- `sensor.octopus_<account>_vehicle_battery_size` indica la capacità stimata dell'accumulatore rilevata da SmartFlex.
 
-**Finestre SmartFlex**
-- `sensor.octopus_<account>_dispatch_current_start`
-- `sensor.octopus_<account>_dispatch_current_end`
-- `sensor.octopus_<account>_dispatch_next_start`
-- `sensor.octopus_<account>_dispatch_next_end`
+**SmartFlex, dispositivi e dispatch**
 
-**Dispositivi e veicoli**
-- `sensor.octopus_<account>_device_status`
-- `sensor.octopus_<account>_device_charge_target`
-- `sensor.octopus_<account>_device_target_time`
-- `sensor.octopus_<account>_vehicle_battery_size`
+| Entità | Unità | Attributi principali |
+| --- | --- | --- |
+| `sensor.octopus_<account>_device_status` | testo | `device_id`, `device_name`, `device_model`, `device_provider`, `battery_size`, `is_suspended`, `current_state`, `preferences_mode`, `preferences_unit`, `preferences_target_type`, `preferences_grid_export`, `preferences_schedules`, `account_number`, `last_updated` |
+| `sensor.octopus_<account>_device_charge_target` | % | `account_number`, `device_id`, `device_name`, `mode`, `unit`, `target_type`, `grid_export`, `schedules` |
+| `sensor.octopus_<account>_device_target_time` | HH:MM | `account_number`, `device_id`, `device_name`, `day_of_week`, `target_percentage`, `raw_schedule` |
+| `sensor.octopus_<account>_dispatch_current_start` / `_current_end` / `_next_start` / `_next_end` | timestamp ISO 8601 | `account_number`, `window_key` |
 
-**Controlli**
-- `number.octopus_<account>_<device>_charge_target` – slider per la percentuale di carica SmartFlex.
-- `select.octopus_<account>_<device>_target_time_select` – menu per scegliere l’orario di completamento.
-
-> I sensori e i controlli dedicati a SmartFlex (finestre, target, orario, informazioni prodotto e batteria veicolo) sono creati disattivati: abilita solo quelli necessari dall’Entity Registry.
+> I sensori e i controlli dedicati a SmartFlex vengono creati disattivati: abilita dall'Entity Registry solo quelli necessari alla tua configurazione.
 
 ### :control_knobs: Switch
 

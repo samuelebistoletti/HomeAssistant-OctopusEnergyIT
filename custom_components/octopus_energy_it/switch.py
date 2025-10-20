@@ -7,7 +7,7 @@ from typing import Any
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -164,9 +164,9 @@ class OctopusSwitch(CoordinatorEntity, SwitchEntity):
         self._pending_state = None
         self._pending_until = None
 
-        # Updated name format to include "Device Smart Control"
-        self._attr_name = f"Octopus {self._account_number} Device Smart Control"
-        self._attr_unique_id = f"octopus_{self._account_number}_device_smart_control"
+        # Updated name format to include "EV Charge Smart Control"
+        self._attr_name = f"Octopus {self._account_number} EV Charge Smart Control"
+        self._attr_unique_id = f"octopus_{self._account_number}_ev_charge_smart_control"
         self._update_attributes()
 
     def _update_attributes(self):
@@ -176,17 +176,7 @@ class OctopusSwitch(CoordinatorEntity, SwitchEntity):
             return
 
         # Update extra state attributes
-        self._attr_extra_state_attributes = {
-            "device_id": self._device_id,
-            "name": device.get("name", "Unknown"),
-            "model": device.get("vehicleVariant", {}).get("model", "Unknown"),
-            "battery_size": device.get("vehicleVariant", {}).get(
-                "batterySize", "Unknown"
-            ),
-            "provider": device.get("provider", "Unknown"),
-            "status": device.get("status", {}).get("currentState", "Unknown"),
-            "last_updated": datetime.now().isoformat(),
-        }
+        self._attr_extra_state_attributes = {}
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -436,42 +426,9 @@ class BoostChargeSwitch(CoordinatorEntity, SwitchEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return additional state attributes."""
-        device_data = self._get_device_data()
-        if not device_data:
-            return {}
+        return {}
 
-        status = device_data.get("status", {})
 
-        # Calculate boost charge states
-        current_state = status.get("currentState", "")
-        boost_charge_active = "BOOST" in current_state.upper()
-
-        # Calculate boost charge availability
-        current = status.get("current", "")
-        is_suspended = status.get("isSuspended", False)
-        is_live = current == "LIVE"
-        has_smart_control = "SMART_CONTROL_CAPABLE" in current_state
-        has_boost_state = "BOOST" in current_state.upper()
-        has_boost_charging = "BOOST_CHARGING" in current_state.upper()
-
-        boost_charge_available = (
-            is_live
-            and (has_smart_control or has_boost_state or has_boost_charging)
-            and not is_suspended
-        )
-
-        return {
-            "device_type": device_data.get("deviceType"),
-            "provider": device_data.get("provider"),
-            "current_status": status.get("current"),
-            "current_state": status.get("currentState"),
-            "is_suspended": status.get("isSuspended"),
-            "device_id": self.device_id,
-            "account_number": self.account_number,
-            "boost_charge_active": boost_charge_active,
-            "boost_charge_available": boost_charge_available,
-        }
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on boost charging."""

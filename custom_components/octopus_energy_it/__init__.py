@@ -373,7 +373,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             result_data[account_number]["electricity_supply_start"] = first_electricity_supply_point.get("supplyStartDate")
             result_data[account_number]["electricity_is_smart_meter"] = first_electricity_supply_point.get("isSmartMeter")
             result_data[account_number]["electricity_cancellation_reason"] = first_electricity_supply_point.get("cancellationReason")
-            agreements = api._flatten_connection(first_electricity_supply_point.get("agreements"))
+            agreements = api.flatten_connection(first_electricity_supply_point.get("agreements"))
             simplified_agreements = []
             for agreement in agreements or []:
                 if not isinstance(agreement, dict):
@@ -456,7 +456,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             result_data[account_number]["gas_supply_start"] = first_gas_supply_point.get("supplyStartDate")
             result_data[account_number]["gas_is_smart_meter"] = first_gas_supply_point.get("isSmartMeter")
             result_data[account_number]["gas_cancellation_reason"] = first_gas_supply_point.get("cancellationReason")
-            agreements = api._flatten_connection(first_gas_supply_point.get("agreements"))
+            agreements = api.flatten_connection(first_gas_supply_point.get("agreements"))
             simplified_agreements = []
             for agreement in agreements or []:
                 if not isinstance(agreement, dict):
@@ -812,7 +812,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         # Validate time format
         try:
-            api._format_time_to_hh_mm(target_time)
+            api.format_time_to_hh_mm(target_time)
         except ValueError as time_error:
             _LOGGER.error("Time validation error: %s", time_error)
             from homeassistant.exceptions import ServiceValidationError
@@ -838,7 +838,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             if success:
                 _LOGGER.info("Successfully set device preferences")
-                formatted_time = api._format_time_to_hh_mm(target_time)
+                formatted_time = api.format_time_to_hh_mm(target_time)
                 for acc_number, acc_data in coordinator.data.items():
                     for device in acc_data.get("devices", []):
                         if device.get("id") == device_id:

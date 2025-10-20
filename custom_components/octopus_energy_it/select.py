@@ -113,7 +113,7 @@ class OctopusDeviceTargetTimeSelect(CoordinatorEntity, SelectEntity):
         self._device_id = device_id
         self._api = api
 
-        self._attr_name = f"Octopus {account_number} Target Time"
+        self._attr_name = f"Octopus {account_number} EV Ready Time"
         self._attr_unique_id = (
             f"octopus_{account_number}_{device_id}_target_time_select"
         )
