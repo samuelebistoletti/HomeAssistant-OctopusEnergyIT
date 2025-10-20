@@ -5,14 +5,14 @@
 ### Core Components
 - **Main Coordinator**: Central data coordinator using `DataUpdateCoordinator` with shared token management
 - **API Client** (`octopus_energy_it.py`): Handles GraphQL authentication, token refresh, and all API calls
-- **Platforms**: binary_sensor, sensor, switch - all sharing the main coordinator
-- **Token Management**: Automatic refresh with 59-minute intervals, robust error handling
+- **Platforms**: binary_sensor, sensor, switch, number, select - all sharing the main coordinator
+- **Token Management**: On-demand refresh with a 5-minute expiry margin and robust retry handling
 
 ### Key Implementation Details
 
 #### Token Management & Authentication
 - **Shared Token Strategy**: All platforms use `hass.data[DOMAIN][entry.entry_id]["coordinator"]`
-- **Auto-Refresh**: Background task refreshes tokens every 59 minutes
+- **Token Refresh Logic**: Tokens refresh on demand when near expiry (5-minute margin, 50-minute fallback when exp missing)
 - **Error Handling**: 5 retry attempts with exponential backoff on login failures
 - **GraphQL Client**: Centralized `_get_graphql_client()` method for consistent authentication
 
@@ -24,7 +24,9 @@ Main Coordinator (DataUpdateCoordinator)
     ↓ (Shared Data)
 ├── Binary Sensor (intelligent dispatching)
 ├── Sensors (price, balance, meter readings, device status)
-└── Switches (device suspension, boost charge)
+├── Switches (device suspension, boost charge)
+├── Number (SmartFlex target percentage)
+└── Select (SmartFlex target ready time)
 ```
 
 #### Critical Implementation Rules
@@ -80,6 +82,20 @@ Main Coordinator (DataUpdateCoordinator)
   )
   ```
 
+#### Number & Select Platform Specifics
+
+##### SmartFlex Target Number
+- One entity per SmartFlex-capable device exposing the charge target (`OctopusDeviceChargeTargetNumber`)
+- Reads limits from `preferenceSetting.scheduleSettings` (`min`, `max`, `timeFrom`) with 5% steps and floor/ceiling of 20-100%
+- Writes via `set_device_preferences()` to keep parity with the SmartFlex service layer
+- Locally mirrors the returned schedule in coordinator data so UI stays fresh between coordinator polls
+
+##### SmartFlex Ready-Time Select
+- One entity per SmartFlex-capable device exposing the ready-by time (`OctopusDeviceTargetTimeSelect`)
+- Builds options from `scheduleSettings.timeFrom/timeTo/timeStep`, defaulting to 30-minute increments when metadata is missing
+- Reuses the current charge target when only the time changes, calling the same `set_device_preferences()` mutation
+- Mirrors schedule updates locally using the shared coordinator to keep per-device data coherent
+
 #### Services
 
 ##### set_device_preferences
@@ -87,11 +103,6 @@ Main Coordinator (DataUpdateCoordinator)
 - **Parameters**: device_id, target_percentage (20-100%), target_time (04:00-17:00)
 - **GraphQL Mutation**: `setDevicePreferences`
 - **Validation**: Time format handling, percentage validation
-
-##### ~~set_vehicle_charge_preferences~~ (DEPRECATED)
-- **Status**: Completely removed as of v0.0.61
-- **Replacement**: Use `set_device_preferences` instead
-- **Migration**: Users must update automations to use device_id instead of account-level settings
 
 #### Error Handling Patterns
 
@@ -129,10 +140,10 @@ logger:
 
 #### Performance Considerations
 
-- **Update Interval**: 1 minute (configurable)
+- **Update Interval**: 1 minute (set via `UPDATE_INTERVAL` constant)
 - **API Call Throttling**: Prevents excessive requests
 - **Cached Data Fallback**: Returns last known data on API failures
-- **Efficient GraphQL**: Single query fetches all account data
+- **GraphQL Strategy**: Comprehensive base query plus targeted calls for dispatches and meter readings
 
 #### Security Notes
 
