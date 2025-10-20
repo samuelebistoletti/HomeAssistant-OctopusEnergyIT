@@ -1,13 +1,13 @@
-# Integrazione Octopus Energy Italia per Home Assistant
+# Integrazione Octopus Energy Italy per Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 ![installation_badge](https://img.shields.io/badge/dynamic/json?color=41BDF5&logo=home-assistant&label=utenti&suffix=%20installs&cacheSeconds=15600&url=https://analytics.home-assistant.io/custom_integrations.json&query=%24.octopus_energy_it.total)
 
-Questa integrazione personalizzata utilizza le API GraphQL di Octopus Energy Italia per portare in Home Assistant saldi, tariffe, punti di prelievo, dispositivi SmartFlex e preferenze di ricarica.
+Questa integrazione personalizzata utilizza le API GraphQL di Octopus Energy Italy per portare in Home Assistant saldi, tariffe, punti di prelievo, dispositivi SmartFlex e preferenze di ricarica.
 
 *Il progetto è mantenuto dalla community e non è affiliato in alcun modo ad Octopus Energy*
 
-:car: :octopus: Se utilizzi **Intelligent Octopus** con una **wallbox V2C :electric_plug:** ([https://v2charge.com/it/](https://v2charge.com/it/)), questa integrazione ti consente di collegare **Home Assistant** al servizio **Octopus Energy Italia**, delegando a **Intelligent Octopus** la gestione ottimizzata delle ricariche in base agli orari energetici più convenienti e ai target di ricarica impostati direttamente nel servizio.
+:car: :octopus: Se utilizzi **Intelligent Octopus** con una **wallbox V2C :electric_plug:** ([https://v2charge.com/it/](https://v2charge.com/it/)), questa integrazione ti consente di collegare **Home Assistant** al servizio **Octopus Energy Italy**, delegando a **Intelligent Octopus** la gestione ottimizzata delle ricariche in base agli orari energetici più convenienti e ai target di ricarica impostati direttamente nel servizio.
 
 :zap: A differenza dell’integrazione nativa tra V2C e Home Assistant, questa soluzione utilizza **Intelligent Octopus** come motore di ottimizzazione, permettendo di monitorare e controllare da Home Assistant i target di ricarica e le sessioni gestite automaticamente da Octopus.
 
@@ -19,7 +19,7 @@ oppure usare il [link di riferimento Octopus Energy](https://octopusenergy.it/oc
 
 ## :sparkles: Caratteristiche principali
 
-- :electric_plug: **Copertura completa dei dati italiani** – recupero di account, ledger, proprietà, punti di prelievo, prodotti e finestre SmartFlex pubblicati dalle API ufficiali di Octopus Energy Italia.
+- :electric_plug: **Copertura completa dei dati italiani** – recupero di account, ledger, proprietà, punti di prelievo, prodotti e finestre SmartFlex pubblicati dalle API ufficiali di Octopus Energy Italy.
 - :busts_in_silhouette: **Gestione multi-account** – rilevamento automatico di tutti i conti collegati alle credenziali e suddivisione dei dati per ciascuno di essi.
 - :money_with_wings: **Tariffe dettagliate per luce e gas** – esposizione del prodotto attivo, dei prezzi base/F2/F3, delle quote fisse, dell’unità di misura (incluso il prezzo gas in €/m³) e dei link ai termini contrattuali.
 - :house_with_garden: **Monitoraggio POD e PDR** – stato fornitura, date di attivazione, presenza del contatore smart e motivazioni di eventuale cessazione.
@@ -28,7 +28,7 @@ oppure usare il [link di riferimento Octopus Energy](https://octopusenergy.it/oc
 
 ## :gear: Prerequisiti
 
-- Account cliente Octopus Energy Italia con accesso al portale clienti.
+- Account cliente Octopus Energy Italy con accesso al portale clienti.
 - Home Assistant 2023.12 o successivo (supporto config flow asincrone e `python-graphql-client`).
 - Facoltativo: attivare il debug in `configuration.yaml` per indagare eventuali problemi API.
 
@@ -42,8 +42,7 @@ logger:
 
 ### :package: HACS (consigliata)
 
-1. In HACS apri **Integrazioni → ⋮ → Custom repositories** e aggiungi `https://github.com/samuelebistoletti/HomeAssistant-OctopusEnergyIT` con tipo *Integration*.
-2. Cerca “Octopus Energy Italy” e installa l’integrazione.
+1. In HACS Cerca “Octopus Energy Italy” e installa l’integrazione.
 3. Riavvia Home Assistant quando richiesto.
 4. Configura l’integrazione da **Impostazioni → Dispositivi e servizi → Aggiungi integrazione**.
 
@@ -56,7 +55,7 @@ logger:
 ## :wrench: Configurazione iniziale
 
 1. Seleziona **Octopus Energy Italy** tra le integrazioni disponibili.
-2. Inserisci e-mail e password utilizzate sul portale clienti Octopus Energy Italia.
+2. Inserisci e-mail e password utilizzate sul portale clienti Octopus Energy Italy.
 3. La procedura convalida le credenziali, recupera i numeri di conto e li memorizza nella config entry.
 4. Le entità vengono create dopo il primo aggiornamento del coordinatore (circa 60 secondi).
 
@@ -142,4 +141,4 @@ logger:
 
 ---
 
-Documentazione aggiornata in base alle API GraphQL di Octopus Energy Italia.
+Documentazione aggiornata in base alle API GraphQL di Octopus Energy Italy.

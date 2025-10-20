@@ -1,4 +1,4 @@
-"""Select entities per Octopus Energy Italia."""
+"""Select entities per Octopus Energy Italy."""
 
 from __future__ import annotations
 

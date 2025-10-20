@@ -1,4 +1,4 @@
-"""Number entities per Octopus Energy Italia."""
+"""Number entities per Octopus Energy Italy."""
 
 from __future__ import annotations
 
@@ -110,9 +110,7 @@ class OctopusDeviceChargeTargetNumber(CoordinatorEntity, NumberEntity):
         self._api = api
 
         self._attr_name = f"Octopus {account_number} EV Charge Target"
-        self._attr_unique_id = (
-            f"octopus_{account_number}_{device_id}_charge_target"
-        )
+        self._attr_unique_id = f"octopus_{account_number}_{device_id}_charge_target"
         self._attr_has_entity_name = False
 
     # Helpers --------------------------------------------------------------
@@ -169,7 +167,9 @@ class OctopusDeviceChargeTargetNumber(CoordinatorEntity, NumberEntity):
         except (TypeError, ValueError):
             return None
 
-    def _update_local_schedule(self, *, target_percentage: int | None = None, target_time: str | None = None) -> None:
+    def _update_local_schedule(
+        self, *, target_percentage: int | None = None, target_time: str | None = None
+    ) -> None:
         account = _get_account_data(self.coordinator, self._account_number)
         if not account:
             return
@@ -192,7 +192,9 @@ class OctopusDeviceChargeTargetNumber(CoordinatorEntity, NumberEntity):
             if target_percentage is not None:
                 schedule["max"] = target_percentage
             if target_time is not None:
-                stored_time = target_time if len(target_time) > 5 else f"{target_time}:00"
+                stored_time = (
+                    target_time if len(target_time) > 5 else f"{target_time}:00"
+                )
                 schedule["time"] = stored_time
             break
         self.coordinator.async_set_updated_data(dict(self.coordinator.data))
@@ -224,7 +226,9 @@ class OctopusDeviceChargeTargetNumber(CoordinatorEntity, NumberEntity):
         target_time = self._current_target_time()
         if not target_time:
             setting = self._schedule_setting()
-            target_time = str(setting.get("timeFrom", "06:00"))[:5] if setting else "06:00"
+            target_time = (
+                str(setting.get("timeFrom", "06:00"))[:5] if setting else "06:00"
+            )
 
         step = self.native_step or 5
         target_percentage = int(round(value / step) * step)
@@ -243,5 +247,7 @@ class OctopusDeviceChargeTargetNumber(CoordinatorEntity, NumberEntity):
         if not success:
             raise HomeAssistantError("Impossibile aggiornare il target di carica")
 
-        self._update_local_schedule(target_percentage=target_percentage, target_time=f"{target_time}:00")
+        self._update_local_schedule(
+            target_percentage=target_percentage, target_time=f"{target_time}:00"
+        )
         await self.coordinator.async_request_refresh()
