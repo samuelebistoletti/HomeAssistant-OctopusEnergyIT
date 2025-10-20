@@ -396,6 +396,27 @@ class BoostChargeSwitch(CoordinatorEntity, SwitchEntity):
 
         return {}
 
+    def _evaluate_boost_flags(self, device_data: dict[str, Any]) -> tuple[bool, bool]:
+        """Calculate boost charge active/available flags from device data."""
+        status = device_data.get("status", {})
+        current_state = status.get("currentState", "") or ""
+        boost_active = "BOOST" in current_state.upper()
+
+        current = status.get("current", "") or ""
+        is_suspended = status.get("isSuspended", False)
+        is_live = current == "LIVE"
+        has_smart_control = "SMART_CONTROL_CAPABLE" in current_state
+        has_boost_state = "BOOST" in current_state.upper()
+        has_boost_charging = "BOOST_CHARGING" in current_state.upper()
+
+        boost_available = (
+            is_live
+            and (has_smart_control or has_boost_state or has_boost_charging)
+            and not is_suspended
+        )
+
+        return boost_active, boost_available
+
     @property
     def is_on(self) -> bool:
         """Return true if boost charging is active."""
@@ -403,12 +424,8 @@ class BoostChargeSwitch(CoordinatorEntity, SwitchEntity):
         if not device_data:
             return False
 
-        # Check device status for boost charge indicators
-        status = device_data.get("status", {})
-        current_state = status.get("currentState", "")
-
-        # Consider boost charging active if state contains boost indicators
-        return "BOOST" in current_state.upper()
+        boost_active, _ = self._evaluate_boost_flags(device_data)
+        return boost_active
 
     @property
     def available(self) -> bool:
@@ -420,7 +437,10 @@ class BoostChargeSwitch(CoordinatorEntity, SwitchEntity):
         if not device_data:
             return False
 
-        # Device is available if we have valid data and it's not suspended
+        _, boost_available = self._evaluate_boost_flags(device_data)
+        if boost_available:
+            return True
+
         status = device_data.get("status", {})
         return not status.get("isSuspended", True)
 
@@ -432,6 +452,17 @@ class BoostChargeSwitch(CoordinatorEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on boost charging."""
+        device_data = self._get_device_data()
+        if not device_data:
+            raise HomeAssistantError("Device data is unavailable for boost charge.")
+
+        _, boost_available = self._evaluate_boost_flags(device_data)
+        if not boost_available:
+            raise ServiceValidationError(
+                "Boost charge cannot currently be performed.",
+                translation_domain=DOMAIN,
+            )
+
         await self._async_trigger_boost_charge()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
@@ -458,9 +489,20 @@ class BoostChargeSwitch(CoordinatorEntity, SwitchEntity):
 
             if "errors" in response:
                 error_messages = [
-                    error.get("message", "Unknown error")
+                    (error.get("message") or "Unknown error")
                     for error in response["errors"]
                 ]
+                lowered = [msg.lower() for msg in error_messages]
+                if any("boost charge cannot currently be performed" in msg for msg in lowered):
+                    _LOGGER.warning(
+                        "Boost charge request rejected by API: %s",
+                        "; ".join(error_messages),
+                    )
+                    raise ServiceValidationError(
+                        "Boost charge cannot currently be performed.",
+                        translation_domain=DOMAIN,
+                    )
+
                 error_str = "; ".join(error_messages)
                 _LOGGER.error("GraphQL errors triggering boost charge: %s", error_str)
                 raise HomeAssistantError(f"GraphQL errors: {error_str}")

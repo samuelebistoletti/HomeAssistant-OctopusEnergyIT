@@ -460,10 +460,10 @@ class OctopusGasLastReadingSensor(CoordinatorEntity, SensorEntity):
         if not reading:
             return {}
         return {
-            "reading_date": reading.get("readingDate"),
-            "reading_type": reading.get("readingType"),
-            "reading_source": reading.get("readingSource"),
-            "unit": reading.get("unit"),
+            "recorded_at": reading.get("readingDate"),
+            "measurement_type": reading.get("readingType"),
+            "measurement_source": reading.get("readingSource"),
+            "unit_of_measurement": reading.get("unit"),
         }
 
     @property
@@ -515,10 +515,10 @@ class OctopusElectricityLastReadingSensor(CoordinatorEntity, SensorEntity):
         return {
             "period_start": reading.get("start"),
             "period_end": reading.get("end"),
-            "source": reading.get("source"),
-            "unit": reading.get("unit"),
-            "start_register_value": reading.get("start_register_value"),
-            "end_register_value": reading.get("end_register_value"),
+            "data_source": reading.get("source"),
+            "unit_of_measurement": reading.get("unit"),
+            "register_start_value": reading.get("start_register_value"),
+            "register_end_value": reading.get("end_register_value"),
         }
 
     @property
@@ -615,19 +615,20 @@ class OctopusElectricityMeterStatusSensor(CoordinatorEntity, SensorEntity):
         if not account_data:
             return {}
         return {
-            "enrolment_status": account_data.get("electricity_enrolment_status")
+            "account_number": self._account_number,
+            "pod": account_data.get("electricity_pod"),
+            "supply_point_id": account_data.get("electricity_supply_point_id"),
+            "enrollment_status": account_data.get("electricity_enrolment_status")
             or supply_point.get("enrolmentStatus"),
-            "enrolment_start": account_data.get("electricity_enrolment_start")
+            "enrollment_started_at": account_data.get("electricity_enrolment_start")
             or supply_point.get("enrolmentStartDate"),
-            "supply_start": account_data.get("electricity_supply_start")
+            "supply_started_at": account_data.get("electricity_supply_start")
             or supply_point.get("supplyStartDate"),
             "is_smart_meter": account_data.get("electricity_is_smart_meter")
             if account_data.get("electricity_is_smart_meter") is not None
             else supply_point.get("isSmartMeter"),
             "cancellation_reason": account_data.get("electricity_cancellation_reason")
             or supply_point.get("cancellationReason"),
-            "pod": account_data.get("electricity_pod"),
-            "supply_point_id": account_data.get("electricity_supply_point_id"),
         }
 
     @property
@@ -833,21 +834,21 @@ class OctopusElectricityProductInfoSensor(CoordinatorEntity, SensorEntity):
         pricing = product.get("pricing") or {}
         return {
             "account_number": self._account_number,
-            "code": product.get("code"),
-            "description": product.get("description"),
+            "product_code": product.get("code"),
             "product_type": product.get("productType"),
+            "product_description": product.get("description"),
             "agreement_id": product.get("agreementId"),
             "valid_from": product.get("validFrom"),
             "valid_to": product.get("validTo"),
             "is_time_of_use": product.get("isTimeOfUse"),
             "terms_url": product.get("termsAndConditionsUrl"),
-            "pricing_base": pricing.get("base"),
-            "pricing_f2": pricing.get("f2"),
-            "pricing_f3": pricing.get("f3"),
-            "pricing_units": pricing.get("units"),
-            "annual_standing_charge": pricing.get("annualStandingCharge"),
-            "annual_standing_charge_units": pricing.get("annualStandingChargeUnits"),
-            "agreements": self._agreements(),
+            "price_base": pricing.get("base"),
+            "price_f2": pricing.get("f2"),
+            "price_f3": pricing.get("f3"),
+            "price_unit": pricing.get("units"),
+            "standing_charge_annual": pricing.get("annualStandingCharge"),
+            "standing_charge_units": pricing.get("annualStandingChargeUnits"),
+            "linked_agreements": self._agreements(),
         }
 
     @property
@@ -925,18 +926,19 @@ class OctopusGasMeterStatusSensor(CoordinatorEntity, SensorEntity):
         if not account_data:
             return {}
         return {
-            "enrolment_status": account_data.get("gas_enrolment_status")
+            "account_number": self._account_number,
+            "pdr": account_data.get("gas_pdr"),
+            "enrollment_status": account_data.get("gas_enrolment_status")
             or supply_point.get("enrolmentStatus"),
-            "enrolment_start": account_data.get("gas_enrolment_start")
+            "enrollment_started_at": account_data.get("gas_enrolment_start")
             or supply_point.get("enrolmentStartDate"),
-            "supply_start": account_data.get("gas_supply_start")
+            "supply_started_at": account_data.get("gas_supply_start")
             or supply_point.get("supplyStartDate"),
             "is_smart_meter": account_data.get("gas_is_smart_meter")
             if account_data.get("gas_is_smart_meter") is not None
             else supply_point.get("isSmartMeter"),
             "cancellation_reason": account_data.get("gas_cancellation_reason")
             or supply_point.get("cancellationReason"),
-            "pdr": account_data.get("gas_pdr"),
         }
 
     @property
@@ -1158,18 +1160,18 @@ class OctopusGasProductInfoSensor(CoordinatorEntity, SensorEntity):
         pricing = product.get("pricing") or {}
         return {
             "account_number": self._account_number,
-            "code": product.get("code"),
-            "description": product.get("description"),
+            "product_code": product.get("code"),
             "product_type": product.get("productType"),
+            "product_description": product.get("description"),
             "agreement_id": product.get("agreementId"),
             "valid_from": product.get("validFrom"),
             "valid_to": product.get("validTo"),
             "terms_url": product.get("termsAndConditionsUrl"),
-            "pricing_base": pricing.get("base"),
-            "pricing_units": pricing.get("units"),
-            "annual_standing_charge": pricing.get("annualStandingCharge"),
-            "annual_standing_charge_units": pricing.get("annualStandingChargeUnits"),
-            "agreements": self._agreements(),
+            "price_base": pricing.get("base"),
+            "price_unit": pricing.get("units"),
+            "standing_charge_annual": pricing.get("annualStandingCharge"),
+            "standing_charge_units": pricing.get("annualStandingChargeUnits"),
+            "linked_agreements": self._agreements(),
         }
 
     @property
@@ -1247,7 +1249,13 @@ class OctopusDispatchWindowSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        return {"account_number": self._account_number, "window_key": self._field_name}
+        phase, _, boundary = self._field_name.partition("_")
+        return {
+            "account_number": self._account_number,
+            "window_phase": phase or self._field_name,
+            "window_boundary": boundary or None,
+            "dispatch_field": self._field_name,
+        }
 
     @property
     def available(self) -> bool:
@@ -1296,24 +1304,26 @@ class OctopusEVChargeStatusSensor(CoordinatorEntity, SensorEntity):
     def _update_attributes(self) -> None:
         """Update the internal attributes dictionary."""
         default_attributes = {
-            "device_id": "Unknown",
-            "device_name": "Unknown",
-            "device_model": "Unknown",
-            "device_provider": "Unknown",
-            "battery_size": "Unknown",
-            "is_suspended": False,
-            "current_state": "Unknown",
+            "account_number": self._account_number,
+            "device_id": None,
+            "device_name": None,
+            "device_model": None,
+            "device_provider": None,
+            "battery_capacity_kwh": None,
+            "status_current_state": "Unknown",
+            "status_connection_state": None,
+            "status_is_suspended": False,
             "preferences_mode": None,
             "preferences_unit": None,
             "preferences_target_type": None,
-            "preferences_grid_export": None,
-            "preferences_schedules": None,
+            "allow_grid_export": None,
+            "schedules": None,
             "target_day_of_week": None,
             "target_time": None,
             "target_percentage": None,
-            "boost_charge_active": False,
-            "boost_charge_available": False,
-            "last_updated": datetime.now().isoformat(),
+            "boost_active": False,
+            "boost_available": False,
+            "last_synced_at": datetime.now().isoformat(),
         }
 
         account_data = _get_account_data(self.coordinator, self._account_number)
@@ -1348,26 +1358,28 @@ class OctopusEVChargeStatusSensor(CoordinatorEntity, SensorEntity):
         )
 
         self._attributes = {
-            "device_id": device.get("id", "Unknown"),
-            "device_name": device.get("name", "Unknown"),
-            "device_model": device.get("vehicleVariant", {}).get("model", "Unknown"),
-            "device_provider": device.get("provider", "Unknown"),
-            "battery_size": device.get("vehicleVariant", {}).get(
-                "batterySize", "Unknown"
+            "account_number": self._account_number,
+            "device_id": device.get("id"),
+            "device_name": device.get("name"),
+            "device_model": device.get("vehicleVariant", {}).get("model"),
+            "device_provider": device.get("provider"),
+            "battery_capacity_kwh": device.get("vehicleVariant", {}).get(
+                "batterySize"
             ),
-            "is_suspended": is_suspended,
-            "current_state": current_state,
+            "status_current_state": current_state,
+            "status_connection_state": current,
+            "status_is_suspended": is_suspended,
             "preferences_mode": preferences.get("mode"),
             "preferences_unit": preferences.get("unit"),
             "preferences_target_type": preferences.get("targetType"),
-            "preferences_grid_export": preferences.get("gridExport"),
-            "preferences_schedules": preferences.get("schedules"),
+            "allow_grid_export": preferences.get("gridExport"),
+            "schedules": preferences.get("schedules"),
             "target_day_of_week": schedule.get("dayOfWeek") if schedule else None,
             "target_time": schedule.get("time") if schedule else None,
             "target_percentage": schedule.get("max") if schedule else None,
-            "boost_charge_active": boost_charge_active,
-            "boost_charge_available": boost_charge_available,
-            "last_updated": datetime.now().isoformat(),
+            "boost_active": boost_charge_active,
+            "boost_available": boost_charge_available,
+            "last_synced_at": datetime.now().isoformat(),
         }
 
     @callback
@@ -1536,7 +1548,8 @@ class OctopusVehicleBatterySizeSensor(CoordinatorEntity, SensorEntity):
                     {
                         "device_id": device.get("id"),
                         "device_name": device.get("name"),
-                        "model": variant.get("model"),
+                        "vehicle_model": variant.get("model"),
+                        "device_provider": device.get("provider"),
                     }
                 )
                 break
