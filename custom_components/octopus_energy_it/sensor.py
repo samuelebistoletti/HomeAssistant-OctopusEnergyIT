@@ -159,21 +159,6 @@ def _build_sensors_for_account(account_number, coordinator, account_data):
     for ledger_type in other_ledgers:
         sensors.append(OctopusLedgerBalanceSensor(account_number, coordinator, ledger_type))
 
-    dispatch_fields = [
-        ("current_start", "Current Dispatch Start", "dispatch_current_start"),
-        ("current_end", "Current Dispatch End", "dispatch_current_end"),
-        ("next_start", "Next Dispatch Start", "dispatch_next_start"),
-        ("next_end", "Next Dispatch End", "dispatch_next_end"),
-    ]
-
-    for field, name_suffix, unique_suffix in dispatch_fields:
-        if account_data.get(field) is not None:
-            sensors.append(
-                OctopusDispatchWindowSensor(
-                    account_number, coordinator, field, name_suffix, unique_suffix
-                )
-            )
-
     if account_data.get("vehicle_battery_size_in_kwh") is not None:
         sensors.append(OctopusVehicleBatterySizeSensor(account_number, coordinator))
 
@@ -1225,47 +1210,6 @@ class OctopusGasStandingChargeSensor(CoordinatorEntity, SensorEntity):
             and account_data.get("gas_annual_standing_charge") is not None
         )
 
-
-
-class OctopusDispatchWindowSensor(CoordinatorEntity, SensorEntity):
-    """Timestamp sensor for current and upcoming dispatch windows."""
-
-    def __init__(self, account_number, coordinator, field_name, name_suffix, unique_suffix) -> None:
-        super().__init__(coordinator)
-        self._account_number = account_number
-        self._field_name = field_name
-        self._attr_name = f"Octopus {account_number} {name_suffix}"
-        self._attr_unique_id = f"octopus_{account_number}_{unique_suffix}"
-        self._attr_device_class = SensorDeviceClass.TIMESTAMP
-        self._attr_has_entity_name = False
-        self._attr_entity_registry_enabled_default = True
-
-    @property
-    def native_value(self):
-        account_data = _get_account_data(self.coordinator, self._account_number)
-        if not account_data:
-            return None
-        return account_data.get(self._field_name)
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        phase, _, boundary = self._field_name.partition("_")
-        return {
-            "account_number": self._account_number,
-            "window_phase": phase or self._field_name,
-            "window_boundary": boundary or None,
-            "dispatch_field": self._field_name,
-        }
-
-    @property
-    def available(self) -> bool:
-        account_data = _get_account_data(self.coordinator, self._account_number)
-        return (
-            self.coordinator is not None
-            and self.coordinator.last_update_success
-            and account_data is not None
-            and account_data.get(self._field_name) is not None
-        )
 
 
 

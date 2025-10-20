@@ -14,26 +14,40 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 
 
-def _get_account_data(coordinator, account_number: str) -> dict | None:
+def _get_account_data(coordinator, account_number: str) -> dict[str, Any] | None:
     """Recupera i dati dell'account dal coordinatore condiviso."""
     data = getattr(coordinator, "data", None)
     if isinstance(data, dict):
-        return data.get(account_number)
+        account_data = data.get(account_number)
+        if isinstance(account_data, dict):
+            return account_data
     return None
 
 
-def _first_device_schedule(device: dict) -> dict | None:
-    schedules = (device.get("preferences") or {}).get("schedules") or []
-    if not schedules:
+def _first_device_schedule(device: dict[str, Any]) -> dict[str, Any] | None:
+    preferences = device.get("preferences") or {}
+    if not isinstance(preferences, dict):
         return None
-    return schedules[0]
+    schedules = preferences.get("schedules") or []
+    if not isinstance(schedules, list):
+        return None
+    for entry in schedules:
+        if isinstance(entry, dict):
+            return entry
+    return None
 
 
-def _schedule_setting(device: dict) -> dict | None:
-    settings = (device.get("preferenceSetting") or {}).get("scheduleSettings") or []
-    if not settings:
+def _schedule_setting(device: dict[str, Any]) -> dict[str, Any] | None:
+    pref_setting = device.get("preferenceSetting") or {}
+    if not isinstance(pref_setting, dict):
         return None
-    return settings[0]
+    settings = pref_setting.get("scheduleSettings") or []
+    if not isinstance(settings, list):
+        return None
+    for entry in settings:
+        if isinstance(entry, dict):
+            return entry
+    return None
 
 
 async def async_setup_entry(
@@ -57,7 +71,13 @@ async def async_setup_entry(
         if not account_data:
             continue
 
-        for device in account_data.get("devices", []):
+        devices = account_data.get("devices") or []
+        if not isinstance(devices, list):
+            continue
+
+        for device in devices:
+            if not isinstance(device, dict):
+                continue
             device_id = device.get("id")
             schedule = _first_device_schedule(device)
             if not device_id or not schedule:
@@ -96,22 +116,25 @@ class OctopusDeviceChargeTargetNumber(CoordinatorEntity, NumberEntity):
         self._attr_has_entity_name = False
 
     # Helpers --------------------------------------------------------------
-    def _current_device(self) -> dict | None:
+    def _current_device(self) -> dict[str, Any] | None:
         account = _get_account_data(self.coordinator, self._account_number)
         if not account:
             return None
-        for device in account.get("devices", []):
-            if device.get("id") == self._device_id:
+        devices = account.get("devices") or []
+        if not isinstance(devices, list):
+            return None
+        for device in devices:
+            if isinstance(device, dict) and device.get("id") == self._device_id:
                 return device
         return None
 
-    def _current_schedule(self) -> dict | None:
+    def _current_schedule(self) -> dict[str, Any] | None:
         device = self._current_device()
         if not device:
             return None
         return _first_device_schedule(device)
 
-    def _schedule_setting(self) -> dict | None:
+    def _schedule_setting(self) -> dict[str, Any] | None:
         device = self._current_device()
         if not device:
             return None
@@ -138,10 +161,10 @@ class OctopusDeviceChargeTargetNumber(CoordinatorEntity, NumberEntity):
         schedule = self._current_schedule()
         if not schedule:
             return None
+        value = schedule.get("max")
+        if value is None:
+            return None
         try:
-            value = schedule.get("max")
-            if value is None:
-                return None
             return int(float(value))
         except (TypeError, ValueError):
             return None
@@ -150,18 +173,28 @@ class OctopusDeviceChargeTargetNumber(CoordinatorEntity, NumberEntity):
         account = _get_account_data(self.coordinator, self._account_number)
         if not account:
             return
-        for device in account.get("devices", []):
-            if device.get("id") == self._device_id:
-                preferences = device.setdefault("preferences", {})
-                schedules = preferences.setdefault("schedules", [])
-                if schedules:
-                    schedule = schedules[0]
-                    if target_percentage is not None:
-                        schedule["max"] = target_percentage
-                    if target_time is not None:
-                        stored_time = target_time if len(target_time) > 5 else f"{target_time}:00"
-                        schedule["time"] = stored_time
+        devices = account.get("devices") or []
+        if not isinstance(devices, list):
+            return
+        for device in devices:
+            if not isinstance(device, dict) or device.get("id") != self._device_id:
+                continue
+            preferences = device.setdefault("preferences", {})
+            if not isinstance(preferences, dict):
+                preferences = {}
+                device["preferences"] = preferences
+            schedules = preferences.setdefault("schedules", [])
+            if not isinstance(schedules, list) or not schedules:
                 break
+            schedule = schedules[0]
+            if not isinstance(schedule, dict):
+                break
+            if target_percentage is not None:
+                schedule["max"] = target_percentage
+            if target_time is not None:
+                stored_time = target_time if len(target_time) > 5 else f"{target_time}:00"
+                schedule["time"] = stored_time
+            break
         self.coordinator.async_set_updated_data(dict(self.coordinator.data))
 
     # NumberEntity API ----------------------------------------------------
@@ -195,7 +228,12 @@ class OctopusDeviceChargeTargetNumber(CoordinatorEntity, NumberEntity):
 
         step = self.native_step or 5
         target_percentage = int(round(value / step) * step)
-        target_percentage = max(self.native_min_value, min(self.native_max_value, target_percentage))
+
+        min_value = int(self.native_min_value)
+        max_value = int(self.native_max_value)
+        if min_value > max_value:
+            min_value, max_value = max_value, min_value
+        target_percentage = max(min_value, min(max_value, target_percentage))
 
         success = await self._api.set_device_preferences(
             self._device_id,

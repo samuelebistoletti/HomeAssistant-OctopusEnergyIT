@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from typing import Any
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -13,28 +14,42 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 
 
-def _get_account_data(coordinator, account_number: str) -> dict | None:
+def _get_account_data(coordinator, account_number: str) -> dict[str, Any] | None:
     data = getattr(coordinator, "data", None)
     if isinstance(data, dict):
-        return data.get(account_number)
+        account_data = data.get(account_number)
+        if isinstance(account_data, dict):
+            return account_data
     return None
 
 
-def _first_device_schedule(device: dict) -> dict | None:
-    schedules = (device.get("preferences") or {}).get("schedules") or []
-    if not schedules:
+def _first_device_schedule(device: dict[str, Any]) -> dict[str, Any] | None:
+    preferences = device.get("preferences") or {}
+    if not isinstance(preferences, dict):
         return None
-    return schedules[0]
-
-
-def _schedule_setting(device: dict) -> dict | None:
-    settings = (device.get("preferenceSetting") or {}).get("scheduleSettings") or []
-    if not settings:
+    schedules = preferences.get("schedules") or []
+    if not isinstance(schedules, list):
         return None
-    return settings[0]
+    for entry in schedules:
+        if isinstance(entry, dict):
+            return entry
+    return None
 
 
-def _build_time_options(setting: dict | None) -> list[str]:
+def _schedule_setting(device: dict[str, Any]) -> dict[str, Any] | None:
+    pref_setting = device.get("preferenceSetting") or {}
+    if not isinstance(pref_setting, dict):
+        return None
+    settings = pref_setting.get("scheduleSettings") or []
+    if not isinstance(settings, list):
+        return None
+    for entry in settings:
+        if isinstance(entry, dict):
+            return entry
+    return None
+
+
+def _build_time_options(setting: dict[str, Any] | None) -> list[str]:
     if not setting:
         return []
 
@@ -42,7 +57,7 @@ def _build_time_options(setting: dict | None) -> list[str]:
     time_to = str(setting.get("timeTo", "17:00"))[:5]
     step_minutes = setting.get("timeStep")
     try:
-        step = int(step_minutes)
+        step = int(step_minutes) if step_minutes is not None else 30
     except (TypeError, ValueError):
         step = 30
     if step <= 0:
@@ -83,7 +98,13 @@ async def async_setup_entry(
         if not account_data:
             continue
 
-        for device in account_data.get("devices", []):
+        devices = account_data.get("devices") or []
+        if not isinstance(devices, list):
+            continue
+
+        for device in devices:
+            if not isinstance(device, dict):
+                continue
             device_id = device.get("id")
             schedule = _first_device_schedule(device)
             if not device_id or not schedule:
@@ -120,16 +141,19 @@ class OctopusDeviceTargetTimeSelect(CoordinatorEntity, SelectEntity):
         self._attr_has_entity_name = False
 
     # Helpers --------------------------------------------------------------
-    def _current_device(self) -> dict | None:
+    def _current_device(self) -> dict[str, Any] | None:
         account = _get_account_data(self.coordinator, self._account_number)
         if not account:
             return None
-        for device in account.get("devices", []):
-            if device.get("id") == self._device_id:
+        devices = account.get("devices") or []
+        if not isinstance(devices, list):
+            return None
+        for device in devices:
+            if isinstance(device, dict) and device.get("id") == self._device_id:
                 return device
         return None
 
-    def _current_schedule(self) -> dict | None:
+    def _current_schedule(self) -> dict[str, Any] | None:
         device = self._current_device()
         if not device:
             return None
@@ -139,8 +163,11 @@ class OctopusDeviceTargetTimeSelect(CoordinatorEntity, SelectEntity):
         schedule = self._current_schedule()
         if not schedule:
             return None
+        value = schedule.get("max")
+        if value is None:
+            return None
         try:
-            return int(float(schedule.get("max")))
+            return int(float(value))
         except (TypeError, ValueError):
             return None
 
@@ -157,14 +184,25 @@ class OctopusDeviceTargetTimeSelect(CoordinatorEntity, SelectEntity):
         account = _get_account_data(self.coordinator, self._account_number)
         if not account:
             return
-        for device in account.get("devices", []):
-            if device.get("id") == self._device_id:
-                preferences = device.setdefault("preferences", {})
-                schedules = preferences.setdefault("schedules", [])
-                if schedules and target_time is not None:
-                    stored_time = target_time if len(target_time) > 5 else f"{target_time}:00"
-                    schedules[0]["time"] = stored_time
+        devices = account.get("devices") or []
+        if not isinstance(devices, list):
+            return
+        for device in devices:
+            if not isinstance(device, dict) or device.get("id") != self._device_id:
+                continue
+            preferences = device.setdefault("preferences", {})
+            if not isinstance(preferences, dict):
+                preferences = {}
+                device["preferences"] = preferences
+            schedules = preferences.setdefault("schedules", [])
+            if not isinstance(schedules, list) or not schedules or target_time is None:
                 break
+            schedule = schedules[0]
+            if not isinstance(schedule, dict):
+                break
+            stored_time = target_time if len(target_time) > 5 else f"{target_time}:00"
+            schedule["time"] = stored_time
+            break
         self.coordinator.async_set_updated_data(dict(self.coordinator.data))
 
     # SelectEntity API ----------------------------------------------------
