@@ -469,8 +469,9 @@ class OctopusElectricityLastReadingSensor(CoordinatorEntity, SensorEntity):
         self._account_number = account_number
         self._attr_name = f"Octopus {account_number} Electricity Last Reading"
         self._attr_unique_id = f"octopus_{account_number}_electricity_last_reading"
+        self._attr_device_class = SensorDeviceClass.ENERGY
         self._attr_native_unit_of_measurement = "kWh"
-        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_state_class = SensorStateClass.TOTAL_INCREASING
         self._attr_has_entity_name = False
 
     def _reading(self):
