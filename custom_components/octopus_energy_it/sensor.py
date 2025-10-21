@@ -118,6 +118,7 @@ def _build_sensors_for_account(account_number, coordinator, account_data):
             )
 
         sensors.append(OctopusGasLastReadingSensor(account_number, coordinator))
+        sensors.append(OctopusGasLastReadingDateSensor(account_number, coordinator))
 
         if account_data.get("gas_supply_point"):
             sensors.append(OctopusGasMeterStatusSensor(account_number, coordinator))
@@ -466,14 +467,66 @@ class OctopusGasLastReadingSensor(CoordinatorEntity, SensorEntity):
         )
 
 
+class OctopusGasLastReadingDateSensor(CoordinatorEntity, SensorEntity):
+    """Sensor exposing the date of the latest gas meter reading."""
+
+    def __init__(self, account_number, coordinator) -> None:
+        super().__init__(coordinator)
+        self._account_number = account_number
+        self._attr_name = f"Octopus {account_number} Gas Last Reading Date"
+        self._attr_unique_id = f"octopus_{account_number}_gas_last_reading_date"
+        self._attr_icon = "mdi:calendar-clock"
+        self._attr_has_entity_name = False
+
+    def _reading(self):
+        account_data = _get_account_data(self.coordinator, self._account_number)
+        if not account_data:
+            return None
+        return account_data.get("gas_last_reading")
+
+    @staticmethod
+    def _parse_date(entry: dict | None):
+        if not entry:
+            return None
+        timestamp = entry.get("readingDate")
+        if not timestamp:
+            return None
+        try:
+            normalised = timestamp.replace("Z", "+00:00")
+            dt = datetime.fromisoformat(normalised)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=UTC)
+            return dt.date()
+        except (ValueError, TypeError):
+            try:
+                return datetime.strptime(timestamp.split("T")[0], "%Y-%m-%d").date()
+            except (ValueError, IndexError):
+                return None
+
+    @property
+    def native_value(self):
+        reading = self._reading()
+        parsed = self._parse_date(reading)
+        if parsed is None:
+            return None
+        return parsed.strftime("%d/%m/%Y")
+
+    @property
+    def available(self) -> bool:
+        return (
+            self.coordinator is not None
+            and self.coordinator.last_update_success
+            and self.native_value is not None
+        )
+
 class OctopusElectricityLastReadingSensor(CoordinatorEntity, SensorEntity):
     """Sensor for the latest electricity meter reading."""
 
     def __init__(self, account_number, coordinator) -> None:
         super().__init__(coordinator)
         self._account_number = account_number
-        self._attr_name = f"Octopus {account_number} Electricity Last Reading"
-        self._attr_unique_id = f"octopus_{account_number}_electricity_last_reading"
+        self._attr_name = f"Octopus {account_number} Electricity Last Daily Reading"
+        self._attr_unique_id = f"octopus_{account_number}_electricity_last_daily_reading"
         self._attr_native_unit_of_measurement = "kWh"
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_icon = "mdi:meter-electric"
@@ -528,8 +581,8 @@ class OctopusElectricityLastReadingDateSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, account_number, coordinator) -> None:
         super().__init__(coordinator)
         self._account_number = account_number
-        self._attr_name = f"Octopus {account_number} Electricity Last Reading Date"
-        self._attr_unique_id = f"octopus_{account_number}_electricity_last_reading_date"
+        self._attr_name = f"Octopus {account_number} Electricity Last Daily Reading Date"
+        self._attr_unique_id = f"octopus_{account_number}_electricity_last_daily_reading_date"
         self._attr_icon = "mdi:calendar-clock"
         self._attr_has_entity_name = False
 
