@@ -13,7 +13,7 @@ A differenza dell’integrazione nativa tra V2C e Home Assistant, questa soluzio
 
 Ti piace l’integrazione?
 Puoi sostenere il progetto con una **donazione una tantum o mensile** tramite [GitHub Sponsorship](https://github.com/sponsors/samuelebistoletti)
-oppure usare il [link di riferimento Octopus Energy](https://octopusenergy.it/octo-friends/airy-queen-959) per attivare un nuovo abbonamento: otterrai **uno sconto fino a 50 €** 
+oppure usare il [link di riferimento Octopus Energy](https://octopusenergy.it/octo-friends/airy-queen-959) per attivare un nuovo abbonamento: otterrai **uno sconto fino a 50 €**
 
 ---
 
@@ -93,9 +93,10 @@ logger:
 
 | Entità | Unità | Attributi extra |
 | --- | --- | --- |
-| `sensor.octopus_<account>_electricity_last_reading` | kWh | `period_start`, `period_end`, `data_source`, `unit_of_measurement`, `register_start_value`, `register_end_value` |
-| `sensor.octopus_<account>_electricity_last_reading_date` | data | — |
+| `sensor.octopus_<account>_electricity_last_daily_reading` | kWh | `period_start`, `period_end`, `data_source`, `unit_of_measurement`, `register_start_value`, `register_end_value` |
+| `sensor.octopus_<account>_electricity_last_daily_reading_date` | data | — |
 | `sensor.octopus_<account>_gas_last_reading` | m³ | `recorded_at`, `measurement_type`, `measurement_source`, `unit_of_measurement` |
+| `sensor.octopus_<account>_gas_last_reading_date` | data | — |
 | `sensor.octopus_<account>_electricity_meter_status` | testo | `account_number`, `pod`, `supply_point_id`, `enrollment_status`, `enrollment_started_at`, `supply_started_at`, `is_smart_meter`, `cancellation_reason` |
 | `sensor.octopus_<account>_gas_meter_status` | testo | `account_number`, `pdr`, `enrollment_status`, `enrollment_started_at`, `supply_started_at`, `is_smart_meter`, `cancellation_reason` |
 

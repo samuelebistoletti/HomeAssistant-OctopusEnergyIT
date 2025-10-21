@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.0.5] - 2025-10-27
+
+### Added
+- Gas last reading date sensor exposing the recording date from the latest cumulative reading.
+
+### Changed
+- Electricity last reading sensors renamed to highlight daily aggregation and align the entity titles with the data returned by Kraken.
+- Added or refreshed explicit icons across all exposed entities to deliver consistent visuals in Home Assistant dashboards.
+
+### Breaking
+- `sensor.octopus_<account>_electricity_last_reading` and `sensor.octopus_<account>_electricity_last_reading_date` now use the IDs `sensor.octopus_<account>_electricity_last_daily_reading` and `sensor.octopus_<account>_electricity_last_daily_reading_date`; update dashboards, automations, and templates accordingly.
+
+### Documentation
+- Updated README files to document the renamed electricity sensors and the new gas reading date entity.
+
 ## [1.0.4] - 2025-10-20
 
 ### Added
