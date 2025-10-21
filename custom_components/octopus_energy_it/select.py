@@ -138,6 +138,7 @@ class OctopusDeviceTargetTimeSelect(CoordinatorEntity, SelectEntity):
         self._attr_unique_id = (
             f"octopus_{account_number}_{device_id}_target_time_select"
         )
+        self._attr_icon = "mdi:clock-outline"
         self._attr_has_entity_name = False
 
     # Helpers --------------------------------------------------------------

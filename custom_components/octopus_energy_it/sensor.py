@@ -238,6 +238,7 @@ class OctopusElectricityPriceSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"octopus_{account_number}_electricity_price"
         self._attr_device_class = SensorDeviceClass.MONETARY
         self._attr_native_unit_of_measurement = "€/kWh"
+        self._attr_icon = "mdi:currency-eur"
         self._attr_has_entity_name = False
 
     def _pricing(self) -> dict:
@@ -305,6 +306,7 @@ class OctopusElectricityBalanceSensor(CoordinatorEntity, SensorEntity):
         self._attr_device_class = SensorDeviceClass.MONETARY
         self._attr_native_unit_of_measurement = "€"
         self._attr_state_class = SensorStateClass.TOTAL
+        self._attr_icon = "mdi:wallet"
         self._attr_has_entity_name = False
 
     @property
@@ -337,6 +339,7 @@ class OctopusGasBalanceSensor(CoordinatorEntity, SensorEntity):
         self._attr_device_class = SensorDeviceClass.MONETARY
         self._attr_native_unit_of_measurement = "€"
         self._attr_state_class = SensorStateClass.TOTAL
+        self._attr_icon = "mdi:wallet"
         self._attr_has_entity_name = False
 
     @property
@@ -370,6 +373,7 @@ class OctopusElectricityStandingChargeSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"octopus_{account_number}_electricity_standing_charge"
         self._attr_device_class = SensorDeviceClass.MONETARY
         self._attr_state_class = SensorStateClass.TOTAL
+        self._attr_icon = "mdi:cash-clock"
         self._attr_has_entity_name = False
         self._attr_entity_registry_enabled_default = True
 
@@ -418,6 +422,7 @@ class OctopusGasLastReadingSensor(CoordinatorEntity, SensorEntity):
         self._attr_device_class = SensorDeviceClass.VOLUME
         self._attr_native_unit_of_measurement = "m³"
         self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+        self._attr_icon = "mdi:meter-gas"
         self._attr_has_entity_name = False
 
     def _reading(self):
@@ -471,6 +476,7 @@ class OctopusElectricityLastReadingSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"octopus_{account_number}_electricity_last_reading"
         self._attr_native_unit_of_measurement = "kWh"
         self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_icon = "mdi:meter-electric"
         self._attr_has_entity_name = False
 
     def _reading(self):
@@ -524,6 +530,7 @@ class OctopusElectricityLastReadingDateSensor(CoordinatorEntity, SensorEntity):
         self._account_number = account_number
         self._attr_name = f"Octopus {account_number} Electricity Last Reading Date"
         self._attr_unique_id = f"octopus_{account_number}_electricity_last_reading_date"
+        self._attr_icon = "mdi:calendar-clock"
         self._attr_has_entity_name = False
 
     def _reading(self):
@@ -576,6 +583,7 @@ class OctopusElectricityMeterStatusSensor(CoordinatorEntity, SensorEntity):
         self._account_number = account_number
         self._attr_name = f"Octopus {account_number} Electricity Meter Status"
         self._attr_unique_id = f"octopus_{account_number}_electricity_meter_status"
+        self._attr_icon = "mdi:transmission-tower"
         self._attr_has_entity_name = False
 
     def _supply_point(self) -> tuple[dict[str, Any] | None, dict[str, Any]]:
@@ -643,6 +651,7 @@ class OctopusHeatBalanceSensor(CoordinatorEntity, SensorEntity):
         self._attr_device_class = SensorDeviceClass.MONETARY
         self._attr_native_unit_of_measurement = "€"
         self._attr_state_class = SensorStateClass.TOTAL
+        self._attr_icon = "mdi:radiator"
         self._attr_has_entity_name = False
 
     @property
@@ -672,6 +681,7 @@ class OctopusElectricityContractStartSensor(CoordinatorEntity, SensorEntity):
         self._account_number = account_number
         self._attr_name = f"Octopus {account_number} Electricity Contract Start"
         self._attr_unique_id = f"octopus_{account_number}_electricity_contract_start"
+        self._attr_icon = "mdi:calendar-start"
         self._attr_has_entity_name = False
         self._attr_entity_registry_enabled_default = True
 
@@ -714,6 +724,7 @@ class OctopusElectricityContractEndSensor(CoordinatorEntity, SensorEntity):
         self._account_number = account_number
         self._attr_name = f"Octopus {account_number} Electricity Contract End"
         self._attr_unique_id = f"octopus_{account_number}_electricity_contract_end"
+        self._attr_icon = "mdi:calendar-end"
         self._attr_has_entity_name = False
         self._attr_entity_registry_enabled_default = True
 
@@ -758,6 +769,7 @@ class OctopusElectricityContractExpiryDaysSensor(CoordinatorEntity, SensorEntity
         self._attr_unique_id = f"octopus_{account_number}_electricity_contract_expiry_days"
         self._attr_native_unit_of_measurement = "days"
         self._attr_state_class = SensorStateClass.TOTAL
+        self._attr_icon = "mdi:calendar-clock"
         self._attr_has_entity_name = False
 
     @property
@@ -786,6 +798,7 @@ class OctopusElectricityProductInfoSensor(CoordinatorEntity, SensorEntity):
         self._account_number = account_number
         self._attr_name = f"Octopus {account_number} Electricity Product"
         self._attr_unique_id = f"octopus_{account_number}_electricity_product"
+        self._attr_icon = "mdi:tag-text-outline"
         self._attr_has_entity_name = False
         self._attr_entity_registry_enabled_default = True
 
@@ -856,6 +869,7 @@ class OctopusLedgerBalanceSensor(CoordinatorEntity, SensorEntity):
         self._attr_device_class = SensorDeviceClass.MONETARY
         self._attr_native_unit_of_measurement = "€"
         self._attr_state_class = SensorStateClass.TOTAL
+        self._attr_icon = "mdi:cash-multiple"
         self._attr_has_entity_name = False
 
     @property
@@ -887,6 +901,7 @@ class OctopusGasMeterStatusSensor(CoordinatorEntity, SensorEntity):
         self._account_number = account_number
         self._attr_name = f"Octopus {account_number} Gas Meter Status"
         self._attr_unique_id = f"octopus_{account_number}_gas_meter_status"
+        self._attr_icon = "mdi:gas-burner"
         self._attr_has_entity_name = False
 
     def _supply_point(self) -> tuple[dict[str, Any] | None, dict[str, Any]]:
@@ -953,6 +968,7 @@ class OctopusGasPriceSensor(CoordinatorEntity, SensorEntity):
         self._attr_device_class = SensorDeviceClass.MONETARY
         self._attr_native_unit_of_measurement = "€/m³"
         self._attr_state_class = SensorStateClass.TOTAL
+        self._attr_icon = "mdi:currency-eur"
         self._attr_has_entity_name = False
 
     @property
@@ -986,6 +1002,7 @@ class OctopusGasContractStartSensor(CoordinatorEntity, SensorEntity):
         self._account_number = account_number
         self._attr_name = f"Octopus {account_number} Gas Contract Start"
         self._attr_unique_id = f"octopus_{account_number}_gas_contract_start"
+        self._attr_icon = "mdi:calendar-start"
         self._attr_has_entity_name = False
         self._attr_entity_registry_enabled_default = True
 
@@ -1033,6 +1050,7 @@ class OctopusGasContractEndSensor(CoordinatorEntity, SensorEntity):
         self._account_number = account_number
         self._attr_name = f"Octopus {account_number} Gas Contract End"
         self._attr_unique_id = f"octopus_{account_number}_gas_contract_end"
+        self._attr_icon = "mdi:calendar-end"
         self._attr_has_entity_name = False
         self._attr_entity_registry_enabled_default = True
 
@@ -1082,6 +1100,7 @@ class OctopusGasContractExpiryDaysSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"octopus_{account_number}_gas_contract_expiry_days"
         self._attr_native_unit_of_measurement = "days"
         self._attr_state_class = SensorStateClass.TOTAL
+        self._attr_icon = "mdi:calendar-clock"
         self._attr_has_entity_name = False
 
     @property
@@ -1112,6 +1131,7 @@ class OctopusGasProductInfoSensor(CoordinatorEntity, SensorEntity):
         self._account_number = account_number
         self._attr_name = f"Octopus {account_number} Gas Product"
         self._attr_unique_id = f"octopus_{account_number}_gas_product"
+        self._attr_icon = "mdi:tag-text-outline"
         self._attr_has_entity_name = False
         self._attr_entity_registry_enabled_default = True
 
@@ -1174,6 +1194,7 @@ class OctopusGasStandingChargeSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"octopus_{account_number}_gas_standing_charge"
         self._attr_device_class = SensorDeviceClass.MONETARY
         self._attr_state_class = SensorStateClass.TOTAL
+        self._attr_icon = "mdi:cash-clock"
         self._attr_has_entity_name = False
         self._attr_entity_registry_enabled_default = True
 
@@ -1224,6 +1245,7 @@ class OctopusEVChargeStatusSensor(CoordinatorEntity, SensorEntity):
         self._account_number = account_number
         self._attr_name = f"Octopus {account_number} EV Charge Status"
         self._attr_unique_id = f"octopus_{account_number}_ev_charge_status"
+        self._attr_icon = "mdi:ev-station"
         self._attr_has_entity_name = False
         self._attributes = {}
 
@@ -1364,6 +1386,7 @@ class OctopusEVChargeTargetSensor(CoordinatorEntity, SensorEntity):
         self._attr_device_class = SensorDeviceClass.BATTERY
         self._attr_native_unit_of_measurement = "%"
         self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_icon = "mdi:target"
         self._attr_has_entity_name = False
         self._attr_entity_registry_enabled_default = True
 
@@ -1419,6 +1442,7 @@ class OctopusEVReadyTimeSensor(CoordinatorEntity, SensorEntity):
         self._account_number = account_number
         self._attr_name = f"Octopus {account_number} EV Ready Time"
         self._attr_unique_id = f"octopus_{account_number}_ev_ready_time"
+        self._attr_icon = "mdi:clock-check"
         self._attr_has_entity_name = False
         self._attr_entity_registry_enabled_default = True
 
@@ -1467,6 +1491,7 @@ class OctopusVehicleBatterySizeSensor(CoordinatorEntity, SensorEntity):
         self._attr_device_class = SensorDeviceClass.ENERGY
         self._attr_native_unit_of_measurement = "kWh"
         self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_icon = "mdi:car-battery"
         self._attr_has_entity_name = False
         self._attr_entity_registry_enabled_default = True
 

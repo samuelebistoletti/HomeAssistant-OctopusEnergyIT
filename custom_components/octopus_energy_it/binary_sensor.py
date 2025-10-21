@@ -85,6 +85,7 @@ class OctopusIntelligentDispatchingBinarySensor(CoordinatorEntity, BinarySensorE
         self._attr_name = f"Octopus {account_number} EV Charge Intelligent Dispatching"
         self._attr_unique_id = f"octopus_{account_number}_intelligent_dispatching"
         self._attr_device_class = None
+        self._attr_icon = "mdi:clock-check"
         self._attr_has_entity_name = False
         self._attributes = {}
         self._update_attributes()

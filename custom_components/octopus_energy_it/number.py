@@ -111,6 +111,7 @@ class OctopusDeviceChargeTargetNumber(CoordinatorEntity, NumberEntity):
 
         self._attr_name = f"Octopus {account_number} EV Charge Target"
         self._attr_unique_id = f"octopus_{account_number}_{device_id}_charge_target"
+        self._attr_icon = "mdi:target"
         self._attr_has_entity_name = False
 
     # Helpers --------------------------------------------------------------

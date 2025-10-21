@@ -167,6 +167,7 @@ class OctopusSwitch(CoordinatorEntity, SwitchEntity):
         # Updated name format to include "EV Charge Smart Control"
         self._attr_name = f"Octopus {self._account_number} EV Charge Smart Control"
         self._attr_unique_id = f"octopus_{self._account_number}_ev_charge_smart_control"
+        self._attr_icon = "mdi:car-electric"
         self._update_attributes()
 
     def _update_attributes(self):
