@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.6] - 2025-10-28
+
+### Changed
+- Updated the download counter to mirror the installation numbers reported by HACS analytics.
+
 ## [1.0.5] - 2025-10-27
 
 ### Added
