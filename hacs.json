@@ -2,7 +2,8 @@
   "name": "Octopus Energy Italy",
   "homeassistant": "2025.4.0",
   "hacs": "2.0.5",
+  "country": ["IT"],
   "render_readme": true,
   "zip_release": true,
-  "country": ["IT"]
+  "filename": "octopus_energy_it.zip"
 }

@@ -65,6 +65,11 @@ jobs:
           pathlib.Path("release_body.md").write_text(section, encoding="utf-8")
           PY
 
+      - name: Build release ZIP
+        if: env.EXISTS == 'false'
+        run: |
+          zip -r octopus_energy_it.zip custom_components/octopus_energy_it -x "*.pyc" "__pycache__/*"
+
       - name: Create GitHub Release
         if: env.EXISTS == 'false'
         uses: softprops/action-gh-release@v2
@@ -72,3 +77,4 @@ jobs:
           tag_name: v${{ env.VERSION }}
           name: v${{ env.VERSION }}
           body_path: release_body.md
+          files: octopus_energy_it.zip
