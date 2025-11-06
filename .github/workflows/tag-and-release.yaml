@@ -68,7 +68,8 @@ jobs:
       - name: Build release ZIP
         if: env.EXISTS == 'false'
         run: |
-          zip -r octopus_energy_it.zip custom_components/octopus_energy_it -x "*.pyc" "__pycache__/*"
+          cd "${{ github.workspace }}/custom_components/octopus_energy_it"
+          zip octopus_energy_it.zip -r ./
 
       - name: Create GitHub Release
         if: env.EXISTS == 'false'
@@ -77,4 +78,4 @@ jobs:
           tag_name: v${{ env.VERSION }}
           name: v${{ env.VERSION }}
           body_path: release_body.md
-          files: octopus_energy_it.zip
+          files: ${{ github.workspace }}/custom_components/octopus_energy_it/octopus_energy_it.zip
