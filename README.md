@@ -26,6 +26,7 @@ Se vuoi connettere Home Assistant direttamente al cloud V2C, prova l’integrazi
 - **Tariffe dettagliate per luce e gas** – esposizione del prodotto attivo, dei prezzi base/F2/F3, delle quote fisse, dell’unità di misura (incluso il prezzo gas in €/m³) e dei link ai termini contrattuali.
 - **Monitoraggio POD e PDR** – stato fornitura, date di attivazione, presenza del contatore smart e motivazioni di eventuale cessazione.
 - **Funzionalità SmartFlex** – stato dispositivi, limiti di carica, finestre di dispatch correnti/future e capacità della batteria del veicolo.
+- **Interfaccia bilingue** – nomi delle entità e stati di POD, PDR ed EV disponibili in italiano e inglese con descrizioni leggibili.
 - **Aggiornamenti integrati in Home Assistant** – utilizzo del DataUpdateCoordinator, registrazione automatica delle entità e servizi dedicati per aggiornare le preferenze di ricarica.
 
 ## Prerequisiti

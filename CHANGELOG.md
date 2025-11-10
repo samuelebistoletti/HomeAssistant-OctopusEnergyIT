@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.7] - 2025-11-10
+
+### Changed
+- Refreshed the bundled GraphQL schema and aligned all entities with a centralized translation system, delivering bilingual (IT/EN) names for POD/PDR statuses, EV SmartFlex states and ledger balances.
+- Switch entities now keep their pending state until Kraken confirms the action and trigger an immediate coordinator refresh after every toggle, so the Home Assistant UI reflects backend changes without waiting for the next poll.
+- Ledger balances adopt static translation keys (e.g. TV licence fee) instead of the raw labels returned by the API, ensuring consistent naming across dashboards.
+
+### Breaking
+- Removed the redundant `sensor.octopus_<account>_ev_charge_target` and `sensor.octopus_<account>_ev_ready_time` entities; use the existing number/select platforms to manage Intelligent Octopus targets and ready-by times.
+
+### Documentation
+- README files and the technical notes now reference the official developer portal, the public Kraken GraphQL endpoint, and document the new localization model.
+
 ## [1.0.6] - 2025-11-06
 
 ### Changed

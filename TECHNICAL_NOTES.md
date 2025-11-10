@@ -6,6 +6,11 @@
 - Documentazione ufficiale: [developer portal Octopus Energy Italy](https://developer.oeit-kraken.energy/)
 - Endpoint GraphQL: [`https://api.oeit-kraken.energy/v1/graphql/`](https://api.oeit-kraken.energy/v1/graphql/) utilizzato tramite il client `python-graphql-client`
 
+### Localization & Naming
+- Tutte le entità espongono `translation_key`, consentendo a Home Assistant di visualizzare nomi e stati in italiano o inglese senza duplicare logica.
+- Le funzioni `_normalize_supply_status` e `_normalize_ev_status` massaggiano gli stati restituiti da Kraken così che POD/PDR ed EV SmartFlex pubblichino sempre slug leggibili.
+- I ledger con etichette poco chiare (es. canone TV) ricevono translation key dedicate per evitare di usare i nomi grezzi del backend.
+
 ### Core Components
 - **Main Coordinator**: Central data coordinator using `DataUpdateCoordinator` with shared token management
 - **API Client** (`octopus_energy_it.py`): Handles GraphQL authentication, token refresh, and all API calls
