@@ -3,7 +3,13 @@
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 ![installation_badge](https://img.shields.io/badge/dynamic/json?color=41BDF5&logo=home-assistant&label=utenti&suffix=%20installs&cacheSeconds=15600&url=https://analytics.home-assistant.io/custom_integrations.json&query=%24.octopus_energy_it.total)
 
+> Stai scegliendo una nuova wallbox? Approfitta del **10% di sconto** su Trydan o Trydan Pro nello store ufficiale V2C (https://v2charge.com/store/it/) con il codice `INTEGRATIONTRYDAN10` 🎁
+
+> Se devi attivare un nuovo abbonamento con Octopus Energy puoi usare questo [link](https://octopusenergy.it/octo-friends/airy-queen-959): otterrai **uno sconto fino a 50 €** 🎁
+
 Questa integrazione personalizzata utilizza le API GraphQL di Octopus Energy Italy per portare in Home Assistant saldi, tariffe, punti di prelievo, dispositivi SmartFlex e preferenze di ricarica.
+
+La documentazione ufficiale è disponibile sul [developer portal Octopus Energy Italy](https://developer.oeit-kraken.energy/) e l'integrazione dialoga con l'endpoint GraphQL [`https://api.oeit-kraken.energy/v1/graphql/`](https://api.oeit-kraken.energy/v1/graphql/) tramite il client `python-graphql-client`.
 
 *Il progetto è mantenuto dalla community e non è affiliato in alcun modo ad Octopus Energy*
 
@@ -12,10 +18,6 @@ Se utilizzi **Intelligent Octopus** con una **wallbox V2C** ([https://v2charge.c
 A differenza dell’integrazione nativa tra V2C e Home Assistant, questa soluzione utilizza **Intelligent Octopus** come motore di ottimizzazione, permettendo di monitorare e controllare da Home Assistant i target di ricarica e le sessioni gestite automaticamente da Octopus Energy.
 
 Se vuoi connettere Home Assistant direttamente al cloud V2C, prova l’integrazione complementare [HomeAssistant-V2C-Cloud](https://github.com/samuelebistoletti/HomeAssistant-V2C-Cloud): porta in HA telemetrie e controlli nativi della wallbox.
-
-> Stai scegliendo una nuova wallbox? Approfitta del **10% di sconto** su Trydan o Trydan Pro nello store ufficiale V2C (https://v2charge.com/store/it/) con il codice `INTEGRATIONTRYDAN10` 🎁
-
-> Se devi attivare un nuovo abbonamento con Octopus Energy puoi usare questo [link](https://octopusenergy.it/octo-friends/airy-queen-959): otterrai **uno sconto fino a 50 €** 🎁
 
 ---
 

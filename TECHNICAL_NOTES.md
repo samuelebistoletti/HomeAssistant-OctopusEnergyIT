@@ -2,6 +2,10 @@
 
 ## Architecture Overview
 
+## Riferimenti API
+- Documentazione ufficiale: [developer portal Octopus Energy Italy](https://developer.oeit-kraken.energy/)
+- Endpoint GraphQL: [`https://api.oeit-kraken.energy/v1/graphql/`](https://api.oeit-kraken.energy/v1/graphql/) utilizzato tramite il client `python-graphql-client`
+
 ### Core Components
 - **Main Coordinator**: Central data coordinator using `DataUpdateCoordinator` with shared token management
 - **API Client** (`octopus_energy_it.py`): Handles GraphQL authentication, token refresh, and all API calls
