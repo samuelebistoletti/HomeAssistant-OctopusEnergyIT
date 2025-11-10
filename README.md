@@ -13,9 +13,9 @@ A differenza dell’integrazione nativa tra V2C e Home Assistant, questa soluzio
 
 Se vuoi connettere Home Assistant direttamente al cloud V2C, prova l’integrazione complementare [HomeAssistant-V2C-Cloud](https://github.com/samuelebistoletti/HomeAssistant-V2C-Cloud): porta in HA telemetrie e controlli nativi della wallbox.
 
-> 🎁 Stai scegliendo una nuova wallbox? Approfitta del **10% di sconto** su Trydan o Trydan Pro nello store ufficiale V2C (https://v2charge.com/store/it/) con il codice `INTEGRATIONTRYDAN10`.
+> Stai scegliendo una nuova wallbox? Approfitta del **10% di sconto** su Trydan o Trydan Pro nello store ufficiale V2C (https://v2charge.com/store/it/) con il codice `INTEGRATIONTRYDAN10` 🎁
 
-> Se devi attivare un nuovo abbonamento con Octopus Energy puoi usare questo [link](https://octopusenergy.it/octo-friends/airy-queen-959): otterrai **uno sconto fino a 50 €**
+> Se devi attivare un nuovo abbonamento con Octopus Energy puoi usare questo [link](https://octopusenergy.it/octo-friends/airy-queen-959): otterrai **uno sconto fino a 50 €** 🎁
 
 ---
 
