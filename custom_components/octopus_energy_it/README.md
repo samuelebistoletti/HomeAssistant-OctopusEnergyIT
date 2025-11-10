@@ -9,13 +9,13 @@ Questa integrazione personalizzata utilizza le API GraphQL di Octopus Energy Ita
 
 Se utilizzi **Intelligent Octopus** con una **wallbox V2C** ([https://v2charge.com/it/](https://v2charge.com/it/)), questa integrazione ti consente di collegare **Home Assistant** al servizio **Octopus Energy Italy**, delegando a **Intelligent Octopus** la gestione ottimizzata delle ricariche in base agli orari energetici più convenienti e ai target di ricarica impostati direttamente nel servizio.
 
-A differenza dell’integrazione nativa tra V2C e Home Assistant, questa soluzione utilizza **Intelligent Octopus** come motore di ottimizzazione, permettendo di monitorare e controllare da Home Assistant i target di ricarica e le sessioni gestite automaticamente da Octopus.
+A differenza dell’integrazione nativa tra V2C e Home Assistant, questa soluzione utilizza **Intelligent Octopus** come motore di ottimizzazione, permettendo di monitorare e controllare da Home Assistant i target di ricarica e le sessioni gestite automaticamente da Octopus Energy.
 
 Se vuoi connettere Home Assistant direttamente al cloud V2C, prova l’integrazione complementare [HomeAssistant-V2C-Cloud](https://github.com/samuelebistoletti/HomeAssistant-V2C-Cloud): porta in HA telemetrie e controlli nativi della wallbox.
 
-Ti piace l’integrazione?
-Puoi sostenere il progetto con una **donazione una tantum o mensile** tramite [GitHub Sponsorship](https://github.com/sponsors/samuelebistoletti)
-oppure usare il [link di riferimento Octopus Energy](https://octopusenergy.it/octo-friends/airy-queen-959) per attivare un nuovo abbonamento: otterrai **uno sconto fino a 50 €**
+> **🎁 Suggerimento imperdibile:** Stai scegliendo una nuova wallbox? Approfitta del **10% di sconto** su Trydan o Trydan Pro nello store ufficiale V2C (https://v2charge.com/store/it/) con il codice `INTEGRATIONTRYDAN10`.
+
+> Se devi attivare un nuovo abbonamento con Octopus Energy puoi usare questo [link](https://octopusenergy.it/octo-friends/airy-queen-959): otterrai **uno sconto fino a 50 €**
 
 ---
 
@@ -44,8 +44,7 @@ logger:
 
 ### HACS (consigliata)
 
-1. In HACS apri **Integrazioni → ⋮ → Custom repositories** e aggiungi `https://github.com/samuelebistoletti/HomeAssistant-OctopusEnergyIT` con tipo *Integration*.
-2. Cerca “Octopus Energy Italy” e installa l’integrazione.
+1. In HACS Cerca “Octopus Energy Italy” e installa l’integrazione.
 3. Riavvia Home Assistant quando richiesto.
 4. Configura l’integrazione da **Impostazioni → Dispositivi e servizi → Aggiungi integrazione**.
 
@@ -130,6 +129,7 @@ logger:
 
 - `switch.octopus_<account>_ev_charge_smart_control` – sospende o riattiva il controllo intelligente del dispositivo principale.
 - `switch.octopus_<account>_<device_name>_boost_charge` – avvia o annulla il boost immediato quando disponibile (solo dispositivi compatibili).
+
 ### Servizi
 
 - `octopus_energy_it.set_device_preferences`
@@ -142,7 +142,3 @@ logger:
 - Verifica **Strumenti per sviluppatori → Log** per messaggi di errore o avviso.
 - Imposta `LOG_API_RESPONSES` o `LOG_TOKEN_RESPONSES` su `True` in `custom_components/octopus_energy_it/const.py` per log estesi (solo per debug temporaneo).
 - Se non compaiono entità, assicurati che almeno un POD o PDR sia attivo nell’area clienti Octopus Energy.
-
----
-
-Documentazione aggiornata in base alle API GraphQL di Octopus Energy Italy.
