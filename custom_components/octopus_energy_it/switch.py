@@ -268,10 +268,8 @@ class OctopusSwitch(OctopusCoordinatorEntity, SwitchEntity):
                 _LOGGER.debug(
                     "Successfully turned on device: device_id=%s", self._device_id
                 )
-                self._is_switching = False
-                self._pending_state = None
-                self._pending_until = None
                 await self.coordinator.async_request_refresh()
+                await self.coordinator.async_refresh()
             else:
                 _LOGGER.error("Failed to turn on device: device_id=%s", self._device_id)
                 # On failure: Reset pending state
@@ -310,10 +308,8 @@ class OctopusSwitch(OctopusCoordinatorEntity, SwitchEntity):
                 _LOGGER.debug(
                     "Successfully turned off device: device_id=%s", self._device_id
                 )
-                self._is_switching = False
-                self._pending_state = None
-                self._pending_until = None
                 await self.coordinator.async_request_refresh()
+                await self.coordinator.async_refresh()
             else:
                 _LOGGER.error(
                     "Failed to turn off device: device_id=%s", self._device_id
@@ -387,6 +383,9 @@ class BoostChargeSwitch(OctopusCoordinatorEntity, SwitchEntity):
         self.account_number = account_number
         slug_name = device_name.lower().replace(" ", "_")
         self._attr_unique_id = f"{DOMAIN}_{account_number}_{slug_name}_boost_charge"
+        self._is_switching = False
+        self._pending_state: bool | None = None
+        self._pending_until: datetime | None = None
 
     def _get_device_data(self) -> dict[str, Any]:
         """Get device data from main coordinator."""
@@ -427,6 +426,12 @@ class BoostChargeSwitch(OctopusCoordinatorEntity, SwitchEntity):
     @property
     def is_on(self) -> bool:
         """Return true if boost charging is active."""
+        if self._is_switching and self._pending_state is not None:
+            if self._pending_until and datetime.now() > self._pending_until:
+                self._clear_pending()
+            else:
+                return self._pending_state
+
         device_data = self._get_device_data()
         if not device_data:
             return False
@@ -461,6 +466,24 @@ class BoostChargeSwitch(OctopusCoordinatorEntity, SwitchEntity):
         placeholders["device"] = self.device_name
         return placeholders
 
+    def _clear_pending(self) -> None:
+        self._is_switching = False
+        self._pending_state = None
+        self._pending_until = None
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        device_data = self._get_device_data()
+        if self._is_switching and device_data:
+            boost_active, _ = self._evaluate_boost_flags(device_data)
+            if self._pending_state is not None and boost_active == self._pending_state:
+                _LOGGER.debug(
+                    "Immediate charge state confirmed for device %s -> %s",
+                    self.device_id,
+                    "on" if boost_active else "off",
+                )
+                self._clear_pending()
+        self.async_write_ha_state()
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on boost charging."""
@@ -468,17 +491,18 @@ class BoostChargeSwitch(OctopusCoordinatorEntity, SwitchEntity):
         if not device_data:
             raise HomeAssistantError("Device data is unavailable for boost charge.")
 
-        _, boost_available = self._evaluate_boost_flags(device_data)
-        if not boost_available:
-            raise ServiceValidationError(
-                "Boost charge cannot currently be performed.",
-                translation_domain=DOMAIN,
-            )
-
+        self._is_switching = True
+        self._pending_state = True
+        self._pending_until = datetime.now() + timedelta(minutes=5)
+        self.async_write_ha_state()
         await self._async_trigger_boost_charge()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off boost charging."""
+        self._is_switching = True
+        self._pending_state = False
+        self._pending_until = datetime.now() + timedelta(minutes=5)
+        self.async_write_ha_state()
         await self._async_cancel_boost_charge()
 
     async def _async_trigger_boost_charge(self) -> None:
@@ -504,16 +528,6 @@ class BoostChargeSwitch(OctopusCoordinatorEntity, SwitchEntity):
                     (error.get("message") or "Unknown error")
                     for error in response["errors"]
                 ]
-                lowered = [msg.lower() for msg in error_messages]
-                if any("boost charge cannot currently be performed" in msg for msg in lowered):
-                    _LOGGER.warning(
-                        "Boost charge request rejected by API: %s",
-                        "; ".join(error_messages),
-                    )
-                    raise ServiceValidationError(
-                        "Boost charge cannot currently be performed.",
-                        translation_domain=DOMAIN,
-                    )
 
                 error_str = "; ".join(error_messages)
                 _LOGGER.error("GraphQL errors triggering boost charge: %s", error_str)
@@ -530,11 +544,14 @@ class BoostChargeSwitch(OctopusCoordinatorEntity, SwitchEntity):
 
             # Request coordinator refresh to update state
             await self.coordinator.async_request_refresh()
+            await self.coordinator.async_refresh()
 
         except Exception as err:
             _LOGGER.error(
                 "Failed to trigger boost charge for device %s: %s", self.device_id, err
             )
+            self._clear_pending()
+            self.async_write_ha_state()
             raise HomeAssistantError(f"Failed to trigger boost charge: {err}")
 
     async def _async_cancel_boost_charge(self) -> None:
@@ -575,9 +592,12 @@ class BoostChargeSwitch(OctopusCoordinatorEntity, SwitchEntity):
 
             # Request coordinator refresh to update state
             await self.coordinator.async_request_refresh()
+            await self.coordinator.async_refresh()
 
         except Exception as err:
             _LOGGER.error(
                 "Failed to cancel boost charge for device %s: %s", self.device_id, err
             )
+            self._clear_pending()
+            self.async_write_ha_state()
             raise HomeAssistantError(f"Failed to cancel boost charge: {err}")
