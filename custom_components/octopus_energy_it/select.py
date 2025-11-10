@@ -9,9 +9,8 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
-
 from .const import DOMAIN
+from .entity import OctopusCoordinatorEntity
 
 
 def _get_account_data(coordinator, account_number: str) -> dict[str, Any] | None:
@@ -123,23 +122,21 @@ async def async_setup_entry(
         async_add_entities(entities)
 
 
-class OctopusDeviceTargetTimeSelect(CoordinatorEntity, SelectEntity):
+class OctopusDeviceTargetTimeSelect(OctopusCoordinatorEntity, SelectEntity):
     """Select per impostare l'orario di completamento SmartFlex."""
 
     _attr_entity_registry_enabled_default = True
+    _attr_translation_key = "ev_ready_time_select"
+    _attr_icon = "mdi:clock-outline"
 
     def __init__(self, account_number: str, device_id: str, coordinator, api) -> None:
-        super().__init__(coordinator)
-        self._account_number = account_number
+        super().__init__(account_number, coordinator)
         self._device_id = device_id
         self._api = api
 
-        self._attr_name = f"Octopus {account_number} EV Ready Time"
         self._attr_unique_id = (
             f"octopus_{account_number}_{device_id}_target_time_select"
         )
-        self._attr_icon = "mdi:clock-outline"
-        self._attr_has_entity_name = False
 
     # Helpers --------------------------------------------------------------
     def _current_device(self) -> dict[str, Any] | None:
@@ -196,15 +193,23 @@ class OctopusDeviceTargetTimeSelect(CoordinatorEntity, SelectEntity):
                 preferences = {}
                 device["preferences"] = preferences
             schedules = preferences.setdefault("schedules", [])
-            if not isinstance(schedules, list) or not schedules or target_time is None:
+            if not isinstance(schedules, list) or not schedules:
                 break
             schedule = schedules[0]
             if not isinstance(schedule, dict):
                 break
-            stored_time = target_time if len(target_time) > 5 else f"{target_time}:00"
-            schedule["time"] = stored_time
+            if target_time is not None:
+                stored_time = target_time if len(target_time) > 5 else f"{target_time}:00"
+                schedule["time"] = stored_time
             break
         self.coordinator.async_set_updated_data(dict(self.coordinator.data))
+
+    @property
+    def translation_placeholders(self) -> dict[str, str]:
+        placeholders = super().translation_placeholders
+        device = self._current_device()
+        placeholders["device"] = (device or {}).get("name") or self._device_id
+        return placeholders
 
     # SelectEntity API ----------------------------------------------------
     @property

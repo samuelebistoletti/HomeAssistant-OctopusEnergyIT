@@ -9,9 +9,3 @@ frontend:
 automation: !include automations.yaml
 script: !include scripts.yaml
 scene: !include scenes.yaml
-
-logger:
-  logs:
-    custom_components.octopus_energy_it: debug
-    custom_components.octopus_energy_it.octopus_energy_it: debug
-    custom_components.octopus_energy_it.switch: debug

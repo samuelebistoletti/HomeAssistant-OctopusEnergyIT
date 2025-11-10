@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Octopus Energy Italy",
-        "description": "Enter your Octopus Energy Italy credentials",
+        "description": "Sign in with your Octopus Energy Italy account.",
         "data": {
           "email": "Email",
           "password": "Password"
@@ -11,7 +11,7 @@
       },
       "reconfigure": {
         "title": "Reconfigure Octopus Energy Italy",
-        "description": "Update your Octopus Energy Italy credentials. Current email: {current_email}",
+        "description": "Update the Octopus Energy Italy credentials. Current email: {current_email}.",
         "data": {
           "email": "Email",
           "password": "Password"
@@ -34,11 +34,160 @@
     "step": {
       "init": {
         "title": "Octopus Energy Italy Options",
-        "description": "Configure Octopus Energy Italy integration",
+        "description": "Update the credentials used by the integration.",
         "data": {
           "email": "Email",
           "password": "Password"
         }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "electricity_price": {
+        "name": "Electricity price (F1) or flat rate"
+      },
+      "electricity_price_f2": {
+        "name": "Electricity price (F2)"
+      },
+      "electricity_price_f3": {
+        "name": "Electricity price (F3)"
+      },
+      "electricity_balance": {
+        "name": "Electricity balance"
+      },
+      "gas_balance": {
+        "name": "Gas balance"
+      },
+      "electricity_standing_charge": {
+        "name": "Electricity standing charge"
+      },
+      "gas_last_reading": {
+        "name": "Last gas reading"
+      },
+      "gas_last_reading_date": {
+        "name": "Last gas reading date"
+      },
+      "electricity_last_reading": {
+        "name": "Last electricity reading"
+      },
+      "electricity_last_reading_date": {
+        "name": "Last electricity reading date"
+      },
+      "electricity_meter_status": {
+        "name": "Electricity supply status",
+        "state": {
+          "on_supply": "Active supply",
+          "off_supply": "Supply ended",
+          "pending_activation": "Activation pending",
+          "pending_enrolment": "Enrollment pending",
+          "enrolment_failed": "Enrollment failed",
+          "cancellation_in_progress": "Cancellation in progress",
+          "cancelled": "Cancelled supply",
+          "suspended": "Supply suspended",
+          "disconnected": "Disconnected",
+          "onboarding": "Onboarding"
+        }
+      },
+      "heat_balance": {
+        "name": "Heat balance"
+      },
+      "electricity_contract_start": {
+        "name": "Electricity contract start"
+      },
+      "electricity_contract_end": {
+        "name": "Electricity contract end"
+      },
+      "electricity_contract_days_until_expiry": {
+        "name": "Electricity contract days remaining"
+      },
+      "electricity_product_info": {
+        "name": "Electricity product"
+      },
+      "ledger_balance": {
+        "name": "Ledger {ledger} balance"
+      },
+      "ledger_balance_tv_fee": {
+        "name": "TV licence fee balance"
+      },
+      "gas_meter_status": {
+        "name": "Gas supply status",
+        "state": {
+          "on_supply": "Active supply",
+          "off_supply": "Supply ended",
+          "pending_activation": "Activation pending",
+          "pending_enrolment": "Enrollment pending",
+          "enrolment_failed": "Enrollment failed",
+          "cancellation_in_progress": "Cancellation in progress",
+          "cancelled": "Cancelled supply",
+          "suspended": "Supply suspended",
+          "disconnected": "Disconnected",
+          "onboarding": "Onboarding"
+        }
+      },
+      "gas_price": {
+        "name": "Gas price"
+      },
+      "gas_contract_start": {
+        "name": "Gas contract start"
+      },
+      "gas_contract_end": {
+        "name": "Gas contract end"
+      },
+      "gas_contract_days_until_expiry": {
+        "name": "Gas contract days remaining"
+      },
+      "gas_product_info": {
+        "name": "Gas product"
+      },
+      "gas_standing_charge": {
+        "name": "Gas standing charge"
+      },
+      "ev_charge_status": {
+        "name": "EV charging status",
+        "state": {
+          "smart_control_capable": "Smart control ready",
+          "smart_control_in_progress": "Smart control in progress",
+          "smart_control_off": "Smart control disabled",
+          "smart_control_not_available": "Smart control unavailable",
+          "boosting": "Boost charging",
+          "lost_connection": "Connection lost",
+          "retired": "Device retired",
+          "setup_complete": "Setup complete",
+          "test_charge_not_available": "Test charge unavailable",
+          "test_charge_in_progress": "Test charge in progress",
+          "test_charge_failed": "Test charge failed",
+          "authentication_pending": "Authentication pending",
+          "authentication_complete": "Authentication complete",
+          "authentication_failed": "Authentication failed",
+          "unknown": "Unknown status"
+        }
+      },
+      "vehicle_battery_size": {
+        "name": "Vehicle battery capacity"
+      }
+    },
+    "binary_sensor": {
+      "ev_intelligent_dispatching": {
+        "name": "EV intelligent dispatch"
+      }
+    },
+    "switch": {
+      "ev_charge_smart_control": {
+        "name": "EV smart control"
+      },
+      "ev_boost_charge": {
+        "name": "Immediate charging"
+      }
+    },
+    "number": {
+      "ev_charge_target_number": {
+        "name": "Energy to add to EV"
+      }
+    },
+    "select": {
+      "ev_ready_time_select": {
+        "name": "EV charge end time"
       }
     }
   }

@@ -8,10 +8,10 @@ from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util.dt import as_local, as_utc, parse_datetime, utcnow
 
 from .const import DOMAIN
+from .entity import OctopusCoordinatorEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -74,19 +74,18 @@ async def async_setup_entry(
         _LOGGER.info("No binary sensors to add for any account")
 
 
-class OctopusIntelligentDispatchingBinarySensor(CoordinatorEntity, BinarySensorEntity):
+class OctopusIntelligentDispatchingBinarySensor(
+    OctopusCoordinatorEntity, BinarySensorEntity
+):
     """Binary sensor for Octopus EV Charge Intelligent Dispatching."""
+
+    _attr_translation_key = "ev_intelligent_dispatching"
+    _attr_icon = "mdi:clock-check"
 
     def __init__(self, account_number, coordinator) -> None:
         """Initialize the binary sensor for intelligent dispatching."""
-        super().__init__(coordinator)
-
-        self._account_number = account_number
-        self._attr_name = f"Octopus {account_number} EV Charge Intelligent Dispatching"
+        super().__init__(account_number, coordinator)
         self._attr_unique_id = f"octopus_{account_number}_intelligent_dispatching"
-        self._attr_device_class = None
-        self._attr_icon = "mdi:clock-check"
-        self._attr_has_entity_name = False
         self._attributes = {}
         self._update_attributes()
 

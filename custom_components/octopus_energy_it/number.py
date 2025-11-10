@@ -9,9 +9,8 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
-
 from .const import DOMAIN
+from .entity import OctopusCoordinatorEntity
 
 
 def _get_account_data(coordinator, account_number: str) -> dict[str, Any] | None:
@@ -96,23 +95,21 @@ async def async_setup_entry(
         async_add_entities(entities)
 
 
-class OctopusDeviceChargeTargetNumber(CoordinatorEntity, NumberEntity):
+class OctopusDeviceChargeTargetNumber(OctopusCoordinatorEntity, NumberEntity):
     """Numero per modificare la percentuale di carica SmartFlex."""
 
     _attr_native_unit_of_measurement = "%"
     _attr_mode = NumberMode.SLIDER
     _attr_entity_registry_enabled_default = True
+    _attr_translation_key = "ev_charge_target_number"
+    _attr_icon = "mdi:target"
 
     def __init__(self, account_number: str, device_id: str, coordinator, api) -> None:
-        super().__init__(coordinator)
-        self._account_number = account_number
+        super().__init__(account_number, coordinator)
         self._device_id = device_id
         self._api = api
 
-        self._attr_name = f"Octopus {account_number} EV Charge Target"
         self._attr_unique_id = f"octopus_{account_number}_{device_id}_charge_target"
-        self._attr_icon = "mdi:target"
-        self._attr_has_entity_name = False
 
     # Helpers --------------------------------------------------------------
     def _current_device(self) -> dict[str, Any] | None:
@@ -199,6 +196,13 @@ class OctopusDeviceChargeTargetNumber(CoordinatorEntity, NumberEntity):
                 schedule["time"] = stored_time
             break
         self.coordinator.async_set_updated_data(dict(self.coordinator.data))
+
+    @property
+    def translation_placeholders(self) -> dict[str, str]:
+        placeholders = super().translation_placeholders
+        device = self._current_device()
+        placeholders["device"] = (device or {}).get("name") or self._device_id
+        return placeholders
 
     # NumberEntity API ----------------------------------------------------
     @property

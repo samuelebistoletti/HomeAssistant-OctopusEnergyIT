@@ -9,9 +9,8 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
-
 from .const import DOMAIN
+from .entity import OctopusCoordinatorEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -146,17 +145,19 @@ async def _setup_boost_charge_switches(
         _LOGGER.error("Failed to set up boost charge switches: %s", err)
 
 
-class OctopusSwitch(CoordinatorEntity, SwitchEntity):
+class OctopusSwitch(OctopusCoordinatorEntity, SwitchEntity):
     """Representation of an Octopus Switch entity."""
+
+    _attr_translation_key = "ev_charge_smart_control"
+    _attr_icon = "mdi:car-electric"
 
     def __init__(self, api, device, coordinator, config_entry, account_number) -> None:
         """Initialize the Octopus switch entity."""
-        super().__init__(coordinator)
+        super().__init__(account_number, coordinator)
         self._api = api
         self._device = device
         self._config_entry = config_entry
         self._device_id = device["id"]
-        self._account_number = account_number
         self._current_state = not device.get("status", {}).get("isSuspended", True)
 
         # Add flag to track if switching is in progress
@@ -164,10 +165,7 @@ class OctopusSwitch(CoordinatorEntity, SwitchEntity):
         self._pending_state = None
         self._pending_until = None
 
-        # Updated name format to include "EV Charge Smart Control"
-        self._attr_name = f"Octopus {self._account_number} EV Charge Smart Control"
         self._attr_unique_id = f"octopus_{self._account_number}_ev_charge_smart_control"
-        self._attr_icon = "mdi:car-electric"
         self._update_attributes()
 
     def _update_attributes(self):
@@ -359,28 +357,36 @@ class OctopusSwitch(CoordinatorEntity, SwitchEntity):
         device_exists = self._get_device() is not None
         return coordinator_has_data and device_exists
 
+    @property
+    def translation_placeholders(self) -> dict[str, str]:
+        placeholders = super().translation_placeholders
+        placeholders["device"] = self._device.get("name") or self._device_id
+        return placeholders
 
-class BoostChargeSwitch(CoordinatorEntity, SwitchEntity):
+
+class BoostChargeSwitch(OctopusCoordinatorEntity, SwitchEntity):
     """Switch to control boost charging for a specific device."""
+
+    _attr_translation_key = "ev_boost_charge"
+    _attr_icon = "mdi:lightning-bolt"
 
     def __init__(
         self,
-        coordinator,  # Now uses main coordinator
+        coordinator,
         client,
         device_id: str,
         device_name: str,
         account_number: str,
     ) -> None:
         """Initialize the switch."""
-        super().__init__(coordinator)
+        super().__init__(account_number, coordinator)
         self.coordinator = coordinator
         self.client = client
         self.device_id = device_id
         self.device_name = device_name
         self.account_number = account_number
-        self._attr_unique_id = f"{DOMAIN}_{account_number}_{device_name.lower().replace(' ', '_')}_boost_charge"
-        self._attr_name = f"Octopus {account_number} {device_name} Boost Charge"
-        self._attr_icon = "mdi:lightning-bolt"
+        slug_name = device_name.lower().replace(" ", "_")
+        self._attr_unique_id = f"{DOMAIN}_{account_number}_{slug_name}_boost_charge"
 
     def _get_device_data(self) -> dict[str, Any]:
         """Get device data from main coordinator."""
@@ -449,6 +455,11 @@ class BoostChargeSwitch(CoordinatorEntity, SwitchEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         return {}
 
+    @property
+    def translation_placeholders(self) -> dict[str, str]:
+        placeholders = super().translation_placeholders
+        placeholders["device"] = self.device_name
+        return placeholders
 
 
     async def async_turn_on(self, **kwargs: Any) -> None:

@@ -13,7 +13,7 @@
     "step": {
       "user": {
         "title": "Octopus Energy Italy",
-        "description": "Inserisci le credenziali Octopus Energy Italy",
+        "description": "Accedi con le credenziali di Octopus Energy Italy.",
         "data": {
           "email": "Email",
           "password": "Password"
@@ -21,7 +21,7 @@
       },
       "reconfigure": {
         "title": "Riconfigura Octopus Energy Italy",
-        "description": "Aggiorna le tue credenziali Octopus Energy Italy. Email corrente: {current_email}",
+        "description": "Aggiorna le credenziali Octopus Energy Italy. Email corrente: {current_email}.",
         "data": {
           "email": "Email",
           "password": "Password"
@@ -39,7 +39,157 @@
         "data": {
           "email": "Email",
           "password": "Password"
+        },
+        "description": "Aggiorna le credenziali usate dall'integrazione."
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "electricity_price": {
+        "name": "Prezzo elettricità (F1) o monoraria"
+      },
+      "electricity_price_f2": {
+        "name": "Prezzo elettricità (F2)"
+      },
+      "electricity_price_f3": {
+        "name": "Prezzo elettricità (F3)"
+      },
+      "electricity_balance": {
+        "name": "Saldo elettricità"
+      },
+      "gas_balance": {
+        "name": "Saldo gas"
+      },
+      "electricity_standing_charge": {
+        "name": "Quota fissa elettricità"
+      },
+      "gas_last_reading": {
+        "name": "Ultima lettura gas"
+      },
+      "gas_last_reading_date": {
+        "name": "Data ultima lettura gas"
+      },
+      "electricity_last_reading": {
+        "name": "Ultima lettura elettricità"
+      },
+      "electricity_last_reading_date": {
+        "name": "Data ultima lettura elettricità"
+      },
+      "electricity_meter_status": {
+        "name": "Stato fornitura elettrica",
+        "state": {
+          "on_supply": "Fornitura attiva",
+          "off_supply": "Fornitura cessata",
+          "pending_activation": "Attivazione in corso",
+          "pending_enrolment": "Iscrizione in corso",
+          "enrolment_failed": "Iscrizione non riuscita",
+          "cancellation_in_progress": "Disdetta in corso",
+          "cancelled": "Fornitura annullata",
+          "suspended": "Fornitura sospesa",
+          "disconnected": "Disconnessa",
+          "onboarding": "In onboarding"
         }
+      },
+      "heat_balance": {
+        "name": "Saldo calore"
+      },
+      "electricity_contract_start": {
+        "name": "Inizio contratto elettrico"
+      },
+      "electricity_contract_end": {
+        "name": "Fine contratto elettrico"
+      },
+      "electricity_contract_days_until_expiry": {
+        "name": "Giorni alla scadenza contratto elettrico"
+      },
+      "electricity_product_info": {
+        "name": "Prodotto elettrico"
+      },
+      "ledger_balance": {
+        "name": "Saldo {ledger}"
+      },
+      "ledger_balance_tv_fee": {
+        "name": "Saldo canone TV"
+      },
+      "gas_meter_status": {
+        "name": "Stato fornitura gas",
+        "state": {
+          "on_supply": "Fornitura attiva",
+          "off_supply": "Fornitura cessata",
+          "pending_activation": "Attivazione in corso",
+          "pending_enrolment": "Iscrizione in corso",
+          "enrolment_failed": "Iscrizione non riuscita",
+          "cancellation_in_progress": "Disdetta in corso",
+          "cancelled": "Fornitura annullata",
+          "suspended": "Fornitura sospesa",
+          "disconnected": "Disconnessa",
+          "onboarding": "In onboarding"
+        }
+      },
+      "gas_price": {
+        "name": "Prezzo gas"
+      },
+      "gas_contract_start": {
+        "name": "Inizio contratto gas"
+      },
+      "gas_contract_end": {
+        "name": "Fine contratto gas"
+      },
+      "gas_contract_days_until_expiry": {
+        "name": "Giorni alla scadenza contratto gas"
+      },
+      "gas_product_info": {
+        "name": "Prodotto gas"
+      },
+      "gas_standing_charge": {
+        "name": "Quota fissa gas"
+      },
+      "ev_charge_status": {
+        "name": "Stato ricarica EV",
+        "state": {
+          "smart_control_capable": "Pronto per il controllo intelligente",
+          "smart_control_in_progress": "Controllo intelligente in corso",
+          "smart_control_off": "Controllo intelligente disattivato",
+          "smart_control_not_available": "Controllo intelligente non disponibile",
+          "boosting": "Boost di ricarica in corso",
+          "lost_connection": "Connessione persa",
+          "retired": "Dispositivo rimosso",
+          "setup_complete": "Configurazione completata",
+          "test_charge_not_available": "Test di ricarica non disponibile",
+          "test_charge_in_progress": "Test di ricarica in corso",
+          "test_charge_failed": "Test di ricarica non riuscito",
+          "authentication_pending": "Autenticazione in corso",
+          "authentication_complete": "Autenticazione completata",
+          "authentication_failed": "Autenticazione non riuscita",
+          "unknown": "Stato sconosciuto"
+        }
+      },
+      "vehicle_battery_size": {
+        "name": "Capacità batteria veicolo"
+      }
+    },
+    "binary_sensor": {
+      "ev_intelligent_dispatching": {
+        "name": "Dispatching intelligente EV"
+      }
+    },
+    "switch": {
+      "ev_charge_smart_control": {
+        "name": "Controllo smart EV"
+      },
+      "ev_boost_charge": {
+        "name": "Ricarica immediata"
+      }
+    },
+    "number": {
+      "ev_charge_target_number": {
+        "name": "Carica da aggiungere a EV"
+      }
+    },
+    "select": {
+      "ev_ready_time_select": {
+        "name": "Orario fine ricarica EV"
       }
     }
   }

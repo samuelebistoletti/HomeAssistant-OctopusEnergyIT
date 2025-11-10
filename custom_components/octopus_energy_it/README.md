@@ -112,8 +112,6 @@ logger:
 | Entità | Unità | Attributi extra |
 | --- | --- | --- |
 | `sensor.octopus_<account>_ev_charge_status` | testo | `account_number`, `device_id`, `device_name`, `device_model`, `device_provider`, `battery_capacity_kwh`, `status_current_state`, `status_connection_state`, `status_is_suspended`, `preferences_mode`, `preferences_unit`, `preferences_target_type`, `allow_grid_export`, `schedules`, `target_day_of_week`, `target_time`, `target_percentage`, `boost_active`, `boost_available`, `last_synced_at` |
-| `sensor.octopus_<account>_ev_charge_target` | % | — |
-| `sensor.octopus_<account>_ev_ready_time` | HH:MM | — |
 
 > I sensori e i controlli dedicati a SmartFlex compaiono solo per i dispositivi Intelligent Octopus supportati; abilita dall'Entity Registry quelli necessari.
 
