@@ -9,9 +9,7 @@
 
 Questa integrazione personalizzata utilizza le API GraphQL di Octopus Energy Italy per portare in Home Assistant saldi, tariffe, punti di prelievo, dispositivi SmartFlex e preferenze di ricarica.
 
-La documentazione ufficiale è disponibile sul [developer portal Octopus Energy Italy](https://developer.oeit-kraken.energy/) e l'integrazione dialoga con l'endpoint GraphQL [`https://api.oeit-kraken.energy/v1/graphql/`](https://api.oeit-kraken.energy/v1/graphql/) tramite il client `python-graphql-client`.
-
-*Il progetto è mantenuto dalla community e non è affiliato in alcun modo ad Octopus Energy*
+La documentazione ufficiale è disponibile sul [developer portal Octopus Energy Italy](https://developer.oeit-kraken.energy/).
 
 Se utilizzi **Intelligent Octopus** con una **wallbox V2C** ([https://v2charge.com/it/](https://v2charge.com/it/)), questa integrazione ti consente di collegare **Home Assistant** al servizio **Octopus Energy Italy**, delegando a **Intelligent Octopus** la gestione ottimizzata delle ricariche in base agli orari energetici più convenienti e ai target di ricarica impostati direttamente nel servizio.
 
