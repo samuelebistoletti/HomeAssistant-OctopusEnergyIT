@@ -213,8 +213,8 @@ class OctopusDeviceChargeTargetNumber(OctopusCoordinatorEntity, NumberEntity):
     def native_min_value(self) -> float:
         setting = self._schedule_setting()
         if setting:
-            return self._parse_float(setting.get("min"), 20)
-        return 20
+            return self._parse_float(setting.get("min"), 10)
+        return 10
 
     @property
     def native_max_value(self) -> float:
@@ -225,7 +225,11 @@ class OctopusDeviceChargeTargetNumber(OctopusCoordinatorEntity, NumberEntity):
 
     @property
     def native_step(self) -> float:
-        return 5
+        setting = self._schedule_setting()
+        if setting:
+            step = self._parse_float(setting.get("step"), 1)
+            return step if step > 0 else 1
+        return 1
 
     async def async_set_native_value(self, value: float) -> None:
         target_time = self._current_target_time()
@@ -235,7 +239,7 @@ class OctopusDeviceChargeTargetNumber(OctopusCoordinatorEntity, NumberEntity):
                 str(setting.get("timeFrom", "06:00"))[:5] if setting else "06:00"
             )
 
-        step = self.native_step or 5
+        step = self.native_step or 1
         target_percentage = int(round(value / step) * step)
 
         min_value = int(self.native_min_value)

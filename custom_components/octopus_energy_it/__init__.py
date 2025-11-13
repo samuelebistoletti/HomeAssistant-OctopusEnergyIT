@@ -780,7 +780,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             )
 
         original_target_percentage = target_percentage
-        target_percentage = max(20, min(100, int(round(target_percentage / 5) * 5)))
+        target_percentage = int(round(target_percentage))
+        target_percentage = max(10, min(100, target_percentage))
         if original_target_percentage != target_percentage:
             _LOGGER.debug(
                 "Adjusted target percentage from %s to %s for service call",
@@ -788,25 +789,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 target_percentage,
             )
 
-        if not 20 <= target_percentage <= 100:
+        if not 10 <= target_percentage <= 100:
             _LOGGER.error(
-                f"Invalid target percentage: {target_percentage}. Must be between 20 and 100"
+                f"Invalid target percentage: {target_percentage}. Must be between 10 and 100"
             )
             from homeassistant.exceptions import ServiceValidationError
 
             raise ServiceValidationError(
-                f"Invalid target percentage: {target_percentage}. Must be between 20 and 100",
-                translation_domain=DOMAIN,
-            )
-
-        if target_percentage % 5 != 0:
-            _LOGGER.error(
-                f"Invalid target percentage: {target_percentage}. Must be in 5% steps"
-            )
-            from homeassistant.exceptions import ServiceValidationError
-
-            raise ServiceValidationError(
-                f"Invalid target percentage: {target_percentage}. Must be in 5% steps",
+                f"Invalid target percentage: {target_percentage}. Must be between 10 and 100",
                 translation_domain=DOMAIN,
             )
 

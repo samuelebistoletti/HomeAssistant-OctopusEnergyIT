@@ -95,7 +95,7 @@ Main Coordinator (DataUpdateCoordinator)
 
 ##### SmartFlex Target Number
 - One entity per SmartFlex-capable device exposing the charge target (`OctopusDeviceChargeTargetNumber`)
-- Reads limits from `preferenceSetting.scheduleSettings` (`min`, `max`, `timeFrom`) with 5% steps and floor/ceiling of 20-100%
+- Reads limits from `preferenceSetting.scheduleSettings` (`min`, `max`, `timeFrom`, `step`) with granularity defaulting to 1% and floor/ceiling of 10-100%
 - Writes via `set_device_preferences()` to keep parity with the SmartFlex service layer
 - Locally mirrors the returned schedule in coordinator data so UI stays fresh between coordinator polls
 
@@ -109,7 +109,7 @@ Main Coordinator (DataUpdateCoordinator)
 
 ##### set_device_preferences
 - **Current Service**: Uses new SmartFlexDeviceInterface API
-- **Parameters**: device_id, target_percentage (20-100%), target_time (04:00-17:00)
+- **Parameters**: device_id, target_percentage (10-100%), target_time (04:00-17:00)
 - **GraphQL Mutation**: `setDevicePreferences`
 - **Validation**: Time format handling, percentage validation
 

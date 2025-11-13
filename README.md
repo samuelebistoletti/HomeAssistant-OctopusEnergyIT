@@ -118,7 +118,7 @@ logger:
 
 ### Number
 
-- `number.octopus_<account>_<device_id>_charge_target` – imposta il target di ricarica SmartFlex (20–100%, passi da 5). L’aggiornamento viene propagato al coordinatore condiviso, che mantiene coerenti sensori e controlli.
+- `number.octopus_<account>_<device_id>_charge_target` – imposta il target di ricarica SmartFlex (10–100%, passi da 1). L’aggiornamento viene propagato al coordinatore condiviso, che mantiene coerenti sensori e controlli.
 
 ### Select
 
@@ -133,7 +133,7 @@ logger:
 
 - `octopus_energy_it.set_device_preferences`
   - `device_id`: ID del dispositivo (obbligatorio)
-  - `target_percentage`: valore 20–100 con passi da 5 (obbligatorio)
+  - `target_percentage`: valore 10–100 con passi da 1 (obbligatorio)
   - `target_time`: orario di conclusione (`HH:MM`, 04:00–17:00) (obbligatorio)
 
 ## Risoluzione problemi

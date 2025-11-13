@@ -1253,20 +1253,14 @@ class OctopusEnergyIT:
             return False
 
         original_percentage = target_percentage
-        target_percentage = max(20, min(100, int(round(target_percentage / 5) * 5)))
+        target_percentage = int(round(target_percentage))
+        target_percentage = max(10, min(100, target_percentage))
         if target_percentage != original_percentage:
             _LOGGER.debug(
-                "Adjusted target percentage from %s to %s to satisfy 5%% step requirement",
+                "Adjusted target percentage from %s to %s to satisfy API constraints",
                 original_percentage,
                 target_percentage,
             )
-
-        if not 20 <= target_percentage <= 100 or target_percentage % 5 != 0:
-            _LOGGER.error(
-                "Invalid target percentage: %s. Must be between 20 and 100 in 5%% steps.",
-                target_percentage,
-            )
-            return False
 
         try:
             formatted_time = self.format_time_to_hh_mm(target_time)
@@ -1628,4 +1622,3 @@ class OctopusEnergyIT:
                 if isinstance(exc, ValueError):
                     raise
                 raise ValueError(f"Error processing time '{time_str}': {exc!s}")
-

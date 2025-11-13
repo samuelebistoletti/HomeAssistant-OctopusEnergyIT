@@ -11,15 +11,15 @@ set_device_preferences:
         text:
     target_percentage:
       name: Target state of charge
-      description: Target state of charge (20-100% in 5% steps)
+      description: Target state of charge (10-100% in 1% steps)
       required: true
       default: 80
       example: 80
       selector:
         number:
-          min: 20
+          min: 10
           max: 100
-          step: 5
+          step: 1
     target_time:
       name: Target time
       description: Target time for charging (04:00-17:00)
