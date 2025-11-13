@@ -10,6 +10,8 @@ import re
 from datetime import UTC, datetime, time
 from typing import Any
 
+from decimal import Decimal, InvalidOperation
+
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
@@ -19,7 +21,11 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import DOMAIN
-from .entity import OctopusCoordinatorEntity, OctopusEntityMixin
+from .entity import (
+    OctopusCoordinatorEntity,
+    OctopusEntityMixin,
+    OctopusPublicProductsEntity,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -45,6 +51,7 @@ _SUPPLY_STATUS_TRANSLATIONS = {
 }
 
 _STATUS_SLUG_RE = re.compile(r"[^a-z0-9]+")
+_PRODUCT_NAME_SLUG_RE = re.compile(r"[^a-z0-9]+")
 
 _EV_STATUS_TRANSLATIONS = {
     "SMART_CONTROL_CAPABLE": "smart_control_capable",
@@ -140,7 +147,21 @@ def _select_current_product(products):
     return valid_products[0]
 
 
-def _build_sensors_for_account(account_number, coordinator, account_data):
+def _slugify_product_name(name: str | None, fallback: str) -> str:
+    if not name:
+        return fallback
+    slug = _PRODUCT_NAME_SLUG_RE.sub("_", name.lower()).strip("_")
+    return slug or fallback
+
+
+def _build_sensors_for_account(
+    account_number,
+    coordinator,
+    account_data,
+    *,
+    include_public_products: bool = False,
+    public_device_id: str | None = None,
+):
     """Create sensor instances for the provided account data."""
     sensors = []
 
@@ -241,6 +262,37 @@ def _build_sensors_for_account(account_number, coordinator, account_data):
     if account_data.get("vehicle_battery_size_in_kwh") is not None:
         sensors.append(OctopusVehicleBatterySizeSensor(account_number, coordinator))
 
+    if include_public_products and public_device_id:
+        available_products = account_data.get("available_products") or {}
+        for product in available_products.get("electricity") or []:
+            code = product.get("code")
+            if code:
+                full_name = product.get("fullName") or product.get("displayName")
+                sensors.append(
+                    OctopusPublicTariffSensor(
+                        coordinator,
+                        account_number=account_number,
+                        product_code=code,
+                        source="electricity",
+                        device_identifier=public_device_id,
+                        product_name=full_name,
+                    )
+                )
+        for product in available_products.get("gas") or []:
+            code = product.get("code")
+            if code:
+                full_name = product.get("fullName") or product.get("displayName")
+                sensors.append(
+                    OctopusPublicTariffSensor(
+                        coordinator,
+                        account_number=account_number,
+                        product_code=code,
+                        source="gas",
+                        device_identifier=public_device_id,
+                        product_name=full_name,
+                    )
+                )
+
     return sensors
 
 
@@ -253,6 +305,7 @@ async def async_setup_entry(
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator = data["coordinator"]
     account_number = data["account_number"]
+    public_device_id = data.get("public_device_id")
     # Wait for coordinator refresh if needed
     if coordinator.data is None:
         _LOGGER.debug("No data in coordinator, triggering refresh")
@@ -277,12 +330,20 @@ async def async_setup_entry(
     _LOGGER.debug("Creating sensors for accounts: %s", account_numbers)
 
     # Create sensors for each account
+    owns_public_products = data.get("owns_public_products", False)
     for acc_num in account_numbers:
         account_data = _get_account_data(coordinator, acc_num)
 
+        include_public_products = owns_public_products and acc_num == account_number
         if account_data:
             entities.extend(
-                _build_sensors_for_account(acc_num, coordinator, account_data)
+                _build_sensors_for_account(
+                    acc_num,
+                    coordinator,
+                    account_data,
+                    include_public_products=include_public_products,
+                    public_device_id=public_device_id,
+                )
             )
             continue
 
@@ -1576,3 +1637,100 @@ class OctopusVehicleBatterySizeSensor(
             and account_data is not None
             and account_data.get("vehicle_battery_size_in_kwh") is not None
         )
+
+
+class OctopusPublicTariffSensor(OctopusPublicProductsEntity, SensorEntity):
+    """Sensor representing a single public tariff."""
+
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(
+        self,
+        coordinator,
+        *,
+        account_number: str,
+        product_code: str,
+        source: str,
+        device_identifier: str,
+        product_name: str | None,
+    ) -> None:
+        super().__init__(coordinator, device_identifier=device_identifier)
+        self._account_number = account_number
+        self._product_code = product_code
+        self._source = source
+        icon = "mdi:lightning-bolt" if source == "electricity" else "mdi:fire"
+        unit = "€/kWh" if source == "electricity" else "€/Smc"
+        self._attr_icon = icon
+        self._attr_native_unit_of_measurement = unit
+        slug = _slugify_product_name(product_name, product_code.lower())
+        self._attr_unique_id = f"octopus_{device_identifier}_{slug}"
+
+    def _parse_decimal(self, value: Any) -> Decimal | None:
+        if value is None:
+            return None
+        normalized = str(value).replace(",", ".")
+        try:
+            decimal_value = Decimal(normalized)
+        except InvalidOperation:
+            return None
+        return decimal_value.quantize(Decimal("0.0001"))
+
+    def _raw_product(self) -> dict[str, Any] | None:
+        account_data = _get_account_data(self.coordinator, self._account_number)
+        if not account_data:
+            return None
+        available = account_data.get("available_products") or {}
+        for product in available.get(self._source) or []:
+            if isinstance(product, dict) and product.get("code") == self._product_code:
+                return product
+        return None
+
+    def _formatted_product(self) -> dict[str, Any] | None:
+        product = self._raw_product()
+        if not product:
+            return None
+        params = product.get("params") or {}
+        return {
+            "code": product.get("code"),
+            "name": product.get("fullName")
+            or product.get("displayName")
+            or product.get("code"),
+            "type": product.get("__typename"),
+            "product_type": params.get("productType"),
+            "description": product.get("description"),
+            "terms_url": product.get("termsAndConditionsUrl"),
+            "charge_f1": self._parse_decimal(params.get("consumptionCharge")),
+            "charge_f2": self._parse_decimal(params.get("consumptionChargeF2")),
+            "charge_f3": self._parse_decimal(params.get("consumptionChargeF3")),
+            "standing_charge_annual": self._parse_decimal(
+                params.get("annualStandingCharge")
+            ),
+        }
+
+    @property
+    def name(self) -> str | None:
+        formatted = self._formatted_product()
+        return formatted.get("name") if formatted else None
+
+    def _charge_to_float(self, value: Decimal | None) -> float | None:
+        if value is None:
+            return None
+        return float(value)
+
+    @property
+    def native_value(self) -> float | None:
+        formatted = self._formatted_product()
+        if not formatted:
+            return None
+        return self._charge_to_float(formatted.get("charge_f1"))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        formatted = dict(self._formatted_product() or {})
+        for key in ("charge_f1", "charge_f2", "charge_f3", "standing_charge_annual"):
+            formatted[key] = self._charge_to_float(formatted.get(key))
+        return formatted
+
+    @property
+    def available(self) -> bool:
+        return self._formatted_product() is not None

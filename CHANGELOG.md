@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.8] - 2025-11-13
+
+### Added
+- Introduced a dedicated "Octopus Energy Public Tariffs" device with per-tariff sensors (`sensor.public_tariffs_<tariff_slug>`) sourced from the Octopus public site.
+
+### Fixed
+- Charge target number entity accepts the official 10–100% range with 1% increments and keeps slider values in sync with the Octopus API.
+
 ## [1.0.7] - 2025-11-10
 
 ### Changed

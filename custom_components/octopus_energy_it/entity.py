@@ -34,3 +34,18 @@ class OctopusCoordinatorEntity(OctopusEntityMixin, CoordinatorEntity):
     def __init__(self, account_number: str, coordinator) -> None:
         OctopusEntityMixin.__init__(self, account_number)
         CoordinatorEntity.__init__(self, coordinator)
+
+
+class OctopusPublicProductsEntity(CoordinatorEntity):
+    """Entity representing public products not tied to a specific account."""
+
+    _attr_has_entity_name = True
+
+    def __init__(self, coordinator, *, device_identifier: str) -> None:
+        super().__init__(coordinator)
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, device_identifier)},
+            manufacturer="Octopus Energy Italy",
+            name="Octopus Energy Public Tariffs",
+            model="Octopus Energy Public Tariffs",
+        )

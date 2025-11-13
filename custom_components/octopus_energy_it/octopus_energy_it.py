@@ -1391,8 +1391,6 @@ class OctopusEnergyIT:
         )
         return dispatches
 
-
-
     async def _fetch_account_and_devices(self, account_number: str):
             """Fetch account and device data (legacy helper)."""
             _LOGGER.info(

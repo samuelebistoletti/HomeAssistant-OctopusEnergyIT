@@ -7,6 +7,7 @@ This module provides integration with the Octopus Energy Italy API for Home Assi
 from __future__ import annotations
 
 import inspect
+import json
 import logging
 from datetime import UTC, datetime, timedelta
 
@@ -34,6 +35,68 @@ PLATFORMS: list[Platform] = [
 ]
 
 API_URL = "https://api.octopus.energy/v1/graphql/"
+TARIFFS_PAGE_URL = "https://octopusenergy.it/le-nostre-tariffe"
+NEXT_DATA_MARKER = '<script id="__NEXT_DATA__" type="application/json">'
+
+
+async def _fetch_public_tariffs(session: aiohttp.ClientSession) -> dict[str, list] | None:
+    """Scrape the Octopus public tariffs page to mirror frontend data."""
+    try:
+        async with session.get(TARIFFS_PAGE_URL, timeout=20) as response:
+            response.raise_for_status()
+            html = await response.text()
+    except (aiohttp.ClientError, UnicodeDecodeError) as err:
+        _LOGGER.error("Unable to fetch public tariffs page: %s", err)
+        return None
+
+    marker_index = html.find(NEXT_DATA_MARKER)
+    if marker_index == -1:
+        _LOGGER.warning("Public tariffs page did not include __NEXT_DATA__ marker")
+        return None
+
+    data_start = html.find(">", marker_index)
+    if data_start == -1:
+        _LOGGER.warning("Malformed __NEXT_DATA__ script in tariffs page")
+        return None
+
+    data_start += 1
+    data_end = html.find("</script>", data_start)
+    if data_end == -1:
+        _LOGGER.warning("Unable to locate end of __NEXT_DATA__ script")
+        return None
+
+    raw = html[data_start:data_end]
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as err:
+        _LOGGER.error("Unable to decode __NEXT_DATA__ payload: %s", err)
+        return None
+
+    all_products = (
+        payload.get("props", {})
+        .get("pageProps", {})
+        .get("products")
+        or []
+    )
+
+    electricity: list[dict] = []
+    gas: list[dict] = []
+
+    for product in all_products:
+        if not isinstance(product, dict):
+            continue
+        typename = (product.get("__typename") or "").upper()
+        if "GAS" in typename:
+            gas.append(product)
+        else:
+            electricity.append(product)
+
+    _LOGGER.debug(
+        "Fetched %d electricity and %d gas public products from octopusenergy.it",
+        len(electricity),
+        len(gas),
+    )
+    return {"electricity": electricity, "gas": gas}
 
 # Service schemas
 SERVICE_SET_DEVICE_PREFERENCES = "set_device_preferences"
@@ -47,6 +110,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Octopus Energy Italy from a config entry."""
     email = entry.data["email"]
     password = entry.data["password"]
+    session = async_get_clientsession(hass)
 
     # Initialize API
     api = OctopusEnergyIT(email, password)
@@ -160,6 +224,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             # Fetch data for all accounts
             all_accounts_data = {}
+            available_products = await _fetch_public_tariffs(session)
             for account_num in account_numbers:
                 try:
                     # Fetch all data in one call to minimize API requests
@@ -167,7 +232,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     if account_data:
                         # Process the raw API data into a more usable format
                         processed_account_data = await process_api_data(
-                            account_data, account_num, api
+                            account_data, account_num, api, available_products
                         )
                         all_accounts_data.update(processed_account_data)
                     else:
@@ -202,7 +267,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # Return previous data if available, empty dict otherwise
             return coordinator.data if hasattr(coordinator, "data") else {}
 
-    async def process_api_data(data, account_number, api):
+    async def process_api_data(data, account_number, api, available_products):
         """Process raw API response into structured data."""
         if not data:
             return {}
@@ -270,6 +335,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "gas_agreements": [],
                 "electricity_last_reading": None,
                 "gas_last_reading": None,
+                "available_products": available_products or {},
             }
         }
 
@@ -751,11 +817,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             )
 
     # Store API, account number and coordinator in hass.data
+    public_device_id = f"{entry.entry_id}_public_products"
+
+    domain_data = hass.data[DOMAIN]
+    public_device_identifier = domain_data.setdefault(
+        "public_device_identifier", "octopus_public_tariffs"
+    )
+    public_owner = domain_data.setdefault("public_owner", entry.entry_id)
+
     hass.data[DOMAIN][entry.entry_id] = {
         "api": api,
         "account_number": primary_account_number,
         "account_numbers": account_numbers,
         "coordinator": coordinator,
+        "public_device_id": public_device_identifier,
+        "owns_public_products": public_owner == entry.entry_id,
     }
 
     # Forward setup to platforms - no need to wait for another refresh
@@ -877,7 +953,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
-        hass.data[DOMAIN].pop(entry.entry_id)
+        domain_data = hass.data[DOMAIN]
+        domain_data.pop(entry.entry_id, None)
+        if domain_data.get("public_owner") == entry.entry_id:
+            remaining_entries = [
+                key
+                for key in domain_data
+                if isinstance(domain_data[key], dict) and "coordinator" in domain_data[key]
+            ]
+            if remaining_entries:
+                domain_data["public_owner"] = remaining_entries[0]
+            else:
+                domain_data.pop("public_owner", None)
 
     return unload_ok
 

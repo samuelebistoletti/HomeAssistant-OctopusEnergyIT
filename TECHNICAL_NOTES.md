@@ -16,6 +16,7 @@
 - **API Client** (`octopus_energy_it.py`): Handles GraphQL authentication, token refresh, and all API calls
 - **Platforms**: binary_sensor, sensor, switch, number, select - all sharing the main coordinator
 - **Token Management**: On-demand refresh with a 5-minute expiry margin and robust retry handling
+- **Public Tariff Device**: Single device (`Octopus Tariffe pubbliche`) shared across all config entries; sensors hook directly to it instead of per-account devices
 
 ### Key Implementation Details
 
@@ -197,3 +198,9 @@ logger:
 - **Advanced Scheduling**: More complex charge scheduling options
 - **Energy Dashboard**: Integration with HA Energy features
 - **Automation Templates**: Pre-built automations for common scenarios
+- **Public Tariff Sensors**
+  - Device-level scraper reads `__NEXT_DATA__` JSON from `https://octopusenergy.it/le-nostre-tariffe`
+  - Only one device per integration; ownership of the device is tracked in `hass.data[DOMAIN]["public_owner"]`
+  - Entities follow pattern `sensor.public_tariffs_<tariff_slug>`
+  - State equals `charge_f1` (float with 4 decimal places). Attributes expose `charge_f1/2/3`, `standing_charge_annual`, `terms_url`, `product_type`, etc.
+  - Entities are disabled by default; enable via Entity Registry when needed.

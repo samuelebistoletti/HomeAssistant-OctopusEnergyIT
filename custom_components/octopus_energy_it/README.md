@@ -116,6 +116,14 @@ logger:
 
 > I sensori e i controlli dedicati a SmartFlex compaiono solo per i dispositivi Intelligent Octopus supportati; abilita dall'Entity Registry quelli necessari.
 
+**Tariffe pubbliche**
+
+Per ogni tariffa riportata sul sito Octopus viene creato (disabilitato di default) un sensore dedicato `sensor.public_tariffs_<nome_tariffa_slug>`.
+Caratteristiche:
+
+- Il device “Octopus Energy Public Tariffs” è uno solo per l’intera integrazione (condiviso tra tutti gli account configurati).
+- Gli attributi includono `charge_f1`, `charge_f2`, `charge_f3`, `standing_charge_annual`, `terms_url`, `product_type`, `type` (Electricity/Gas) e una descrizione, consentendo confronti puntuali o automazioni basate sul cambio di prezzo.
+
 ### Number
 
 - `number.octopus_<account>_<device_id>_charge_target` – imposta il target di ricarica SmartFlex (10–100%, passi da 1). L’aggiornamento viene propagato al coordinatore condiviso, che mantiene coerenti sensori e controlli.
