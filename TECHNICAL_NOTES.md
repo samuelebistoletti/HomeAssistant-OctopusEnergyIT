@@ -201,6 +201,6 @@ logger:
 - **Public Tariff Sensors**
   - Device-level scraper reads `__NEXT_DATA__` JSON from `https://octopusenergy.it/le-nostre-tariffe`
   - Only one device per integration; ownership of the device is tracked in `hass.data[DOMAIN]["public_owner"]`
-  - Entities follow pattern `sensor.public_tariffs_<tariff_slug>`
+  - Entities follow pattern `sensor.octopus_energy_public_tariffs_<tariff_slug>`
   - State equals `charge_f1` (float with 4 decimal places). Attributes expose `charge_f1/2/3`, `standing_charge_annual`, `terms_url`, `product_type`, etc.
   - Entities are disabled by default; enable via Entity Registry when needed.

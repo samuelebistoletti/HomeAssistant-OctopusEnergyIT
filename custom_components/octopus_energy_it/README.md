@@ -118,7 +118,7 @@ logger:
 
 **Tariffe pubbliche**
 
-Per ogni tariffa riportata sul sito Octopus viene creato (disabilitato di default) un sensore dedicato `sensor.public_tariffs_<nome_tariffa_slug>`.
+Per ogni tariffa riportata sul sito Octopus viene creato (disabilitato di default) un sensore dedicato `sensor.octopus_energy_public_tariffs_<nome_tariffa_slug>`.
 Caratteristiche:
 
 - Il device “Octopus Energy Public Tariffs” è uno solo per l’intera integrazione (condiviso tra tutti gli account configurati).
