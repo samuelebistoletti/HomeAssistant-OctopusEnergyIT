@@ -471,6 +471,7 @@ class OctopusEnergyIT:
 
         self._token_manager = TokenManager()
         self._login_lock = asyncio.Lock()
+        self._missing_device_logged_accounts: set[str] = set()
 
     @property
     def _token(self):
@@ -884,10 +885,18 @@ class OctopusEnergyIT:
                         ]
 
                         if non_critical_errors:
-                            _LOGGER.warning(
-                                "API returned non-critical errors (expected for accounts without devices/dispatches): %s",
-                                non_critical_errors,
-                            )
+                            if account_number not in self._missing_device_logged_accounts:
+                                self._missing_device_logged_accounts.add(account_number)
+                                _LOGGER.info(
+                                    "Octopus API reports no devices/dispatches for account %s (expected for accounts without smart devices): %s",
+                                    account_number,
+                                    non_critical_errors,
+                                )
+                            else:
+                                _LOGGER.debug(
+                                    "Octopus API still reports no devices/dispatches for account %s (expected for accounts without smart devices)",
+                                    account_number,
+                                )
 
                         if other_errors:
                             _LOGGER.error("API returned critical errors: %s", other_errors)

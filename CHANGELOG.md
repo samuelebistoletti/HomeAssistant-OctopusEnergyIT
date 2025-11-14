@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.9] - 2025-11-14
+
+### Fixed
+- Reduced Octopus API noise for accounts without smart devices by logging the expected KT-CT-4301 warnings only once per account and demoting subsequent detections to debug level.
+
 ## [1.0.8] - 2025-11-13
 
 ### Added

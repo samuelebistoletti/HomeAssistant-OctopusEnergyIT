@@ -12,5 +12,5 @@
   "requirements": [
     "python-graphql-client==0.4.3"
   ],
-  "version": "1.0.8"
+  "version": "1.0.9"
 }
