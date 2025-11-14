@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.10] - 2025-11-15
+
+### Changed
+- Public tariffs now use a dedicated hourly coordinator on the Octopus site independently from account polling, reducing noise on the Kraken APIs and ensuring consistent refreshes for every tariff sensor.
+
 ## [1.0.9] - 2025-11-14
 
 ### Fixed

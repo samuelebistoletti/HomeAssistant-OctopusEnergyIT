@@ -119,10 +119,19 @@ logger:
 **Tariffe pubbliche**
 
 Per ogni tariffa riportata sul sito Octopus viene creato (disabilitato di default) un sensore dedicato `sensor.octopus_energy_public_tariffs_<nome_tariffa_slug>`.
-Caratteristiche:
 
-- Il device “Octopus Energy Public Tariffs” è uno solo per l’intera integrazione (condiviso tra tutti gli account configurati).
-- Gli attributi includono `charge_f1`, `charge_f2`, `charge_f3`, `standing_charge_annual`, `terms_url`, `product_type`, `type` (Electricity/Gas) e una descrizione, consentendo confronti puntuali o automazioni basate sul cambio di prezzo.
+Ogni sensore ha la seguente lista di attributi associata.
+
+| Attributo | Descrizione |
+| --- | --- |
+| `code` | Codice prodotto Octopus come riportato sul sito |
+| `name` | Nome esteso della tariffa |
+| `type` | Tipo GraphQL (`ElectricityProduct`, `GasProduct`, ecc.) |
+| `product_type` | Categoria della tariffa (residenziale, business, ecc.) |
+| `description` | Breve descrizione commerciale |
+| `terms_url` | Link ai termini e condizioni ufficiali |
+| `charge_f1`, `charge_f2`, `charge_f3` | Prezzi €/kWh o €/Smc per fascia |
+| `standing_charge_annual` | Quota fissa annuale nella valuta originaria |
 
 ### Number
 

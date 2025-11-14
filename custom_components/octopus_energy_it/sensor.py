@@ -161,6 +161,7 @@ def _build_sensors_for_account(
     *,
     include_public_products: bool = False,
     public_device_id: str | None = None,
+    public_products_coordinator=None,
 ):
     """Create sensor instances for the provided account data."""
     sensors = []
@@ -263,15 +264,20 @@ def _build_sensors_for_account(
         sensors.append(OctopusVehicleBatterySizeSensor(account_number, coordinator))
 
     if include_public_products and public_device_id:
-        available_products = account_data.get("available_products") or {}
+        if not public_products_coordinator:
+            _LOGGER.warning(
+                "Public tariffs requested but coordinator missing for account %s",
+                account_number,
+            )
+            return sensors
+        available_products = public_products_coordinator.data or {}
         for product in available_products.get("electricity") or []:
             code = product.get("code")
             if code:
                 full_name = product.get("fullName") or product.get("displayName")
                 sensors.append(
                     OctopusPublicTariffSensor(
-                        coordinator,
-                        account_number=account_number,
+                        public_products_coordinator,
                         product_code=code,
                         source="electricity",
                         device_identifier=public_device_id,
@@ -284,8 +290,7 @@ def _build_sensors_for_account(
                 full_name = product.get("fullName") or product.get("displayName")
                 sensors.append(
                     OctopusPublicTariffSensor(
-                        coordinator,
-                        account_number=account_number,
+                        public_products_coordinator,
                         product_code=code,
                         source="gas",
                         device_identifier=public_device_id,
@@ -306,6 +311,9 @@ async def async_setup_entry(
     coordinator = data["coordinator"]
     account_number = data["account_number"]
     public_device_id = data.get("public_device_id")
+    public_products_coordinator = data.get("public_products_coordinator")
+    if public_products_coordinator and public_products_coordinator.data is None:
+        await public_products_coordinator.async_request_refresh()
     # Wait for coordinator refresh if needed
     if coordinator.data is None:
         _LOGGER.debug("No data in coordinator, triggering refresh")
@@ -343,6 +351,7 @@ async def async_setup_entry(
                     account_data,
                     include_public_products=include_public_products,
                     public_device_id=public_device_id,
+                    public_products_coordinator=public_products_coordinator,
                 )
             )
             continue
@@ -1648,14 +1657,12 @@ class OctopusPublicTariffSensor(OctopusPublicProductsEntity, SensorEntity):
         self,
         coordinator,
         *,
-        account_number: str,
         product_code: str,
         source: str,
         device_identifier: str,
         product_name: str | None,
     ) -> None:
         super().__init__(coordinator, device_identifier=device_identifier)
-        self._account_number = account_number
         self._product_code = product_code
         self._source = source
         icon = "mdi:lightning-bolt" if source == "electricity" else "mdi:fire"
@@ -1676,11 +1683,10 @@ class OctopusPublicTariffSensor(OctopusPublicProductsEntity, SensorEntity):
         return decimal_value.quantize(Decimal("0.0001"))
 
     def _raw_product(self) -> dict[str, Any] | None:
-        account_data = _get_account_data(self.coordinator, self._account_number)
-        if not account_data:
+        if not self.coordinator:
             return None
-        available = account_data.get("available_products") or {}
-        for product in available.get(self._source) or []:
+        available = (self.coordinator.data or {}).get(self._source) or []
+        for product in available:
             if isinstance(product, dict) and product.get("code") == self._product_code:
                 return product
         return None

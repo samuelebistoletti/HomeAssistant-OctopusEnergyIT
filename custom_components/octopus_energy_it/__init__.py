@@ -18,7 +18,7 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util.dt import as_utc, parse_datetime, utcnow
 
 from .const import CONF_EMAIL, CONF_PASSWORD, DEBUG_ENABLED, DOMAIN, UPDATE_INTERVAL
@@ -123,6 +123,33 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Ensure DOMAIN is initialized in hass.data
     if DOMAIN not in hass.data:
         hass.data[DOMAIN] = {}
+    domain_data = hass.data[DOMAIN]
+
+    public_products_coordinator = domain_data.get("public_products_coordinator")
+
+    async def async_update_public_products():
+        products = await _fetch_public_tariffs(session)
+        if products is None:
+            if public_products_coordinator and public_products_coordinator.data:
+                raise UpdateFailed("Unable to refresh public tariffs")
+            _LOGGER.warning(
+                "Public tariffs data unavailable - sensors will remain empty until data loads"
+            )
+            return {"electricity": [], "gas": []}
+        return products
+
+    if public_products_coordinator is None:
+        public_products_coordinator = DataUpdateCoordinator(
+            hass,
+            _LOGGER,
+            name=f"{DOMAIN}_public_products",
+            update_method=async_update_public_products,
+            update_interval=timedelta(hours=1),
+        )
+        await public_products_coordinator.async_config_entry_first_refresh()
+        domain_data["public_products_coordinator"] = public_products_coordinator
+    elif public_products_coordinator.data is None:
+        await public_products_coordinator.async_request_refresh()
 
     # Enhanced multi-account support with all ledgers
     account_numbers = entry.data.get("account_numbers", [])
@@ -224,7 +251,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             # Fetch data for all accounts
             all_accounts_data = {}
-            available_products = await _fetch_public_tariffs(session)
+            if public_products_coordinator.data is None:
+                await public_products_coordinator.async_request_refresh()
+            available_products = public_products_coordinator.data or {}
             for account_num in account_numbers:
                 try:
                     # Fetch all data in one call to minimize API requests
@@ -817,9 +846,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             )
 
     # Store API, account number and coordinator in hass.data
-    public_device_id = f"{entry.entry_id}_public_products"
-
-    domain_data = hass.data[DOMAIN]
     public_device_identifier = domain_data.setdefault(
         "public_device_identifier", "octopus_public_tariffs"
     )
@@ -832,6 +858,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "coordinator": coordinator,
         "public_device_id": public_device_identifier,
         "owns_public_products": public_owner == entry.entry_id,
+        "public_products_coordinator": public_products_coordinator,
     }
 
     # Forward setup to platforms - no need to wait for another refresh
@@ -955,16 +982,18 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         domain_data = hass.data[DOMAIN]
         domain_data.pop(entry.entry_id, None)
+        remaining_entries = [
+            key
+            for key, value in domain_data.items()
+            if isinstance(value, dict) and "coordinator" in value
+        ]
         if domain_data.get("public_owner") == entry.entry_id:
-            remaining_entries = [
-                key
-                for key in domain_data
-                if isinstance(domain_data[key], dict) and "coordinator" in domain_data[key]
-            ]
             if remaining_entries:
                 domain_data["public_owner"] = remaining_entries[0]
             else:
                 domain_data.pop("public_owner", None)
+        if not remaining_entries:
+            domain_data.pop("public_products_coordinator", None)
 
     return unload_ok
 
