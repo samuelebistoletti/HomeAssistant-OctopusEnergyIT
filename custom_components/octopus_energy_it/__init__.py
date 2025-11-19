@@ -130,12 +130,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def async_update_public_products():
         products = await _fetch_public_tariffs(session)
         if products is None:
-            if public_products_coordinator and public_products_coordinator.data:
-                raise UpdateFailed("Unable to refresh public tariffs")
+            cached_products = domain_data.get("public_products_cache")
+            if cached_products:
+                _LOGGER.warning(
+                    "Unable to refresh public tariffs - using last known values"
+                )
+                return cached_products
             _LOGGER.warning(
                 "Public tariffs data unavailable - sensors will remain empty until data loads"
             )
             return {"electricity": [], "gas": []}
+        domain_data["public_products_cache"] = products
         return products
 
     if public_products_coordinator is None:
@@ -994,6 +999,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 domain_data.pop("public_owner", None)
         if not remaining_entries:
             domain_data.pop("public_products_coordinator", None)
+            domain_data.pop("public_products_cache", None)
 
     return unload_ok
 

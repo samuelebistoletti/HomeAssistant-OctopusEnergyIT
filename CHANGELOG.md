@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.11] - 2025-11-16
+
+### Fixed
+- Public tariff sensors keep showing the last known prices when the octopusenergy.it tariffs page is temporarily unavailable instead of flipping to `unavailable`.
+
 ## [1.0.10] - 2025-11-15
 
 ### Changed
