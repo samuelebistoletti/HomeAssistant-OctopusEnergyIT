@@ -16,7 +16,7 @@
 - **API Client** (`octopus_energy_it.py`): Handles GraphQL authentication, token refresh, and all API calls
 - **Platforms**: binary_sensor, sensor, switch, number, select - all sharing the main coordinator
 - **Token Management**: On-demand refresh with a 5-minute expiry margin and robust retry handling
-- **Public Tariff Device**: Single device (`Octopus Tariffe pubbliche`) shared across all config entries; sensors hook directly to it instead of per-account devices
+- **Public Tariff Device**: Single device (`Octopus Tariffe pubbliche`) shared across all config entries; sensors hook directly to it instead of per-account devices, refresh hourly with a 5-minute retry window after failures, and are enabled by default
 
 ### Key Implementation Details
 

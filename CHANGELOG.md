@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.12] - 2025-11-27
+
+### Changed
+- Public tariff sensors are now enabled by default and retry every 5 minutes after a fetch error, restoring the hourly cadence once the site responds again.
+- Public tariff documentation updated with the new retry/backoff behaviour and default-enabled entities.
+- Vehicle battery capacity sensor now reports a measurement without the energy device class to align with Home Assistant’s state class rules.
+
 ## [1.0.11] - 2025-11-16
 
 ### Fixed

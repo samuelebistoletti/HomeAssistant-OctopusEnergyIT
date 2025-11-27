@@ -37,6 +37,8 @@ PLATFORMS: list[Platform] = [
 API_URL = "https://api.octopus.energy/v1/graphql/"
 TARIFFS_PAGE_URL = "https://octopusenergy.it/le-nostre-tariffe"
 NEXT_DATA_MARKER = '<script id="__NEXT_DATA__" type="application/json">'
+PUBLIC_PRODUCTS_UPDATE_INTERVAL = timedelta(hours=1)
+PUBLIC_PRODUCTS_RETRY_INTERVAL = timedelta(minutes=5)
 
 
 async def _fetch_public_tariffs(session: aiohttp.ClientSession) -> dict[str, list] | None:
@@ -135,11 +137,47 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 _LOGGER.warning(
                     "Unable to refresh public tariffs - using last known values"
                 )
+                if (
+                    public_products_coordinator
+                    and public_products_coordinator.update_interval
+                    != PUBLIC_PRODUCTS_RETRY_INTERVAL
+                ):
+                    _LOGGER.debug(
+                        "Shortening public tariffs retry interval to %s after failure",
+                        PUBLIC_PRODUCTS_RETRY_INTERVAL,
+                    )
+                    public_products_coordinator.update_interval = (
+                        PUBLIC_PRODUCTS_RETRY_INTERVAL
+                    )
                 return cached_products
             _LOGGER.warning(
                 "Public tariffs data unavailable - sensors will remain empty until data loads"
             )
+            if (
+                public_products_coordinator
+                and public_products_coordinator.update_interval
+                != PUBLIC_PRODUCTS_RETRY_INTERVAL
+            ):
+                _LOGGER.debug(
+                    "Shortening public tariffs retry interval to %s after failure",
+                    PUBLIC_PRODUCTS_RETRY_INTERVAL,
+                )
+                public_products_coordinator.update_interval = (
+                    PUBLIC_PRODUCTS_RETRY_INTERVAL
+                )
             return {"electricity": [], "gas": []}
+        if (
+            public_products_coordinator
+            and public_products_coordinator.update_interval
+            != PUBLIC_PRODUCTS_UPDATE_INTERVAL
+        ):
+            _LOGGER.debug(
+                "Restoring public tariffs update interval to %s after successful refresh",
+                PUBLIC_PRODUCTS_UPDATE_INTERVAL,
+            )
+            public_products_coordinator.update_interval = (
+                PUBLIC_PRODUCTS_UPDATE_INTERVAL
+            )
         domain_data["public_products_cache"] = products
         return products
 
@@ -149,7 +187,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER,
             name=f"{DOMAIN}_public_products",
             update_method=async_update_public_products,
-            update_interval=timedelta(hours=1),
+            update_interval=PUBLIC_PRODUCTS_UPDATE_INTERVAL,
         )
         await public_products_coordinator.async_config_entry_first_refresh()
         domain_data["public_products_coordinator"] = public_products_coordinator

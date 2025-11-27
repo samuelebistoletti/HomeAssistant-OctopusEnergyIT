@@ -175,37 +175,56 @@ def _build_sensors_for_account(
                 len(products),
             )
             sensors.append(OctopusElectricityPriceSensor(account_number, coordinator))
-            current_product = account_data.get("current_electricity_product") or _select_current_product(products)
+            current_product = account_data.get(
+                "current_electricity_product"
+            ) or _select_current_product(products)
             pricing = (current_product or {}).get("pricing") or {}
             if pricing.get("f2") is not None:
-                sensors.append(OctopusElectricityPriceF2Sensor(account_number, coordinator))
+                sensors.append(
+                    OctopusElectricityPriceF2Sensor(account_number, coordinator)
+                )
             if pricing.get("f3") is not None:
-                sensors.append(OctopusElectricityPriceF3Sensor(account_number, coordinator))
+                sensors.append(
+                    OctopusElectricityPriceF3Sensor(account_number, coordinator)
+                )
 
         sensors.append(OctopusElectricityLastReadingSensor(account_number, coordinator))
-        sensors.append(OctopusElectricityLastReadingDateSensor(account_number, coordinator))
+        sensors.append(
+            OctopusElectricityLastReadingDateSensor(account_number, coordinator)
+        )
 
         if account_data.get("electricity_balance") is not None:
             sensors.append(OctopusElectricityBalanceSensor(account_number, coordinator))
 
         if account_data.get("electricity_supply_point"):
-            sensors.append(OctopusElectricityMeterStatusSensor(account_number, coordinator))
+            sensors.append(
+                OctopusElectricityMeterStatusSensor(account_number, coordinator)
+            )
 
         if account_data.get("electricity_annual_standing_charge") is not None:
-            sensors.append(OctopusElectricityStandingChargeSensor(account_number, coordinator))
+            sensors.append(
+                OctopusElectricityStandingChargeSensor(account_number, coordinator)
+            )
 
         if account_data.get("electricity_contract_start"):
-            sensors.append(OctopusElectricityContractStartSensor(account_number, coordinator))
+            sensors.append(
+                OctopusElectricityContractStartSensor(account_number, coordinator)
+            )
 
         if account_data.get("electricity_contract_end"):
-            sensors.append(OctopusElectricityContractEndSensor(account_number, coordinator))
+            sensors.append(
+                OctopusElectricityContractEndSensor(account_number, coordinator)
+            )
 
         if account_data.get("electricity_contract_days_until_expiry") is not None:
-            sensors.append(OctopusElectricityContractExpiryDaysSensor(account_number, coordinator))
+            sensors.append(
+                OctopusElectricityContractExpiryDaysSensor(account_number, coordinator)
+            )
 
         if account_data.get("current_electricity_product"):
-            sensors.append(OctopusElectricityProductInfoSensor(account_number, coordinator))
-
+            sensors.append(
+                OctopusElectricityProductInfoSensor(account_number, coordinator)
+            )
 
     if account_data.get("gas_pdr"):
         if account_data.get("gas_balance") is not None:
@@ -235,14 +254,15 @@ def _build_sensors_for_account(
             sensors.append(OctopusGasContractEndSensor(account_number, coordinator))
 
         if account_data.get("gas_contract_days_until_expiry") is not None:
-            sensors.append(OctopusGasContractExpiryDaysSensor(account_number, coordinator))
+            sensors.append(
+                OctopusGasContractExpiryDaysSensor(account_number, coordinator)
+            )
 
         if account_data.get("gas_annual_standing_charge") is not None:
             sensors.append(OctopusGasStandingChargeSensor(account_number, coordinator))
 
         if account_data.get("current_gas_product"):
             sensors.append(OctopusGasProductInfoSensor(account_number, coordinator))
-
 
     devices = account_data.get("devices") or []
     if devices:
@@ -258,7 +278,9 @@ def _build_sensors_for_account(
 
     other_ledgers = account_data.get("other_ledgers") or {}
     for ledger_type in other_ledgers:
-        sensors.append(OctopusLedgerBalanceSensor(account_number, coordinator, ledger_type))
+        sensors.append(
+            OctopusLedgerBalanceSensor(account_number, coordinator, ledger_type)
+        )
 
     if account_data.get("vehicle_battery_size_in_kwh") is not None:
         sensors.append(OctopusVehicleBatterySizeSensor(account_number, coordinator))
@@ -299,7 +321,6 @@ def _build_sensors_for_account(
                 )
 
     return sensors
-
 
 
 async def async_setup_entry(
@@ -393,7 +414,9 @@ class OctopusElectricityPriceSensor(OctopusCoordinatorEntity, SensorEntity):
         account_data = _get_account_data(self.coordinator, self._account_number)
         if not account_data:
             return {}
-        product = account_data.get("current_electricity_product") or _select_current_product(account_data.get("products") or [])
+        product = account_data.get(
+            "current_electricity_product"
+        ) or _select_current_product(account_data.get("products") or [])
         if not product:
             return {}
         return product.get("pricing") or {}
@@ -442,7 +465,6 @@ class OctopusElectricityPriceF3Sensor(OctopusElectricityPriceSensor):
     @property
     def native_value(self) -> float | None:
         return self._to_float(self._pricing().get("f3"))
-
 
 
 class OctopusElectricityBalanceSensor(OctopusCoordinatorEntity, SensorEntity):
@@ -508,11 +530,7 @@ class OctopusGasBalanceSensor(OctopusCoordinatorEntity, SensorEntity):
         )
 
 
-
-
-class OctopusElectricityStandingChargeSensor(
-    OctopusCoordinatorEntity, SensorEntity
-):
+class OctopusElectricityStandingChargeSensor(OctopusCoordinatorEntity, SensorEntity):
     """Sensor exposing the annual electricity standing charge."""
 
     _attr_translation_key = "electricity_standing_charge"
@@ -523,9 +541,7 @@ class OctopusElectricityStandingChargeSensor(
 
     def __init__(self, account_number, coordinator) -> None:
         super().__init__(account_number, coordinator)
-        self._attr_unique_id = (
-            f"octopus_{account_number}_electricity_standing_charge"
-        )
+        self._attr_unique_id = f"octopus_{account_number}_electricity_standing_charge"
 
     @staticmethod
     def _to_float(value):
@@ -666,9 +682,8 @@ class OctopusGasLastReadingDateSensor(OctopusCoordinatorEntity, SensorEntity):
             and self.native_value is not None
         )
 
-class OctopusElectricityLastReadingSensor(
-    OctopusCoordinatorEntity, SensorEntity
-):
+
+class OctopusElectricityLastReadingSensor(OctopusCoordinatorEntity, SensorEntity):
     """Sensor for the latest electricity meter reading."""
 
     _attr_translation_key = "electricity_last_reading"
@@ -678,7 +693,9 @@ class OctopusElectricityLastReadingSensor(
 
     def __init__(self, account_number, coordinator) -> None:
         super().__init__(account_number, coordinator)
-        self._attr_unique_id = f"octopus_{account_number}_electricity_last_daily_reading"
+        self._attr_unique_id = (
+            f"octopus_{account_number}_electricity_last_daily_reading"
+        )
 
     def _reading(self):
         account_data = _get_account_data(self.coordinator, self._account_number)
@@ -723,9 +740,7 @@ class OctopusElectricityLastReadingSensor(
         )
 
 
-class OctopusElectricityLastReadingDateSensor(
-    OctopusCoordinatorEntity, SensorEntity
-):
+class OctopusElectricityLastReadingDateSensor(OctopusCoordinatorEntity, SensorEntity):
     """Sensor exposing the date of the latest electricity meter reading."""
 
     _attr_translation_key = "electricity_last_reading_date"
@@ -733,7 +748,9 @@ class OctopusElectricityLastReadingDateSensor(
 
     def __init__(self, account_number, coordinator) -> None:
         super().__init__(account_number, coordinator)
-        self._attr_unique_id = f"octopus_{account_number}_electricity_last_daily_reading_date"
+        self._attr_unique_id = (
+            f"octopus_{account_number}_electricity_last_daily_reading_date"
+        )
 
     def _reading(self):
         account_data = _get_account_data(self.coordinator, self._account_number)
@@ -756,7 +773,7 @@ class OctopusElectricityLastReadingDateSensor(
             return dt.date()
         except (ValueError, TypeError):
             try:
-                return datetime.strptime(timestamp.split('T')[0], "%Y-%m-%d").date()
+                return datetime.strptime(timestamp.split("T")[0], "%Y-%m-%d").date()
             except (ValueError, IndexError):
                 return None
 
@@ -777,9 +794,7 @@ class OctopusElectricityLastReadingDateSensor(
         )
 
 
-class OctopusElectricityMeterStatusSensor(
-    OctopusCoordinatorEntity, SensorEntity
-):
+class OctopusElectricityMeterStatusSensor(OctopusCoordinatorEntity, SensorEntity):
     """Sensor exposing electricity supply point status metadata."""
 
     _attr_translation_key = "electricity_meter_status"
@@ -803,7 +818,9 @@ class OctopusElectricityMeterStatusSensor(
         status = None
         if not account_data:
             return status, account_data, supply_point
-        status = account_data.get("electricity_supply_status") or supply_point.get("status")
+        status = account_data.get("electricity_supply_status") or supply_point.get(
+            "status"
+        )
         return status, account_data, supply_point
 
     @property
@@ -881,9 +898,7 @@ class OctopusHeatBalanceSensor(OctopusCoordinatorEntity, SensorEntity):
         )
 
 
-class OctopusElectricityContractStartSensor(
-    OctopusCoordinatorEntity, SensorEntity
-):
+class OctopusElectricityContractStartSensor(OctopusCoordinatorEntity, SensorEntity):
     """Sensor for electricity contract start date."""
 
     _attr_translation_key = "electricity_contract_start"
@@ -910,7 +925,9 @@ class OctopusElectricityContractStartSensor(
             return dt.date().strftime("%d/%m/%Y")
         except (TypeError, ValueError):
             try:
-                return datetime.strptime(contract_start.split('T')[0], "%Y-%m-%d").strftime("%d/%m/%Y")
+                return datetime.strptime(
+                    contract_start.split("T")[0], "%Y-%m-%d"
+                ).strftime("%d/%m/%Y")
             except (TypeError, ValueError, IndexError):
                 return None
 
@@ -925,9 +942,7 @@ class OctopusElectricityContractStartSensor(
         )
 
 
-class OctopusElectricityContractEndSensor(
-    OctopusCoordinatorEntity, SensorEntity
-):
+class OctopusElectricityContractEndSensor(OctopusCoordinatorEntity, SensorEntity):
     """Sensor for electricity contract end date."""
 
     _attr_translation_key = "electricity_contract_end"
@@ -954,7 +969,9 @@ class OctopusElectricityContractEndSensor(
             return dt.date().strftime("%d/%m/%Y")
         except (TypeError, ValueError):
             try:
-                return datetime.strptime(contract_end.split('T')[0], "%Y-%m-%d").strftime("%d/%m/%Y")
+                return datetime.strptime(
+                    contract_end.split("T")[0], "%Y-%m-%d"
+                ).strftime("%d/%m/%Y")
             except (TypeError, ValueError, IndexError):
                 return None
 
@@ -981,7 +998,9 @@ class OctopusElectricityContractExpiryDaysSensor(
 
     def __init__(self, account_number, coordinator) -> None:
         super().__init__(account_number, coordinator)
-        self._attr_unique_id = f"octopus_{account_number}_electricity_contract_expiry_days"
+        self._attr_unique_id = (
+            f"octopus_{account_number}_electricity_contract_expiry_days"
+        )
 
     @property
     def native_value(self) -> int | None:
@@ -1001,9 +1020,7 @@ class OctopusElectricityContractExpiryDaysSensor(
         )
 
 
-class OctopusElectricityProductInfoSensor(
-    OctopusCoordinatorEntity, SensorEntity
-):
+class OctopusElectricityProductInfoSensor(OctopusCoordinatorEntity, SensorEntity):
     """Sensor exposing descriptive information about the active electricity product."""
 
     _attr_translation_key = "electricity_product_info"
@@ -1109,6 +1126,8 @@ class OctopusLedgerBalanceSensor(OctopusCoordinatorEntity, SensorEntity):
         if not self._translation_override:
             placeholders["ledger"] = self._default_ledger_name
         return placeholders
+
+
 class OctopusGasMeterStatusSensor(OctopusCoordinatorEntity, SensorEntity):
     """Sensor exposing gas supply point status metadata."""
 
@@ -1211,7 +1230,6 @@ class OctopusGasPriceSensor(OctopusCoordinatorEntity, SensorEntity):
         )
 
 
-
 class OctopusGasContractStartSensor(OctopusCoordinatorEntity, SensorEntity):
     """Sensor for Octopus Energy Italy gas contract start date."""
 
@@ -1242,7 +1260,9 @@ class OctopusGasContractStartSensor(OctopusCoordinatorEntity, SensorEntity):
             return dt.date().strftime("%d/%m/%Y")
         except (ValueError, TypeError):
             try:
-                return datetime.strptime(contract_start.split('T')[0], "%Y-%m-%d").strftime("%d/%m/%Y")
+                return datetime.strptime(
+                    contract_start.split("T")[0], "%Y-%m-%d"
+                ).strftime("%d/%m/%Y")
             except (TypeError, ValueError, IndexError):
                 return None
 
@@ -1288,7 +1308,9 @@ class OctopusGasContractEndSensor(OctopusCoordinatorEntity, SensorEntity):
             return dt.date().strftime("%d/%m/%Y")
         except (ValueError, TypeError):
             try:
-                return datetime.strptime(contract_end.split('T')[0], "%Y-%m-%d").strftime("%d/%m/%Y")
+                return datetime.strptime(
+                    contract_end.split("T")[0], "%Y-%m-%d"
+                ).strftime("%d/%m/%Y")
             except (TypeError, ValueError, IndexError):
                 return None
 
@@ -1304,9 +1326,7 @@ class OctopusGasContractEndSensor(OctopusCoordinatorEntity, SensorEntity):
         )
 
 
-class OctopusGasContractExpiryDaysSensor(
-    OctopusCoordinatorEntity, SensorEntity
-):
+class OctopusGasContractExpiryDaysSensor(OctopusCoordinatorEntity, SensorEntity):
     """Sensor for days until Octopus Energy Italy gas contract expiry."""
 
     _attr_translation_key = "gas_contract_days_until_expiry"
@@ -1446,9 +1466,6 @@ class OctopusGasStandingChargeSensor(OctopusCoordinatorEntity, SensorEntity):
         )
 
 
-
-
-
 class OctopusEVChargeStatusSensor(OctopusCoordinatorEntity, SensorEntity):
     """Sensor for Octopus Energy Italy device status."""
 
@@ -1543,9 +1560,7 @@ class OctopusEVChargeStatusSensor(OctopusCoordinatorEntity, SensorEntity):
             "device_name": device.get("name"),
             "device_model": device.get("vehicleVariant", {}).get("model"),
             "device_provider": device.get("provider"),
-            "battery_capacity_kwh": device.get("vehicleVariant", {}).get(
-                "batterySize"
-            ),
+            "battery_capacity_kwh": device.get("vehicleVariant", {}).get("batterySize"),
             "status_current_state": current_state,
             "status_normalized": _normalize_ev_status(current_state),
             "status_raw": current_state or None,
@@ -1591,15 +1606,14 @@ class OctopusEVChargeStatusSensor(OctopusCoordinatorEntity, SensorEntity):
             and account_data.get("devices")
         )
 
-class OctopusVehicleBatterySizeSensor(
-    OctopusCoordinatorEntity, SensorEntity
-):
+
+class OctopusVehicleBatterySizeSensor(OctopusCoordinatorEntity, SensorEntity):
     """Sensor reporting detected vehicle battery capacity."""
 
     _attr_translation_key = "vehicle_battery_size"
-    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_device_class = None
     _attr_native_unit_of_measurement = "kWh"
-    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_state_class = None
     _attr_icon = "mdi:car-battery"
     _attr_entity_registry_enabled_default = True
 
@@ -1651,7 +1665,7 @@ class OctopusVehicleBatterySizeSensor(
 class OctopusPublicTariffSensor(OctopusPublicProductsEntity, SensorEntity):
     """Sensor representing a single public tariff."""
 
-    _attr_entity_registry_enabled_default = False
+    _attr_entity_registry_enabled_default = True
 
     def __init__(
         self,

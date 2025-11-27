@@ -118,7 +118,7 @@ logger:
 
 **Tariffe pubbliche**
 
-Per ogni tariffa riportata sul sito Octopus viene creato (disabilitato di default) un sensore dedicato `sensor.octopus_energy_public_tariffs_<nome_tariffa_slug>`.
+Per ogni tariffa riportata sul sito Octopus viene creato un sensore dedicato `sensor.octopus_energy_public_tariffs_<nome_tariffa_slug>`.
 
 Ogni sensore ha la seguente lista di attributi associata.
 
@@ -132,6 +132,8 @@ Ogni sensore ha la seguente lista di attributi associata.
 | `terms_url` | Link ai termini e condizioni ufficiali |
 | `charge_f1`, `charge_f2`, `charge_f3` | Prezzi €/kWh o €/Smc per fascia |
 | `standing_charge_annual` | Quota fissa annuale nella valuta originaria |
+
+Aggiornamento: i prezzi vengono aggiornati ogni ora; se il sito delle tariffe non risponde, il retry avviene ogni 5 minuti utilizzando l’ultimo valore valido come cache.
 
 ### Number
 
