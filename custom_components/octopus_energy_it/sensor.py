@@ -1611,7 +1611,7 @@ class OctopusVehicleBatterySizeSensor(OctopusCoordinatorEntity, SensorEntity):
     """Sensor reporting detected vehicle battery capacity."""
 
     _attr_translation_key = "vehicle_battery_size"
-    _attr_device_class = None
+    _attr_device_class = SensorDeviceClass.ENERGY
     _attr_native_unit_of_measurement = "kWh"
     _attr_state_class = None
     _attr_icon = "mdi:car-battery"

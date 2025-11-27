@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.13] - 2025-11-27
+
+### Fixed
+- Device class vehicle battery size fix
+
 ## [1.0.12] - 2025-11-27
 
 ### Changed
