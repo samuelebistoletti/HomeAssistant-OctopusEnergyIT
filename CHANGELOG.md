@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.14] - 2026-02-04
+
+### Documentation
+- Documentation update.
+
 ## [1.0.13] - 2025-11-27
 
 ### Fixed
