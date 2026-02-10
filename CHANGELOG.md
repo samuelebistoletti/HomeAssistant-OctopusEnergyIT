@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.0.15] - 2026-02-10
+## [1.0.16] - 2026-02-10
 
 ### Added
 - New cumulative electricity sensor `sensor.octopus_<account>_electricity_last_reading` for Home Assistant Energy dashboard (`device_class: energy`, `state_class: total_increasing`).
