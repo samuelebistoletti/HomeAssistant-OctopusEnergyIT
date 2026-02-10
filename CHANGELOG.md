@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.17] - 2026-02-10
+
+### Changed
+- Aligned the electricity reading date sensor identity with the normalized naming by switching its unique id to `octopus_<account>_electricity_last_reading_date`.
+
+### Breaking
+- `sensor.octopus_<account>_electricity_last_daily_reading_date` is now exposed as `sensor.octopus_<account>_electricity_last_reading_date`; update dashboards, automations, templates, and any customizations bound to the old entity id.
+
 ## [1.0.16] - 2026-02-10
 
 ### Added

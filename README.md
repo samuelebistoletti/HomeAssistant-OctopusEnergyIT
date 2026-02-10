@@ -99,7 +99,7 @@ logger:
 | --- | --- | --- |
 | `sensor.octopus_<account>_electricity_last_reading` | kWh | `period_start`, `period_end`, `data_source`, `unit_of_measurement`, `register_start_value`, `register_end_value` |
 | `sensor.octopus_<account>_electricity_last_daily_reading` | kWh | `period_start`, `period_end`, `data_source`, `unit_of_measurement`, `register_start_value`, `register_end_value` |
-| `sensor.octopus_<account>_electricity_last_daily_reading_date` | data | — |
+| `sensor.octopus_<account>_electricity_last_reading_date` | data | — |
 | `sensor.octopus_<account>_gas_last_reading` | m³ | `recorded_at`, `measurement_type`, `measurement_source`, `unit_of_measurement` |
 | `sensor.octopus_<account>_gas_last_reading_date` | data | — |
 

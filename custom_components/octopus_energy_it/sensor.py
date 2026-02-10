@@ -813,7 +813,7 @@ class OctopusElectricityLastReadingDateSensor(OctopusCoordinatorEntity, SensorEn
     def __init__(self, account_number, coordinator) -> None:
         super().__init__(account_number, coordinator)
         self._attr_unique_id = (
-            f"octopus_{account_number}_electricity_last_daily_reading_date"
+            f"octopus_{account_number}_electricity_last_reading_date"
         )
 
     def _reading(self):
