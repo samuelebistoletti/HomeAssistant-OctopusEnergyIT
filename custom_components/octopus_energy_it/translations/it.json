@@ -73,6 +73,9 @@
       "electricity_last_reading": {
         "name": "Ultima lettura elettricità"
       },
+      "electricity_last_daily_reading": {
+        "name": "Ultima lettura giornaliera elettricità"
+      },
       "electricity_last_reading_date": {
         "name": "Data ultima lettura elettricità"
       },

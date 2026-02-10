@@ -199,7 +199,7 @@ logger:
 - **Energy Dashboard**: Integration with HA Energy features
 - **Automation Templates**: Pre-built automations for common scenarios
 - **Public Tariff Sensors**
-  - Device-level scraper reads `__NEXT_DATA__` JSON from `https://octopusenergy.it/le-nostre-tariffe`
+  - Device-level scraper reads `__NEXT_DATA__` JSON from `https://octopusenergy.it/le-nostre-tariffe` and augments with PLACET offers parsed from the HTML section.
   - Only one device per integration; ownership of the device is tracked in `hass.data[DOMAIN]["public_owner"]`
   - Entities follow pattern `sensor.octopus_energy_public_tariffs_<tariff_slug>`
   - State equals `charge_f1` (float with 4 decimal places). Attributes expose `charge_f1/2/3`, `standing_charge_annual`, `terms_url`, `product_type`, etc.

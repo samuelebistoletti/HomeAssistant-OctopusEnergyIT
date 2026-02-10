@@ -97,10 +97,13 @@ logger:
 
 | Entità | Unità | Attributi extra |
 | --- | --- | --- |
+| `sensor.octopus_<account>_electricity_last_reading` | kWh | `period_start`, `period_end`, `data_source`, `unit_of_measurement`, `register_start_value`, `register_end_value` |
 | `sensor.octopus_<account>_electricity_last_daily_reading` | kWh | `period_start`, `period_end`, `data_source`, `unit_of_measurement`, `register_start_value`, `register_end_value` |
 | `sensor.octopus_<account>_electricity_last_daily_reading_date` | data | — |
 | `sensor.octopus_<account>_gas_last_reading` | m³ | `recorded_at`, `measurement_type`, `measurement_source`, `unit_of_measurement` |
 | `sensor.octopus_<account>_gas_last_reading_date` | data | — |
+
+Nota: `electricity_last_reading` è la lettura cumulativa del contatore (adatta alla dashboard Energia), mentre `electricity_last_daily_reading` rappresenta il consumo dell’ultimo intervallo giornaliero.
 | `sensor.octopus_<account>_electricity_meter_status` | testo | `account_number`, `pod`, `supply_point_id`, `enrollment_status`, `enrollment_started_at`, `supply_started_at`, `is_smart_meter`, `cancellation_reason` |
 | `sensor.octopus_<account>_gas_meter_status` | testo | `account_number`, `pdr`, `enrollment_status`, `enrollment_started_at`, `supply_started_at`, `is_smart_meter`, `cancellation_reason` |
 
@@ -120,7 +123,7 @@ logger:
 
 **Tariffe pubbliche**
 
-Per ogni tariffa riportata sul sito Octopus viene creato un sensore dedicato `sensor.octopus_energy_public_tariffs_<nome_tariffa_slug>`.
+Per ogni tariffa riportata sul sito Octopus viene creato un sensore dedicato `sensor.octopus_energy_public_tariffs_<nome_tariffa_slug>`, incluse le offerte PLACET.
 
 Ogni sensore ha la seguente lista di attributi associata.
 

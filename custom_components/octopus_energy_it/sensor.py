@@ -190,6 +190,9 @@ def _build_sensors_for_account(
 
         sensors.append(OctopusElectricityLastReadingSensor(account_number, coordinator))
         sensors.append(
+            OctopusElectricityCumulativeReadingSensor(account_number, coordinator)
+        )
+        sensors.append(
             OctopusElectricityLastReadingDateSensor(account_number, coordinator)
         )
 
@@ -581,7 +584,7 @@ class OctopusGasLastReadingSensor(OctopusCoordinatorEntity, SensorEntity):
     """Sensor for the latest gas meter reading."""
 
     _attr_translation_key = "gas_last_reading"
-    _attr_device_class = SensorDeviceClass.VOLUME
+    _attr_device_class = SensorDeviceClass.GAS
     _attr_native_unit_of_measurement = "m³"
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
     _attr_icon = "mdi:meter-gas"
@@ -684,9 +687,9 @@ class OctopusGasLastReadingDateSensor(OctopusCoordinatorEntity, SensorEntity):
 
 
 class OctopusElectricityLastReadingSensor(OctopusCoordinatorEntity, SensorEntity):
-    """Sensor for the latest electricity meter reading."""
+    """Sensor for the latest daily electricity meter reading."""
 
-    _attr_translation_key = "electricity_last_reading"
+    _attr_translation_key = "electricity_last_daily_reading"
     _attr_native_unit_of_measurement = "kWh"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:meter-electric"
@@ -737,6 +740,65 @@ class OctopusElectricityLastReadingSensor(OctopusCoordinatorEntity, SensorEntity
             self.coordinator is not None
             and self.coordinator.last_update_success
             and reading is not None
+        )
+
+
+class OctopusElectricityCumulativeReadingSensor(OctopusCoordinatorEntity, SensorEntity):
+    """Sensor for the latest cumulative electricity meter reading."""
+
+    _attr_translation_key = "electricity_last_reading"
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_native_unit_of_measurement = "kWh"
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_icon = "mdi:meter-electric"
+
+    def __init__(self, account_number, coordinator) -> None:
+        super().__init__(account_number, coordinator)
+        self._attr_unique_id = (
+            f"octopus_{account_number}_electricity_last_reading"
+        )
+
+    def _reading(self):
+        account_data = _get_account_data(self.coordinator, self._account_number)
+        if not account_data:
+            return None
+        return account_data.get("electricity_last_reading")
+
+    @property
+    def native_value(self) -> float | None:
+        reading = self._reading()
+        if not reading:
+            return None
+        value = reading.get("end_register_value")
+        if value is None:
+            return None
+        try:
+            return round(float(value), 2)
+        except (TypeError, ValueError):
+            return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        reading = self._reading()
+        if not reading:
+            return {}
+        return {
+            "period_start": reading.get("start"),
+            "period_end": reading.get("end"),
+            "data_source": reading.get("source"),
+            "unit_of_measurement": reading.get("unit"),
+            "register_start_value": reading.get("start_register_value"),
+            "register_end_value": reading.get("end_register_value"),
+        }
+
+    @property
+    def available(self) -> bool:
+        reading = self._reading()
+        return (
+            self.coordinator is not None
+            and self.coordinator.last_update_success
+            and reading is not None
+            and reading.get("end_register_value") is not None
         )
 
 

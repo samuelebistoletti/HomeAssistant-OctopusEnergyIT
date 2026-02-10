@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.15] - 2026-02-10
+
+### Added
+- Electricity cumulative meter reading sensor aligned with the gas reading for Energy dashboard usage.
+- Public tariff scraper now ingests PLACET offers from the Octopus public site.
+
+### Changed
+- Bundled GraphQL schema refreshed from the Kraken endpoint.
+
+### Fixed
+- Gas last reading sensor now reports the `gas` device class to satisfy Home Assistant Energy requirements.
+
 ## [1.0.14] - 2026-02-04
 
 ### Documentation
