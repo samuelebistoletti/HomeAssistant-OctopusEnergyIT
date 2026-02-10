@@ -3,14 +3,18 @@
 ## [1.0.15] - 2026-02-10
 
 ### Added
-- Electricity cumulative meter reading sensor aligned with the gas reading for Energy dashboard usage.
+- New cumulative electricity sensor `sensor.octopus_<account>_electricity_last_reading` for Home Assistant Energy dashboard (`device_class: energy`, `state_class: total_increasing`).
 - Public tariff scraper now ingests PLACET offers from the Octopus public site.
 
 ### Changed
 - Bundled GraphQL schema refreshed from the Kraken endpoint.
+- Electricity reading nomenclature aligned in code/docs: `electricity_last_daily_reading` = daily delta, `electricity_last_reading` = cumulative meter reading.
 
 ### Fixed
 - Gas last reading sensor now reports the `gas` device class to satisfy Home Assistant Energy requirements.
+
+### Breaking
+- None.
 
 ## [1.0.14] - 2026-02-04
 

@@ -188,9 +188,11 @@ def _build_sensors_for_account(
                     OctopusElectricityPriceF3Sensor(account_number, coordinator)
                 )
 
-        sensors.append(OctopusElectricityLastReadingSensor(account_number, coordinator))
         sensors.append(
-            OctopusElectricityCumulativeReadingSensor(account_number, coordinator)
+            OctopusElectricityLastDailyReadingSensor(account_number, coordinator)
+        )
+        sensors.append(
+            OctopusElectricityLastReadingSensor(account_number, coordinator)
         )
         sensors.append(
             OctopusElectricityLastReadingDateSensor(account_number, coordinator)
@@ -686,7 +688,7 @@ class OctopusGasLastReadingDateSensor(OctopusCoordinatorEntity, SensorEntity):
         )
 
 
-class OctopusElectricityLastReadingSensor(OctopusCoordinatorEntity, SensorEntity):
+class OctopusElectricityLastDailyReadingSensor(OctopusCoordinatorEntity, SensorEntity):
     """Sensor for the latest daily electricity meter reading."""
 
     _attr_translation_key = "electricity_last_daily_reading"
@@ -743,7 +745,7 @@ class OctopusElectricityLastReadingSensor(OctopusCoordinatorEntity, SensorEntity
         )
 
 
-class OctopusElectricityCumulativeReadingSensor(OctopusCoordinatorEntity, SensorEntity):
+class OctopusElectricityLastReadingSensor(OctopusCoordinatorEntity, SensorEntity):
     """Sensor for the latest cumulative electricity meter reading."""
 
     _attr_translation_key = "electricity_last_reading"

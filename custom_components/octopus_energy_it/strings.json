@@ -71,6 +71,9 @@
       "electricity_last_reading": {
         "name": "Last electricity reading"
       },
+      "electricity_last_daily_reading": {
+        "name": "Last daily electricity reading"
+      },
       "electricity_last_reading_date": {
         "name": "Last electricity reading date"
       },

@@ -71,7 +71,7 @@
         "name": "Last gas reading date"
       },
       "electricity_last_reading": {
-        "name": "Cumulative electricity reading"
+        "name": "Last electricity reading"
       },
       "electricity_last_daily_reading": {
         "name": "Last daily electricity reading"
