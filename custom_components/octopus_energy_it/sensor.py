@@ -20,6 +20,9 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util.dt import as_utc
+from homeassistant.util.dt import parse_datetime as _parse_dt
+from homeassistant.util.dt import utcnow
 from .const import DOMAIN
 from .entity import (
     OctopusCoordinatorEntity,
@@ -153,6 +156,23 @@ def _slugify_product_name(name: str | None, fallback: str) -> str:
     return slug or fallback
 
 
+def _find_next_dispatch(
+    planned_dispatches: list[dict], next_start: datetime | None
+) -> dict | None:
+    """Return the dispatch dict whose start matches *next_start*, or None."""
+    if not next_start or not planned_dispatches:
+        return None
+    for d in planned_dispatches:
+        try:
+            raw = d.get("start", "")
+            parsed = _parse_dt(raw)
+            if parsed and as_utc(parsed) == next_start:
+                return d
+        except (TypeError, ValueError, AttributeError):
+            pass
+    return None
+
+
 def _build_sensors_for_account(
     account_number,
     coordinator,
@@ -276,6 +296,9 @@ def _build_sensors_for_account(
             len(devices),
         )
         sensors.append(OctopusEVChargeStatusSensor(account_number, coordinator))
+        sensors.append(OctopusEvNextDispatchStartSensor(account_number, coordinator))
+        sensors.append(OctopusEvNextDispatchEndSensor(account_number, coordinator))
+        sensors.append(OctopusEvPlannedDispatchesSensor(account_number, coordinator))
 
     if account_data.get("heat_balance", 0):
         sensors.append(OctopusHeatBalanceSensor(account_number, coordinator))
@@ -1722,6 +1745,175 @@ class OctopusVehicleBatterySizeSensor(OctopusCoordinatorEntity, SensorEntity):
             and self.coordinator.last_update_success
             and account_data is not None
             and account_data.get("vehicle_battery_size_in_kwh") is not None
+        )
+
+
+class OctopusEvNextDispatchStartSensor(OctopusCoordinatorEntity, SensorEntity):
+    """Sensor exposing the start time of the next planned EV dispatch."""
+
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_translation_key = "ev_next_dispatch_start"
+    _attr_icon = "mdi:lightning-bolt-circle"
+    _attr_entity_registry_enabled_default = True
+
+    def __init__(self, account_number, coordinator) -> None:
+        super().__init__(account_number, coordinator)
+        self._attr_unique_id = f"octopus_{account_number}_ev_next_dispatch_start"
+
+    def _effective_start_end(self, account_data: dict) -> tuple[datetime | None, datetime | None]:
+        """Return (effective_start, effective_end): next future dispatch, or current if active."""
+        next_start = account_data.get("next_start")
+        next_end = account_data.get("next_end")
+        if next_start is not None:
+            return next_start, next_end
+        return account_data.get("current_start"), account_data.get("current_end")
+
+    @property
+    def native_value(self) -> datetime | None:
+        account_data = _get_account_data(self.coordinator, self._account_number)
+        if not account_data:
+            return None
+        start, _ = self._effective_start_end(account_data)
+        return start
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        account_data = _get_account_data(self.coordinator, self._account_number)
+        if not account_data:
+            return {}
+        eff_start, eff_end = self._effective_start_end(account_data)
+        dispatch = _find_next_dispatch(
+            account_data.get("planned_dispatches") or [], eff_start
+        )
+        return {
+            "end": eff_end.isoformat() if eff_end else None,
+            "energy_kwh": (dispatch or {}).get("deltaKwh"),
+            "type": (dispatch or {}).get("type"),
+        }
+
+    @property
+    def available(self) -> bool:
+        account_data = _get_account_data(self.coordinator, self._account_number)
+        if not self.coordinator or not self.coordinator.last_update_success or not account_data:
+            return False
+        start, _ = self._effective_start_end(account_data)
+        return start is not None
+
+
+class OctopusEvNextDispatchEndSensor(OctopusCoordinatorEntity, SensorEntity):
+    """Sensor exposing the end time of the next planned EV dispatch."""
+
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_translation_key = "ev_next_dispatch_end"
+    _attr_icon = "mdi:lightning-bolt-outline"
+    _attr_entity_registry_enabled_default = True
+
+    def __init__(self, account_number, coordinator) -> None:
+        super().__init__(account_number, coordinator)
+        self._attr_unique_id = f"octopus_{account_number}_ev_next_dispatch_end"
+
+    def _effective_start_end(self, account_data: dict) -> tuple[datetime | None, datetime | None]:
+        """Return (effective_start, effective_end): next future dispatch, or current if active."""
+        next_start = account_data.get("next_start")
+        next_end = account_data.get("next_end")
+        if next_start is not None:
+            return next_start, next_end
+        return account_data.get("current_start"), account_data.get("current_end")
+
+    @property
+    def native_value(self) -> datetime | None:
+        account_data = _get_account_data(self.coordinator, self._account_number)
+        if not account_data:
+            return None
+        _, end = self._effective_start_end(account_data)
+        return end
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        account_data = _get_account_data(self.coordinator, self._account_number)
+        if not account_data:
+            return {}
+        eff_start, eff_end = self._effective_start_end(account_data)
+        dispatch = _find_next_dispatch(
+            account_data.get("planned_dispatches") or [], eff_start
+        )
+        return {
+            "start": eff_start.isoformat() if eff_start else None,
+            "energy_kwh": (dispatch or {}).get("deltaKwh"),
+            "type": (dispatch or {}).get("type"),
+        }
+
+    @property
+    def available(self) -> bool:
+        account_data = _get_account_data(self.coordinator, self._account_number)
+        if not self.coordinator or not self.coordinator.last_update_success or not account_data:
+            return False
+        _, end = self._effective_start_end(account_data)
+        return end is not None
+
+
+class OctopusEvPlannedDispatchesSensor(OctopusCoordinatorEntity, SensorEntity):
+    """Sensor exposing the count and details of all planned EV dispatches."""
+
+    _attr_translation_key = "ev_planned_dispatches"
+    _attr_icon = "mdi:calendar-clock"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_registry_enabled_default = True
+
+    def __init__(self, account_number, coordinator) -> None:
+        super().__init__(account_number, coordinator)
+        self._attr_unique_id = f"octopus_{account_number}_ev_planned_dispatches"
+
+    @property
+    def native_value(self) -> int:
+        account_data = _get_account_data(self.coordinator, self._account_number)
+        if not account_data:
+            return 0
+        return len(account_data.get("planned_dispatches") or [])
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        account_data = _get_account_data(self.coordinator, self._account_number)
+        if not account_data:
+            return {}
+        now = utcnow()
+        current_start = account_data.get("current_start")
+        current_end = account_data.get("current_end")
+        dispatches = account_data.get("planned_dispatches") or []
+
+        slots = []
+        for d in sorted(dispatches, key=lambda x: x.get("start", "")):
+            try:
+                raw_start = d.get("start", "")
+                raw_end = d.get("end", "")
+                ds = as_utc(_parse_dt(raw_start)) if raw_start else None
+                de = as_utc(_parse_dt(raw_end)) if raw_end else None
+                is_active = bool(ds and de and ds <= now <= de)
+            except (TypeError, ValueError, AttributeError):
+                is_active = False
+            slots.append(
+                {
+                    "start": d.get("start"),
+                    "end": d.get("end"),
+                    "energy_kwh": d.get("deltaKwh"),
+                    "type": d.get("type"),
+                    "is_active": is_active,
+                }
+            )
+
+        return {
+            "dispatches": slots,
+            "current_start": current_start.isoformat() if current_start else None,
+            "current_end": current_end.isoformat() if current_end else None,
+        }
+
+    @property
+    def available(self) -> bool:
+        account_data = _get_account_data(self.coordinator, self._account_number)
+        return (
+            self.coordinator is not None
+            and self.coordinator.last_update_success
+            and account_data is not None
         )
 
 

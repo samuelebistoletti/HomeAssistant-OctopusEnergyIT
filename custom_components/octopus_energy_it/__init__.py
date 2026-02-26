@@ -721,7 +721,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     and previous.get("value") is not None
                     and latest.get("value") is not None
                 ):
-                    latest_entry["value"] = latest["value"] - previous["value"]
+                    delta = latest["value"] - previous["value"]
+                    if delta < 0:
+                        _LOGGER.warning(
+                            "Negative electricity consumption delta (%.2f kWh) for account %s: "
+                            "start_register=%.2f end_register=%.2f — delta discarded.",
+                            delta,
+                            account_number,
+                            previous["value"],
+                            latest["value"],
+                        )
+                    else:
+                        latest_entry["value"] = delta
 
                 result_data[account_number]["electricity_last_reading"] = latest_entry
 

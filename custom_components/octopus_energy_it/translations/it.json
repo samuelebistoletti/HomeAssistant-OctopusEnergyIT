@@ -170,6 +170,15 @@
       },
       "vehicle_battery_size": {
         "name": "Capacità batteria veicolo"
+      },
+      "ev_next_dispatch_start": {
+        "name": "Inizio prossima ricarica pianificata"
+      },
+      "ev_next_dispatch_end": {
+        "name": "Fine prossima ricarica pianificata"
+      },
+      "ev_planned_dispatches": {
+        "name": "Ricariche pianificate"
       }
     },
     "binary_sensor": {

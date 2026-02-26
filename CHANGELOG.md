@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.0] - 2026-02-26
+
+### Added
+- Three new sensors for SmartFlex/Intelligent Octopus dispatch slots, available for all accounts with at least one smart device:
+  - `sensor.octopus_<account>_ev_next_dispatch_start` – start time of the next planned charging window (`device_class: timestamp`); attributes expose `end`, `energy_kwh`, and `type`.
+  - `sensor.octopus_<account>_ev_next_dispatch_end` – end time of the next planned charging window (`device_class: timestamp`); attributes expose `start`, `energy_kwh`, and `type`.
+  - `sensor.octopus_<account>_ev_planned_dispatches` – count of all upcoming dispatch windows; the `dispatches` attribute contains the full sorted list (start, end, energy_kwh, type, is_active) for use in templates and dashboards. `current_start`/`current_end` are also exposed when a window is currently active.
+- The timestamp sensors are natively understood by Home Assistant (relative-time display, "in X minutes/hours") and can be referenced directly in automations and Lovelace cards.
+
+### Fixed
+- Negative electricity consumption deltas are no longer propagated to the daily reading sensor. When the API returns a register value lower than the previous one (e.g. due to a meter replacement, an estimated correction, or intermittent connectivity), the delta is discarded and a warning is logged with both register values to aid diagnosis. The cumulative reading sensor (`electricity_last_reading`) is unaffected.
+
 ## [1.0.17] - 2026-02-10
 
 ### Changed
