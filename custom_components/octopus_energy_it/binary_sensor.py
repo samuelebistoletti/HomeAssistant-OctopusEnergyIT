@@ -1,17 +1,16 @@
 """Binary sensors for the Octopus Energy Italy integration."""
 
 import logging
-from datetime import datetime
 from typing import Any
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.util.dt import as_local, as_utc, parse_datetime, utcnow
+from homeassistant.util.dt import as_utc, parse_datetime, utcnow
 
 from .const import DOMAIN
-from .entity import OctopusCoordinatorEntity
+from .entity import OctopusCoordinatorEntity, resolve_account_numbers
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -24,15 +23,7 @@ async def async_setup_entry(
     coordinator = data["coordinator"]
     account_number = data["account_number"]
 
-    # Get all account numbers from entry data or coordinator data
-    account_numbers = entry.data.get("account_numbers", [])
-    if not account_numbers and account_number:
-        account_numbers = [account_number]
-
-    # If still no account numbers, try to get them from coordinator data
-    if not account_numbers and coordinator.data:
-        account_numbers = list(coordinator.data.keys())
-
+    account_numbers = resolve_account_numbers(entry, coordinator, account_number)
     _LOGGER.debug("Creating binary sensors for accounts: %s", account_numbers)
 
     entities = []
@@ -47,18 +38,16 @@ async def async_setup_entry(
             entities.append(
                 OctopusIntelligentDispatchingBinarySensor(acc_num, coordinator)
             )
-            _LOGGER.info(
+            _LOGGER.debug(
                 "Added intelligent dispatching binary sensor for account %s", acc_num
             )
-
-            # Log out the keys in coordinator data for debugging
-            _LOGGER.info(
+            _LOGGER.debug(
                 "Available keys in coordinator for %s: %s",
                 acc_num,
                 list(coordinator.data[acc_num].keys()),
             )
             if "plannedDispatches" in coordinator.data[acc_num]:
-                _LOGGER.info(
+                _LOGGER.debug(
                     "Found %d planned dispatches in coordinator data",
                     len(coordinator.data[acc_num]["plannedDispatches"]),
                 )
@@ -186,89 +175,6 @@ class OctopusIntelligentDispatchingBinarySensor(
         # If no active dispatch was found, the sensor is 'off'
         _LOGGER.debug("No active dispatches found, sensor is OFF")
         return False
-
-    def _format_dispatch(self, dispatch):
-        """Format a dispatch entry for display."""
-        try:
-            # Get start and end as strings
-            start_str = dispatch.get("start")
-            end_str = dispatch.get("end")
-
-            if not start_str or not end_str:
-                return None
-
-            # Parse string to datetime and ensure timezone aware
-            start = parse_datetime(start_str)
-            end = parse_datetime(end_str)
-
-            if not start or not end:
-                return None
-
-            # Create a simpler format for the attribute
-            formatted = {
-                "start": start_str,
-                "end": end_str,
-                "start_time": as_local(start).strftime("%Y-%m-%d %H:%M:%S")
-                if start
-                else "Unknown",
-                "end_time": as_local(end).strftime("%Y-%m-%d %H:%M:%S")
-                if end
-                else "Unknown",
-                "charge_kwh": float(dispatch.get("deltaKwh", 0)),
-            }
-
-            # Add type if available (from new flex API)
-            if "type" in dispatch:
-                formatted["type"] = dispatch["type"]
-
-            # Add source and location if available
-            meta = dispatch.get("meta", {})
-            if meta:
-                if "source" in meta:
-                    formatted["source"] = meta["source"]
-                if "location" in meta:
-                    formatted["location"] = meta["location"]
-                # Also check for type in meta for backward compatibility
-                if "type" in meta and "type" not in formatted:
-                    formatted["type"] = meta["type"]
-
-            return formatted
-        except (ValueError, TypeError) as e:
-            _LOGGER.error("Error formatting dispatch: %s - %s", dispatch, e)
-            return None
-
-    def _process_device_preferences(self, device):
-        """Process and format device preferences for display."""
-        if not isinstance(device, dict):
-            return {}
-
-        preferences = device.get("preferences", {})
-        if not preferences:
-            return {}
-
-        processed_prefs = {}
-
-        # Process mode preference if available
-        if "mode" in preferences:
-            processed_prefs["mode"] = preferences["mode"]
-
-        # Process schedules if available
-        if "schedules" in preferences and isinstance(preferences["schedules"], list):
-            schedules = []
-            for schedule in preferences["schedules"]:
-                if isinstance(schedule, dict):
-                    formatted_schedule = {
-                        "day": schedule.get("dayOfWeek", ""),
-                        "time": schedule.get("time", ""),
-                        "min": schedule.get("min", 0),
-                        "max": schedule.get("max", 100),
-                    }
-                    schedules.append(formatted_schedule)
-
-            if schedules:
-                processed_prefs["schedules"] = schedules
-
-        return processed_prefs
 
     def _update_attributes(self) -> None:
         """No custom attributes exposed."""

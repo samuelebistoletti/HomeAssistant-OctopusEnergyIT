@@ -36,7 +36,6 @@ PLATFORMS: list[Platform] = [
     Platform.SELECT,
 ]
 
-API_URL = "https://api.octopus.energy/v1/graphql/"
 TARIFFS_PAGE_URL = "https://octopusenergy.it/le-nostre-tariffe"
 NEXT_DATA_MARKER = '<script id="__NEXT_DATA__" type="application/json">'
 PUBLIC_PRODUCTS_UPDATE_INTERVAL = timedelta(hours=1)

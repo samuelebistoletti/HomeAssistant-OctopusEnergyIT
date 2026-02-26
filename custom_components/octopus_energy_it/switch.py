@@ -1,7 +1,7 @@
 """Switch platform for Octopus Energy Italy."""
 
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
@@ -9,8 +9,9 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util.dt import utcnow
 from .const import DOMAIN
-from .entity import OctopusCoordinatorEntity
+from .entity import OctopusCoordinatorEntity, resolve_account_numbers
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up the Octopus switch from config entry."""
     _LOGGER.debug(
-        "Setting up switch platform at %s", datetime.now().strftime("%H:%M:%S")
+        "Setting up switch platform at %s", utcnow().strftime("%H:%M:%S")
     )
 
     data = hass.data[DOMAIN][config_entry.entry_id]
@@ -35,14 +36,7 @@ async def async_setup_entry(
         _LOGGER.info("No data in coordinator, not creating switches")
         return
 
-    # Get all account numbers from entry data or coordinator data
-    account_numbers = config_entry.data.get("account_numbers", [])
-    if not account_numbers and account_number:
-        account_numbers = [account_number]
-
-    # If still no account numbers, try to get them from coordinator data
-    if not account_numbers and coordinator.data:
-        account_numbers = list(coordinator.data.keys())
+    account_numbers = resolve_account_numbers(config_entry, coordinator, account_number)
 
     _LOGGER.debug("Creating switches for accounts: %s", account_numbers)
 
@@ -81,9 +75,9 @@ async def async_setup_entry(
     else:
         _LOGGER.info("No valid devices to create switches for any account")
 
-    # Setup boost charge switches (always enabled)
+    # Setup boost charge switches for all accounts
     await _setup_boost_charge_switches(
-        hass, config_entry, async_add_entities, api, account_number
+        hass, config_entry, async_add_entities, api, account_numbers
     )
 
 
@@ -92,50 +86,34 @@ async def _setup_boost_charge_switches(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
     client,
-    account_number: str,
+    account_numbers: list[str],
 ) -> None:
-    """Set up boost charge switches."""
+    """Set up boost charge switches for all accounts."""
     try:
-        # Use the existing main coordinator instead of creating a separate one
-        # This avoids token management issues
-        data = hass.data[DOMAIN][entry.entry_id]
-        coordinator = data["coordinator"]
-
-        # Get current data from main coordinator
-        account_data = (
-            coordinator.data.get(account_number, {}) if coordinator.data else {}
-        )
-        devices = account_data.get("devices", [])
-
-        # Create switches for each electric vehicle/charge point
+        coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
         switches = []
 
-        for device in devices:
-            device_id = device.get("id")
-            device_type = device.get("deviceType")
-            device_name = device.get("name", f"Device {device_id}")
+        for acc_num in account_numbers:
+            account_data = (
+                coordinator.data.get(acc_num, {}) if coordinator.data else {}
+            )
+            devices = account_data.get("devices", [])
 
-            # Only create boost charge switches for electric vehicles and charge points
-            if device_type in ["ELECTRIC_VEHICLES", "CHARGE_POINTS"] and device_id:
-                switches.append(
-                    BoostChargeSwitch(
-                        coordinator, client, device_id, device_name, account_number
+            for device in devices:
+                device_id = device.get("id")
+                device_type = device.get("deviceType")
+                device_name = device.get("name", f"Device {device_id}")
+
+                if device_type in ["ELECTRIC_VEHICLES", "CHARGE_POINTS"] and device_id:
+                    switches.append(
+                        BoostChargeSwitch(
+                            coordinator, client, device_id, device_name, acc_num
+                        )
                     )
-                )
 
         if switches:
             async_add_entities(switches)
-            _LOGGER.info(
-                "Set up %d boost charge switches for %d devices",
-                len(switches),
-                len(
-                    [
-                        d
-                        for d in devices
-                        if d.get("deviceType") in ["ELECTRIC_VEHICLES", "CHARGE_POINTS"]
-                    ]
-                ),
-            )
+            _LOGGER.info("Set up %d boost charge switch(es)", len(switches))
         else:
             _LOGGER.info(
                 "No electric vehicles or charge points found for boost charge switches"
@@ -224,7 +202,7 @@ class OctopusSwitch(OctopusCoordinatorEntity, SwitchEntity):
         # If a switching operation is active, return the pending state
         if self._is_switching and self._pending_state is not None:
             # Check if timeout has been exceeded
-            if self._pending_until and datetime.now() > self._pending_until:
+            if self._pending_until and utcnow() > self._pending_until:
                 # Timeout exceeded, revert to API status
                 self._is_switching = False
                 self._pending_state = None
@@ -255,7 +233,7 @@ class OctopusSwitch(OctopusCoordinatorEntity, SwitchEntity):
         # Set pending state immediately
         self._is_switching = True
         self._pending_state = True
-        self._pending_until = datetime.now() + timedelta(minutes=5)  # 5 minute timeout
+        self._pending_until = utcnow() + timedelta(minutes=5)
         self.async_write_ha_state()
 
         # Send API request with retry logic
@@ -269,7 +247,6 @@ class OctopusSwitch(OctopusCoordinatorEntity, SwitchEntity):
                     "Successfully turned on device: device_id=%s", self._device_id
                 )
                 await self.coordinator.async_request_refresh()
-                await self.coordinator.async_refresh()
             else:
                 _LOGGER.error("Failed to turn on device: device_id=%s", self._device_id)
                 # On failure: Reset pending state
@@ -296,7 +273,7 @@ class OctopusSwitch(OctopusCoordinatorEntity, SwitchEntity):
         # Set pending state immediately
         self._is_switching = True
         self._pending_state = False
-        self._pending_until = datetime.now() + timedelta(minutes=5)  # 5 minute timeout
+        self._pending_until = utcnow() + timedelta(minutes=5)
         self.async_write_ha_state()
 
         try:
@@ -309,7 +286,6 @@ class OctopusSwitch(OctopusCoordinatorEntity, SwitchEntity):
                     "Successfully turned off device: device_id=%s", self._device_id
                 )
                 await self.coordinator.async_request_refresh()
-                await self.coordinator.async_refresh()
             else:
                 _LOGGER.error(
                     "Failed to turn off device: device_id=%s", self._device_id
@@ -427,7 +403,7 @@ class BoostChargeSwitch(OctopusCoordinatorEntity, SwitchEntity):
     def is_on(self) -> bool:
         """Return true if boost charging is active."""
         if self._is_switching and self._pending_state is not None:
-            if self._pending_until and datetime.now() > self._pending_until:
+            if self._pending_until and utcnow() > self._pending_until:
                 self._clear_pending()
             else:
                 return self._pending_state
@@ -493,7 +469,7 @@ class BoostChargeSwitch(OctopusCoordinatorEntity, SwitchEntity):
 
         self._is_switching = True
         self._pending_state = True
-        self._pending_until = datetime.now() + timedelta(minutes=5)
+        self._pending_until = utcnow() + timedelta(minutes=5)
         self.async_write_ha_state()
         await self._async_trigger_boost_charge()
 
@@ -501,7 +477,7 @@ class BoostChargeSwitch(OctopusCoordinatorEntity, SwitchEntity):
         """Turn off boost charging."""
         self._is_switching = True
         self._pending_state = False
-        self._pending_until = datetime.now() + timedelta(minutes=5)
+        self._pending_until = utcnow() + timedelta(minutes=5)
         self.async_write_ha_state()
         await self._async_cancel_boost_charge()
 
@@ -544,7 +520,6 @@ class BoostChargeSwitch(OctopusCoordinatorEntity, SwitchEntity):
 
             # Request coordinator refresh to update state
             await self.coordinator.async_request_refresh()
-            await self.coordinator.async_refresh()
 
         except Exception as err:
             _LOGGER.error(
@@ -592,7 +567,6 @@ class BoostChargeSwitch(OctopusCoordinatorEntity, SwitchEntity):
 
             # Request coordinator refresh to update state
             await self.coordinator.async_request_refresh()
-            await self.coordinator.async_refresh()
 
         except Exception as err:
             _LOGGER.error(

@@ -50,8 +50,7 @@ _SUPPLY_STATUS_TRANSLATIONS = {
     "ONBOARDING": "onboarding",
 }
 
-_STATUS_SLUG_RE = re.compile(r"[^a-z0-9]+")
-_PRODUCT_NAME_SLUG_RE = re.compile(r"[^a-z0-9]+")
+_SLUG_RE = re.compile(r"[^a-z0-9]+")
 
 _EV_STATUS_TRANSLATIONS = {
     "SMART_CONTROL_CAPABLE": "smart_control_capable",
@@ -89,7 +88,7 @@ def _normalize_supply_status(raw_status: Any) -> str | None:
     if mapped:
         return mapped
 
-    slug = _STATUS_SLUG_RE.sub("_", normalized.lower()).strip("_")
+    slug = _SLUG_RE.sub("_", normalized.lower()).strip("_")
     return slug or normalized.lower()
 
 
@@ -107,7 +106,7 @@ def _normalize_ev_status(raw_status: Any) -> str:
     if mapped:
         return mapped
 
-    slug = _STATUS_SLUG_RE.sub("_", normalized.lower()).strip("_")
+    slug = _SLUG_RE.sub("_", normalized.lower()).strip("_")
     return slug or "unknown"
 
 
@@ -150,7 +149,7 @@ def _select_current_product(products):
 def _slugify_product_name(name: str | None, fallback: str) -> str:
     if not name:
         return fallback
-    slug = _PRODUCT_NAME_SLUG_RE.sub("_", name.lower()).strip("_")
+    slug = _SLUG_RE.sub("_", name.lower()).strip("_")
     return slug or fallback
 
 

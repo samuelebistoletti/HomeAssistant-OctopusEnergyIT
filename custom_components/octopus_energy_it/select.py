@@ -10,42 +10,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import DOMAIN
-from .entity import OctopusCoordinatorEntity
-
-
-def _get_account_data(coordinator, account_number: str) -> dict[str, Any] | None:
-    data = getattr(coordinator, "data", None)
-    if isinstance(data, dict):
-        account_data = data.get(account_number)
-        if isinstance(account_data, dict):
-            return account_data
-    return None
-
-
-def _first_device_schedule(device: dict[str, Any]) -> dict[str, Any] | None:
-    preferences = device.get("preferences") or {}
-    if not isinstance(preferences, dict):
-        return None
-    schedules = preferences.get("schedules") or []
-    if not isinstance(schedules, list):
-        return None
-    for entry in schedules:
-        if isinstance(entry, dict):
-            return entry
-    return None
-
-
-def _schedule_setting(device: dict[str, Any]) -> dict[str, Any] | None:
-    pref_setting = device.get("preferenceSetting") or {}
-    if not isinstance(pref_setting, dict):
-        return None
-    settings = pref_setting.get("scheduleSettings") or []
-    if not isinstance(settings, list):
-        return None
-    for entry in settings:
-        if isinstance(entry, dict):
-            return entry
-    return None
+from .entity import (
+    OctopusCoordinatorEntity,
+    device_schedule_setting,
+    first_device_schedule,
+    get_account_data,
+    resolve_account_numbers,
+)
 
 
 def _build_time_options(setting: dict[str, Any] | None) -> list[str]:
@@ -84,16 +55,14 @@ async def async_setup_entry(
     coordinator = data["coordinator"]
     api = data["api"]
 
-    account_numbers = data.get("account_numbers") or []
-    if not account_numbers:
-        primary = data.get("account_number")
-        if primary:
-            account_numbers = [primary]
+    account_numbers = resolve_account_numbers(
+        entry, coordinator, data.get("account_number")
+    )
 
     entities: list[OctopusDeviceTargetTimeSelect] = []
 
     for account_number in account_numbers:
-        account_data = _get_account_data(coordinator, account_number)
+        account_data = get_account_data(coordinator, account_number)
         if not account_data:
             continue
 
@@ -105,7 +74,7 @@ async def async_setup_entry(
             if not isinstance(device, dict):
                 continue
             device_id = device.get("id")
-            schedule = _first_device_schedule(device)
+            schedule = first_device_schedule(device)
             if not device_id or not schedule:
                 continue
 
@@ -140,7 +109,7 @@ class OctopusDeviceTargetTimeSelect(OctopusCoordinatorEntity, SelectEntity):
 
     # Helpers --------------------------------------------------------------
     def _current_device(self) -> dict[str, Any] | None:
-        account = _get_account_data(self.coordinator, self._account_number)
+        account = get_account_data(self.coordinator, self._account_number)
         if not account:
             return None
         devices = account.get("devices") or []
@@ -155,7 +124,7 @@ class OctopusDeviceTargetTimeSelect(OctopusCoordinatorEntity, SelectEntity):
         device = self._current_device()
         if not device:
             return None
-        return _first_device_schedule(device)
+        return first_device_schedule(device)
 
     def _current_target_percentage(self) -> int | None:
         schedule = self._current_schedule()
@@ -179,7 +148,7 @@ class OctopusDeviceTargetTimeSelect(OctopusCoordinatorEntity, SelectEntity):
         return str(time_val)[:5]
 
     def _update_local_schedule(self, *, target_time: str | None = None) -> None:
-        account = _get_account_data(self.coordinator, self._account_number)
+        account = get_account_data(self.coordinator, self._account_number)
         if not account:
             return
         devices = account.get("devices") or []
@@ -215,7 +184,7 @@ class OctopusDeviceTargetTimeSelect(OctopusCoordinatorEntity, SelectEntity):
     @property
     def options(self) -> list[str]:
         device = self._current_device()
-        return _build_time_options(_schedule_setting(device) if device else None)
+        return _build_time_options(device_schedule_setting(device) if device else None)
 
     @property
     def current_option(self) -> str | None:

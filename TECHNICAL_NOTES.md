@@ -192,15 +192,18 @@ logger:
 2. **Time Zone Handling**: API uses UTC, local conversion needed for UI
 3. **GraphQL Schema Evolution**: Monitor for field additions/deprecations
 
+#### Public Tariff Sensors
+
+- Device-level scraper reads `__NEXT_DATA__` JSON from `https://octopusenergy.it/le-nostre-tariffe` and augments it with PLACET offers parsed from the HTML section.
+- Only one device per integration; ownership of the device is tracked in `hass.data[DOMAIN]["public_owner"]`.
+- Entities follow the pattern `sensor.octopus_energy_public_tariffs_<tariff_slug>`.
+- State equals `charge_f1` (float with 4 decimal places). Attributes expose `charge_f1/2/3`, `standing_charge_annual`, `terms_url`, `product_type`, etc.
+- **Entities are enabled by default** (`_attr_entity_registry_enabled_default = True`).
+- Refresh interval: hourly, with a 5-minute retry window after fetch failures (last known values are returned from cache while the site is unreachable).
+
 ## Future Considerations
 
 - **WebSocket Support**: Real-time updates from Octopus API
 - **Advanced Scheduling**: More complex charge scheduling options
-- **Energy Dashboard**: Integration with HA Energy features
+- **Energy Dashboard**: Deeper integration with HA Energy features
 - **Automation Templates**: Pre-built automations for common scenarios
-- **Public Tariff Sensors**
-  - Device-level scraper reads `__NEXT_DATA__` JSON from `https://octopusenergy.it/le-nostre-tariffe` and augments with PLACET offers parsed from the HTML section.
-  - Only one device per integration; ownership of the device is tracked in `hass.data[DOMAIN]["public_owner"]`
-  - Entities follow pattern `sensor.octopus_energy_public_tariffs_<tariff_slug>`
-  - State equals `charge_f1` (float with 4 decimal places). Attributes expose `charge_f1/2/3`, `standing_charge_annual`, `terms_url`, `product_type`, etc.
-  - Entities are disabled by default; enable via Entity Registry when needed.

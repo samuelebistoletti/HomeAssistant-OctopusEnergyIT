@@ -34,7 +34,7 @@ Per saperne di più sui miei progetti vai su https://samuele.bistoletti.me/.
 ## Prerequisiti
 
 - Account cliente Octopus Energy Italy con accesso al portale clienti.
-- Home Assistant 2023.12 o successivo (supporto config flow asincrone e `python-graphql-client`).
+- Home Assistant 2025.4.0 o successivo.
 - Facoltativo: attivare il debug in `configuration.yaml` per indagare eventuali problemi API.
 
 ```yaml

@@ -2,10 +2,77 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
+
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
+
+
+# ---------------------------------------------------------------------------
+# Shared data-access helpers (used by number.py, select.py, …)
+# ---------------------------------------------------------------------------
+
+def get_account_data(coordinator, account_number: str) -> dict[str, Any] | None:
+    """Return the account dict for *account_number* from coordinator data."""
+    data = getattr(coordinator, "data", None)
+    if isinstance(data, dict):
+        account_data = data.get(account_number)
+        if isinstance(account_data, dict):
+            return account_data
+    return None
+
+
+def first_device_schedule(device: dict[str, Any]) -> dict[str, Any] | None:
+    """Return the first schedule entry from device preferences, or None."""
+    preferences = device.get("preferences") or {}
+    if not isinstance(preferences, dict):
+        return None
+    schedules = preferences.get("schedules") or []
+    if not isinstance(schedules, list):
+        return None
+    for entry in schedules:
+        if isinstance(entry, dict):
+            return entry
+    return None
+
+
+def device_schedule_setting(device: dict[str, Any]) -> dict[str, Any] | None:
+    """Return the first scheduleSettings entry from preferenceSetting, or None."""
+    pref_setting = device.get("preferenceSetting") or {}
+    if not isinstance(pref_setting, dict):
+        return None
+    settings = pref_setting.get("scheduleSettings") or []
+    if not isinstance(settings, list):
+        return None
+    for entry in settings:
+        if isinstance(entry, dict):
+            return entry
+    return None
+
+
+def resolve_account_numbers(
+    entry: ConfigEntry,
+    coordinator,
+    primary_account_number: str | None = None,
+) -> list[str]:
+    """Return the list of account numbers for this config entry.
+
+    Falls back progressively:
+    1. ``entry.data["account_numbers"]``
+    2. ``primary_account_number`` (single-account legacy path)
+    3. All keys present in ``coordinator.data``
+    """
+    account_numbers: list[str] = list(entry.data.get("account_numbers") or [])
+    if not account_numbers and primary_account_number:
+        account_numbers = [primary_account_number]
+    if not account_numbers and coordinator.data:
+        account_numbers = list(coordinator.data.keys())
+    return account_numbers
 
 
 class OctopusEntityMixin:
