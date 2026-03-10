@@ -30,7 +30,7 @@ All code lives in `custom_components/octopus_energy_it/`. Key files:
 |------|------|
 | `octopus_energy_it.py` | GraphQL API client — auth, token refresh, all API calls |
 | `__init__.py` | Integration setup, `DataUpdateCoordinator`, public tariff scraper |
-| `entity.py` | Base entity classes (`OctopusCoordinatorEntity`, `OctopusPublicProductsEntity`) |
+| `entity.py` | Base entity classes (`OctopusCoordinatorEntity`, `OctopusPublicProductsEntity`, `OctopusDeviceScheduleMixin`) |
 | `config_flow.py` | User auth/credential validation during setup |
 | `sensor.py` | Prices, balance, meter readings, dispatch info, public tariffs |
 | `switch.py` | Device suspension + boost charge switches |
@@ -57,11 +57,14 @@ coordinator.data = {
         "products": [...],
         "ledgers": [...],
         "properties": [...],
-        "plannedDispatches": [...],
-        "meterReadings": {...},
+        "planned_dispatches": [...],
+        "completed_dispatches": [...],
+        "meter_readings": {...},
     }
 }
 ```
+
+All keys use **snake_case**. Do not use camelCase variants (`plannedDispatches`, `meterReadings`) — they no longer exist.
 
 ### Critical Patterns
 
@@ -81,6 +84,10 @@ Never create per-platform coordinators or separate GraphQL clients. All platform
 ### Public Tariffs
 
 A separate hourly coordinator in `__init__.py` scrapes `https://octopusenergy.it/le-nostre-tariffe`, extracting `__NEXT_DATA__` JSON + PLACET offers from HTML. Creates sensors named `sensor.octopus_energy_public_tariffs_<tariff_slug>` under a single shared device. Only one `public_owner` entry exists in `hass.data[DOMAIN]` regardless of how many config entries are loaded.
+
+**Shared device-schedule logic** (`number.py`, `select.py`) lives in `OctopusDeviceScheduleMixin` (entity.py). It provides `_current_device()`, `_current_schedule()`, `_schedule_setting()`, `_current_target_percentage()`, `_current_target_time()`, and `_update_local_schedule()`. Do not duplicate these in number/select.
+
+**Boost charge API calls** go through `api.update_boost_charge(device_id, action)` — never call `_get_graphql_client()` directly, as it bypasses automatic token refresh.
 
 ### Boost Charge Switch Availability
 

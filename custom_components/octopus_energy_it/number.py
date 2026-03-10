@@ -9,10 +9,11 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
 from .const import DOMAIN
 from .entity import (
     OctopusCoordinatorEntity,
-    device_schedule_setting,
+    OctopusDeviceScheduleMixin,
     first_device_schedule,
     get_account_data,
     resolve_account_numbers,
@@ -63,7 +64,9 @@ async def async_setup_entry(
         async_add_entities(entities)
 
 
-class OctopusDeviceChargeTargetNumber(OctopusCoordinatorEntity, NumberEntity):
+class OctopusDeviceChargeTargetNumber(
+    OctopusDeviceScheduleMixin, OctopusCoordinatorEntity, NumberEntity
+):
     """Numero per modificare la percentuale di carica SmartFlex."""
 
     _attr_native_unit_of_measurement = "%"
@@ -79,31 +82,6 @@ class OctopusDeviceChargeTargetNumber(OctopusCoordinatorEntity, NumberEntity):
 
         self._attr_unique_id = f"octopus_{account_number}_{device_id}_charge_target"
 
-    # Helpers --------------------------------------------------------------
-    def _current_device(self) -> dict[str, Any] | None:
-        account = get_account_data(self.coordinator, self._account_number)
-        if not account:
-            return None
-        devices = account.get("devices") or []
-        if not isinstance(devices, list):
-            return None
-        for device in devices:
-            if isinstance(device, dict) and device.get("id") == self._device_id:
-                return device
-        return None
-
-    def _current_schedule(self) -> dict[str, Any] | None:
-        device = self._current_device()
-        if not device:
-            return None
-        return first_device_schedule(device)
-
-    def _schedule_setting(self) -> dict[str, Any] | None:
-        device = self._current_device()
-        if not device:
-            return None
-        return device_schedule_setting(device)
-
     def _parse_float(self, value: Any, default: float) -> float:
         try:
             if value is None:
@@ -111,59 +89,6 @@ class OctopusDeviceChargeTargetNumber(OctopusCoordinatorEntity, NumberEntity):
             return float(str(value))
         except (TypeError, ValueError):
             return default
-
-    def _current_target_time(self) -> str | None:
-        schedule = self._current_schedule()
-        if not schedule:
-            return None
-        time_value = schedule.get("time")
-        if not time_value:
-            return None
-        return str(time_value)[:5]
-
-    def _current_target_percentage(self) -> int | None:
-        schedule = self._current_schedule()
-        if not schedule:
-            return None
-        value = schedule.get("max")
-        if value is None:
-            return None
-        try:
-            return int(float(value))
-        except (TypeError, ValueError):
-            return None
-
-    def _update_local_schedule(
-        self, *, target_percentage: int | None = None, target_time: str | None = None
-    ) -> None:
-        account = get_account_data(self.coordinator, self._account_number)
-        if not account:
-            return
-        devices = account.get("devices") or []
-        if not isinstance(devices, list):
-            return
-        for device in devices:
-            if not isinstance(device, dict) or device.get("id") != self._device_id:
-                continue
-            preferences = device.setdefault("preferences", {})
-            if not isinstance(preferences, dict):
-                preferences = {}
-                device["preferences"] = preferences
-            schedules = preferences.setdefault("schedules", [])
-            if not isinstance(schedules, list) or not schedules:
-                break
-            schedule = schedules[0]
-            if not isinstance(schedule, dict):
-                break
-            if target_percentage is not None:
-                schedule["max"] = target_percentage
-            if target_time is not None:
-                stored_time = (
-                    target_time if len(target_time) > 5 else f"{target_time}:00"
-                )
-                schedule["time"] = stored_time
-            break
-        self.coordinator.async_set_updated_data(dict(self.coordinator.data))
 
     @property
     def translation_placeholders(self) -> dict[str, str]:

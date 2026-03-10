@@ -1,15 +1,16 @@
 """Switch platform for Octopus Energy Italy."""
 
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util.dt import utcnow
+
 from .const import DOMAIN
 from .entity import OctopusCoordinatorEntity, resolve_account_numbers
 
@@ -22,9 +23,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Octopus switch from config entry."""
-    _LOGGER.debug(
-        "Setting up switch platform at %s", utcnow().strftime("%H:%M:%S")
-    )
+    _LOGGER.debug("Setting up switch platform at %s", utcnow().strftime("%H:%M:%S"))
 
     data = hass.data[DOMAIN][config_entry.entry_id]
     api = data["api"]
@@ -45,7 +44,7 @@ async def async_setup_entry(
     for acc_num in account_numbers:
         if acc_num not in coordinator.data:
             _LOGGER.info(
-                "No data for account %s found in coordinator data, not creating switches",
+                "No data for account %s in coordinator, skipping switches",
                 acc_num,
             )
             continue
@@ -94,9 +93,7 @@ async def _setup_boost_charge_switches(
         switches = []
 
         for acc_num in account_numbers:
-            account_data = (
-                coordinator.data.get(acc_num, {}) if coordinator.data else {}
-            )
+            account_data = coordinator.data.get(acc_num, {}) if coordinator.data else {}
             devices = account_data.get("devices", [])
 
             for device in devices:
@@ -143,7 +140,9 @@ class OctopusSwitch(OctopusCoordinatorEntity, SwitchEntity):
         self._pending_state = None
         self._pending_until = None
 
-        self._attr_unique_id = f"octopus_{self._account_number}_ev_charge_smart_control"
+        self._attr_unique_id = (
+            f"octopus_{self._account_number}_{self._device_id}_ev_charge_smart_control"
+        )
         self._update_attributes()
 
     def _update_attributes(self):
@@ -208,7 +207,7 @@ class OctopusSwitch(OctopusCoordinatorEntity, SwitchEntity):
                 self._pending_state = None
                 self._pending_until = None
                 _LOGGER.warning(
-                    "Switch state change timeout reached for device_id=%s, reverting to API state",
+                    "Switch state change timeout for device_id=%s, reverting",
                     self._device_id,
                 )
             else:
@@ -321,7 +320,7 @@ class OctopusSwitch(OctopusCoordinatorEntity, SwitchEntity):
     @property
     def available(self) -> bool:
         """Return if entity is available."""
-        # The entity is available if the coordinator has data and the specific device exists
+        # Available if coordinator has data and device exists
         coordinator_has_data = (
             self.coordinator.last_update_success
             and self._account_number in self.coordinator.data
@@ -357,8 +356,7 @@ class BoostChargeSwitch(OctopusCoordinatorEntity, SwitchEntity):
         self.device_id = device_id
         self.device_name = device_name
         self.account_number = account_number
-        slug_name = device_name.lower().replace(" ", "_")
-        self._attr_unique_id = f"{DOMAIN}_{account_number}_{slug_name}_boost_charge"
+        self._attr_unique_id = f"{DOMAIN}_{account_number}_{device_id}_boost_charge"
         self._is_switching = False
         self._pending_state: bool | None = None
         self._pending_until: datetime | None = None
@@ -482,45 +480,21 @@ class BoostChargeSwitch(OctopusCoordinatorEntity, SwitchEntity):
         await self._async_cancel_boost_charge()
 
     async def _async_trigger_boost_charge(self) -> None:
-        """Trigger boost charging using updateBoostCharge mutation."""
-        mutation = """
-        mutation triggerBoostCharge($input: UpdateBoostChargeInput!) {
-            updateBoostCharge(input: $input) {
-                id
-            }
-        }
-        """
-
-        variables = {"input": {"deviceId": self.device_id, "action": "BOOST"}}
-
+        """Trigger boost charging via the API client."""
         try:
-            # Use the OctopusEnergyIT API client's method
-            client = self.client._get_graphql_client()
-
-            response = await client.execute_async(query=mutation, variables=variables)
-
-            if "errors" in response:
-                error_messages = [
-                    (error.get("message") or "Unknown error")
-                    for error in response["errors"]
-                ]
-
-                error_str = "; ".join(error_messages)
-                _LOGGER.error("GraphQL errors triggering boost charge: %s", error_str)
-                raise HomeAssistantError(f"GraphQL errors: {error_str}")
-
-            result = response.get("data", {}).get("updateBoostCharge")
+            result = await self.client.update_boost_charge(self.device_id, "BOOST")
             if result is None:
-                raise HomeAssistantError("No result from updateBoostCharge mutation")
+                raise HomeAssistantError("Failed to trigger boost charge")
 
-            # Success case - mutation returned without GraphQL errors
             _LOGGER.info(
                 "Successfully triggered boost charge for device %s", self.device_id
             )
-
-            # Request coordinator refresh to update state
             await self.coordinator.async_request_refresh()
 
+        except HomeAssistantError:
+            self._clear_pending()
+            self.async_write_ha_state()
+            raise
         except Exception as err:
             _LOGGER.error(
                 "Failed to trigger boost charge for device %s: %s", self.device_id, err
@@ -530,44 +504,21 @@ class BoostChargeSwitch(OctopusCoordinatorEntity, SwitchEntity):
             raise HomeAssistantError(f"Failed to trigger boost charge: {err}")
 
     async def _async_cancel_boost_charge(self) -> None:
-        """Cancel boost charging using updateBoostCharge mutation."""
-        mutation = """
-        mutation cancelBoostCharge($input: UpdateBoostChargeInput!) {
-            updateBoostCharge(input: $input) {
-                id
-            }
-        }
-        """
-
-        variables = {"input": {"deviceId": self.device_id, "action": "CANCEL"}}
-
+        """Cancel boost charging via the API client."""
         try:
-            # Use the OctopusEnergyIT API client's method
-            client = self.client._get_graphql_client()
-
-            response = await client.execute_async(query=mutation, variables=variables)
-
-            if "errors" in response:
-                error_messages = [
-                    error.get("message", "Unknown error")
-                    for error in response["errors"]
-                ]
-                error_str = "; ".join(error_messages)
-                _LOGGER.error("GraphQL errors canceling boost charge: %s", error_str)
-                raise HomeAssistantError(f"GraphQL errors: {error_str}")
-
-            result = response.get("data", {}).get("updateBoostCharge")
+            result = await self.client.update_boost_charge(self.device_id, "CANCEL")
             if result is None:
-                raise HomeAssistantError("No result from updateBoostCharge mutation")
+                raise HomeAssistantError("Failed to cancel boost charge")
 
-            # Success case - mutation returned without GraphQL errors
             _LOGGER.info(
                 "Successfully canceled boost charge for device %s", self.device_id
             )
-
-            # Request coordinator refresh to update state
             await self.coordinator.async_request_refresh()
 
+        except HomeAssistantError:
+            self._clear_pending()
+            self.async_write_ha_state()
+            raise
         except Exception as err:
             _LOGGER.error(
                 "Failed to cancel boost charge for device %s: %s", self.device_id, err

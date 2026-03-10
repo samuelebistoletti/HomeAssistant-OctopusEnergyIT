@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 # Shared data-access helpers (used by number.py, select.py, …)
 # ---------------------------------------------------------------------------
 
+
 def get_account_data(coordinator, account_number: str) -> dict[str, Any] | None:
     """Return the account dict for *account_number* from coordinator data."""
     data = getattr(coordinator, "data", None)
@@ -60,7 +61,8 @@ def resolve_account_numbers(
     coordinator,
     primary_account_number: str | None = None,
 ) -> list[str]:
-    """Return the list of account numbers for this config entry.
+    """
+    Return the list of account numbers for this config entry.
 
     Falls back progressively:
     1. ``entry.data["account_numbers"]``
@@ -101,6 +103,90 @@ class OctopusCoordinatorEntity(OctopusEntityMixin, CoordinatorEntity):
     def __init__(self, account_number: str, coordinator) -> None:
         OctopusEntityMixin.__init__(self, account_number)
         CoordinatorEntity.__init__(self, coordinator)
+
+
+class OctopusDeviceScheduleMixin:
+    """Mixin providing shared device-schedule helpers for number/select entities."""
+
+    _device_id: str
+    _account_number: str
+
+    def _current_device(self) -> dict[str, Any] | None:
+        account = get_account_data(self.coordinator, self._account_number)
+        if not account:
+            return None
+        devices = account.get("devices") or []
+        if not isinstance(devices, list):
+            return None
+        for device in devices:
+            if isinstance(device, dict) and device.get("id") == self._device_id:
+                return device
+        return None
+
+    def _current_schedule(self) -> dict[str, Any] | None:
+        device = self._current_device()
+        if not device:
+            return None
+        return first_device_schedule(device)
+
+    def _schedule_setting(self) -> dict[str, Any] | None:
+        device = self._current_device()
+        if not device:
+            return None
+        return device_schedule_setting(device)
+
+    def _current_target_percentage(self) -> int | None:
+        schedule = self._current_schedule()
+        if not schedule:
+            return None
+        value = schedule.get("max")
+        if value is None:
+            return None
+        try:
+            return int(float(value))
+        except (TypeError, ValueError):
+            return None
+
+    def _current_target_time(self) -> str | None:
+        schedule = self._current_schedule()
+        if not schedule:
+            return None
+        time_value = schedule.get("time")
+        if not time_value:
+            return None
+        return str(time_value)[:5]
+
+    def _update_local_schedule(
+        self, *, target_percentage: int | None = None, target_time: str | None = None
+    ) -> None:
+        account = get_account_data(self.coordinator, self._account_number)
+        if not account:
+            return
+        devices = account.get("devices") or []
+        if not isinstance(devices, list):
+            return
+        for device in devices:
+            if not isinstance(device, dict) or device.get("id") != self._device_id:
+                continue
+            preferences = device.setdefault("preferences", {})
+            if not isinstance(preferences, dict):
+                preferences = {}
+                device["preferences"] = preferences
+            schedules = preferences.setdefault("schedules", [])
+            if not isinstance(schedules, list) or not schedules:
+                break
+            schedule = schedules[0]
+            if not isinstance(schedule, dict):
+                break
+            if target_percentage is not None:
+                schedule["max"] = target_percentage
+            if target_time is not None:
+                stored_time = (
+                    target_time if len(target_time) > 5 else f"{target_time}:00"
+                )
+                schedule["time"] = stored_time
+            break
+        self.coordinator.async_set_updated_data(dict(self.coordinator.data))
 
 
 class OctopusPublicProductsEntity(CoordinatorEntity):

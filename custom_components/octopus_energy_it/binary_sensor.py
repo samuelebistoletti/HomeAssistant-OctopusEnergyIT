@@ -46,14 +46,14 @@ async def async_setup_entry(
                 acc_num,
                 list(coordinator.data[acc_num].keys()),
             )
-            if "plannedDispatches" in coordinator.data[acc_num]:
+            if "planned_dispatches" in coordinator.data[acc_num]:
                 _LOGGER.debug(
                     "Found %d planned dispatches in coordinator data",
-                    len(coordinator.data[acc_num]["plannedDispatches"]),
+                    len(coordinator.data[acc_num]["planned_dispatches"]),
                 )
         else:
             _LOGGER.info(
-                "Not creating intelligent dispatching sensor due to missing devices data for account %s",
+                "No devices data for account %s, skipping intelligent dispatch sensor",
                 acc_num,
             )
 
@@ -97,9 +97,7 @@ class OctopusIntelligentDispatchingBinarySensor(
         account_data = self.coordinator.data[self._account_number]
 
         # Check for both camelCase and snake_case keys
-        planned_dispatches = account_data.get("plannedDispatches", [])
-        if not planned_dispatches:
-            planned_dispatches = account_data.get("planned_dispatches", [])
+        planned_dispatches = account_data.get("planned_dispatches", [])
 
         if not planned_dispatches:
             _LOGGER.debug("No planned dispatches found")
@@ -124,7 +122,7 @@ class OctopusIntelligentDispatchingBinarySensor(
                     _LOGGER.debug("Dispatch missing start or end time: %s", dispatch)
                     continue
 
-                # Convert strings to datetime objects and ensure they are timezone-aware UTC
+                # Convert to timezone-aware UTC datetimes
                 start = as_utc(parse_datetime(start_str))
                 end = as_utc(parse_datetime(end_str))
 
@@ -150,9 +148,7 @@ class OctopusIntelligentDispatchingBinarySensor(
                         now.isoformat(),
                     )
                     return True
-                time_to_start = (
-                    (start - now).total_seconds() if start > now else None
-                )
+                time_to_start = (start - now).total_seconds() if start > now else None
                 time_since_end = (now - end).total_seconds() if now > end else None
 
                 if time_to_start is not None:

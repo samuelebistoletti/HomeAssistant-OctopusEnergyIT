@@ -13,9 +13,9 @@ La documentazione ufficiale è disponibile sul [developer portal Octopus Energy 
 
 Se utilizzi **Intelligent Octopus** con una **wallbox V2C** ([https://v2charge.com/it/](https://v2charge.com/it/)), questa integrazione ti consente di collegare **Home Assistant** al servizio **Octopus Energy Italy**, delegando a **Intelligent Octopus** la gestione ottimizzata delle ricariche in base agli orari energetici più convenienti e ai target di ricarica impostati direttamente nel servizio.
 
-A differenza dell’integrazione nativa tra V2C e Home Assistant, questa soluzione utilizza **Intelligent Octopus** come motore di ottimizzazione, permettendo di monitorare e controllare da Home Assistant i target di ricarica e le sessioni gestite automaticamente da Octopus Energy.
+A differenza dell'integrazione nativa tra V2C e Home Assistant, questa soluzione utilizza **Intelligent Octopus** come motore di ottimizzazione, permettendo di monitorare e controllare da Home Assistant i target di ricarica e le sessioni gestite automaticamente da Octopus Energy.
 
-Se vuoi connettere Home Assistant direttamente al cloud V2C, prova l’integrazione complementare [HomeAssistant-V2C-Cloud](https://github.com/samuelebistoletti/HomeAssistant-V2C-Cloud): porta in HA telemetrie e controlli nativi della wallbox.
+Se vuoi connettere Home Assistant direttamente al cloud V2C, prova l'integrazione complementare [HomeAssistant-V2C-Cloud](https://github.com/samuelebistoletti/HomeAssistant-V2C-Cloud): porta in HA telemetrie e controlli nativi della wallbox.
 
 Per saperne di più sui miei progetti vai su https://samuele.bistoletti.me/.
 
@@ -25,7 +25,7 @@ Per saperne di più sui miei progetti vai su https://samuele.bistoletti.me/.
 
 - **Copertura completa dei dati italiani** – recupero di account, ledger, proprietà, punti di prelievo, prodotti e finestre SmartFlex pubblicati dalle API ufficiali di Octopus Energy Italy.
 - **Gestione multi-account** – rilevamento automatico di tutti i conti collegati alle credenziali e suddivisione dei dati per ciascuno di essi.
-- **Tariffe dettagliate per luce e gas** – esposizione del prodotto attivo, dei prezzi base/F2/F3, delle quote fisse, dell’unità di misura (incluso il prezzo gas in €/m³) e dei link ai termini contrattuali.
+- **Tariffe dettagliate per luce e gas** – esposizione del prodotto attivo, dei prezzi base/F2/F3, delle quote fisse, dell'unità di misura (incluso il prezzo gas in €/m³) e dei link ai termini contrattuali.
 - **Monitoraggio POD e PDR** – stato fornitura, date di attivazione, presenza del contatore smart e motivazioni di eventuale cessazione.
 - **Funzionalità SmartFlex** – stato dispositivi, limiti di carica, finestre di dispatch correnti/future e capacità della batteria del veicolo.
 - **Interfaccia bilingue** – nomi delle entità e stati di POD, PDR ed EV disponibili in italiano e inglese con descrizioni leggibili.
@@ -47,9 +47,9 @@ logger:
 
 ### HACS (consigliata)
 
-1. In HACS Cerca “Octopus Energy Italy” e installa l’integrazione.
-3. Riavvia Home Assistant quando richiesto.
-4. Configura l’integrazione da **Impostazioni → Dispositivi e servizi → Aggiungi integrazione**.
+1. In HACS cerca "Octopus Energy Italy" e installa l'integrazione.
+2. Riavvia Home Assistant quando richiesto.
+3. Configura l'integrazione da **Impostazioni → Dispositivi e servizi → Aggiungi integrazione**.
 
 ### Installazione manuale
 
@@ -76,7 +76,7 @@ logger:
 
 ### Sensori binari
 
-- `binary_sensor.octopus_<account>_intelligent_dispatching` – `on` se è attiva una finestra di dispatch.
+- `binary_sensor.octopus_<account>_intelligent_dispatching` – `on` se è attiva una finestra di dispatch in questo momento.
 
 ### Sensori
 
@@ -100,32 +100,33 @@ logger:
 | `sensor.octopus_<account>_electricity_last_reading` | kWh | `period_start`, `period_end`, `data_source`, `unit_of_measurement`, `register_start_value`, `register_end_value` |
 | `sensor.octopus_<account>_electricity_last_daily_reading` | kWh | `period_start`, `period_end`, `data_source`, `unit_of_measurement`, `register_start_value`, `register_end_value` |
 | `sensor.octopus_<account>_electricity_last_reading_date` | data | — |
+| `sensor.octopus_<account>_electricity_meter_status` | testo | `account_number`, `pod`, `supply_point_id`, `enrollment_status`, `enrollment_started_at`, `supply_started_at`, `is_smart_meter`, `cancellation_reason` |
 | `sensor.octopus_<account>_gas_last_reading` | m³ | `recorded_at`, `measurement_type`, `measurement_source`, `unit_of_measurement` |
 | `sensor.octopus_<account>_gas_last_reading_date` | data | — |
-
-Nota: `electricity_last_reading` è la lettura cumulativa del contatore (adatta alla dashboard Energia), mentre `electricity_last_daily_reading` rappresenta il consumo dell’ultimo intervallo giornaliero.
-| `sensor.octopus_<account>_electricity_meter_status` | testo | `account_number`, `pod`, `supply_point_id`, `enrollment_status`, `enrollment_started_at`, `supply_started_at`, `is_smart_meter`, `cancellation_reason` |
 | `sensor.octopus_<account>_gas_meter_status` | testo | `account_number`, `pdr`, `enrollment_status`, `enrollment_started_at`, `supply_started_at`, `is_smart_meter`, `cancellation_reason` |
+
+Nota: `electricity_last_reading` è la lettura cumulativa del contatore (adatta alla dashboard Energia di HA), mentre `electricity_last_daily_reading` rappresenta il consumo dell'ultimo intervallo giornaliero.
 
 **Saldi e contratti**
 
-- `sensor.octopus_<account>_electricity_balance`, `sensor.octopus_<account>_gas_balance`, `sensor.octopus_<account>_heat_balance` e `sensor.octopus_<account>_<ledger>_balance` riportano i saldi monetari forniti dall’API.
+- `sensor.octopus_<account>_electricity_balance`, `sensor.octopus_<account>_gas_balance`, `sensor.octopus_<account>_heat_balance` e `sensor.octopus_<account>_<ledger>_balance` riportano i saldi monetari forniti dall'API.
 - `sensor.octopus_<account>_electricity_contract_start`, `_electricity_contract_end` e `_electricity_contract_days_until_expiry` espongono rispettivamente data di attivazione, data di termine e giorni residui del contratto luce (equivalenti disponibili per il gas).
-- `sensor.octopus_<account>_vehicle_battery_size` indica la capacità stimata dell’accumulatore e fornisce gli attributi `account_number`, `device_id`, `device_name`, `vehicle_model`, `device_provider`.
+- `sensor.octopus_<account>_vehicle_battery_size` indica la capacità stimata dell'accumulatore e fornisce gli attributi `account_number`, `device_id`, `device_name`, `vehicle_model`, `device_provider`.
 
 **SmartFlex e dispatch**
 
 | Entità | Unità | Attributi extra |
 | --- | --- | --- |
 | `sensor.octopus_<account>_ev_charge_status` | testo | `account_number`, `device_id`, `device_name`, `device_model`, `device_provider`, `battery_capacity_kwh`, `status_current_state`, `status_connection_state`, `status_is_suspended`, `preferences_mode`, `preferences_unit`, `preferences_target_type`, `allow_grid_export`, `schedules`, `target_day_of_week`, `target_time`, `target_percentage`, `boost_active`, `boost_available`, `last_synced_at` |
+| `sensor.octopus_<account>_ev_next_dispatch_start` | timestamp | `end`, `energy_kwh`, `type` — orario di inizio della prossima finestra di carica pianificata |
+| `sensor.octopus_<account>_ev_next_dispatch_end` | timestamp | `start`, `energy_kwh`, `type` — orario di fine della prossima finestra di carica pianificata |
+| `sensor.octopus_<account>_ev_planned_dispatches` | numero | `dispatches` (lista completa), `current_start`, `current_end` — conteggio delle finestre future; espone anche la finestra attiva corrente |
 
-> I sensori e i controlli dedicati a SmartFlex compaiono solo per i dispositivi Intelligent Octopus supportati; abilita dall'Entity Registry quelli necessari.
+> I sensori e i controlli dedicati a SmartFlex compaiono solo per i dispositivi Intelligent Octopus supportati.
 
 **Tariffe pubbliche**
 
 Per ogni tariffa riportata sul sito Octopus viene creato un sensore dedicato `sensor.octopus_energy_public_tariffs_<nome_tariffa_slug>`, incluse le offerte PLACET.
-
-Ogni sensore ha la seguente lista di attributi associata.
 
 | Attributo | Descrizione |
 | --- | --- |
@@ -138,11 +139,11 @@ Ogni sensore ha la seguente lista di attributi associata.
 | `charge_f1`, `charge_f2`, `charge_f3` | Prezzi €/kWh o €/Smc per fascia |
 | `standing_charge_annual` | Quota fissa annuale nella valuta originaria |
 
-Aggiornamento: i prezzi vengono aggiornati ogni ora; se il sito delle tariffe non risponde, il retry avviene ogni 5 minuti utilizzando l’ultimo valore valido come cache.
+I prezzi vengono aggiornati ogni ora. Se il sito delle tariffe non risponde, il retry avviene automaticamente ogni 5 minuti utilizzando l'ultimo valore valido come cache; i sensori non passano mai in stato Unknown durante un'interruzione temporanea del sito.
 
 ### Number
 
-- `number.octopus_<account>_<device_id>_charge_target` – imposta il target di ricarica SmartFlex (10–100%, passi da 1). L’aggiornamento viene propagato al coordinatore condiviso, che mantiene coerenti sensori e controlli.
+- `number.octopus_<account>_<device_id>_charge_target` – imposta il target di ricarica SmartFlex (10–100%, passi da 1). L'aggiornamento viene propagato al coordinatore condiviso, che mantiene coerenti sensori e controlli.
 
 ### Select
 
@@ -150,8 +151,8 @@ Aggiornamento: i prezzi vengono aggiornati ogni ora; se il sito delle tariffe no
 
 ### Switch
 
-- `switch.octopus_<account>_ev_charge_smart_control` – sospende o riattiva il controllo intelligente del dispositivo principale.
-- `switch.octopus_<account>_<device_name>_boost_charge` – avvia o annulla il boost immediato quando disponibile (solo dispositivi compatibili).
+- `switch.octopus_<account>_<device_id>_ev_charge_smart_control` – sospende o riattiva il controllo intelligente del dispositivo. Contiene `<device_id>` per supportare correttamente più veicoli sullo stesso account.
+- `switch.octopus_<account>_<device_id>_boost_charge` – avvia o annulla il boost immediato quando disponibile (solo per dispositivi con `deviceType` `ELECTRIC_VEHICLES` o `CHARGE_POINTS`).
 
 ### Servizi
 
@@ -160,8 +161,59 @@ Aggiornamento: i prezzi vengono aggiornati ogni ora; se il sito delle tariffe no
   - `target_percentage`: valore 10–100 con passi da 1 (obbligatorio)
   - `target_time`: orario di conclusione (`HH:MM`, 04:00–17:00) (obbligatorio)
 
+## Sviluppo locale
+
+### Ambiente di sviluppo
+
+```bash
+# Installa le dipendenze di sviluppo (ruff, pytest, ecc.)
+bash scripts/setup
+
+# Avvia un'istanza Home Assistant locale su http://localhost:8123
+docker-compose up
+
+# Segui i log del container
+docker-compose logs -f homeassistant
+```
+
+### Test automatici
+
+La suite di test usa `pytest` e `pytest-asyncio` e non richiede una installazione di Home Assistant (tutte le dipendenze HA vengono simulate tramite stub).
+
+```bash
+# Installa le dipendenze di test
+pip install -r requirements_test.txt
+
+# Esegui tutti i test
+python -m pytest tests/
+
+# Con output verboso
+python -m pytest tests/ -v
+
+# Solo un file di test
+python -m pytest tests/test_api_client.py -v
+```
+
+I test coprono:
+
+| File | Cosa testa |
+| --- | --- |
+| `tests/test_api_client.py` | Client GraphQL: autenticazione, token management, fetch dati, mutazioni |
+| `tests/test_sensor.py` | Logica sensori: dispatch window, arrotondamenti letture, sensor states |
+| `tests/test_switch.py` | Switch: unique_id, disponibilità boost, logica sospensione |
+| `tests/test_binary_sensor.py` | Binary sensor dispatching: finestre attive/future/passate |
+| `tests/test_coordinator.py` | Coordinator: fetch dati, retry tariffe pubbliche, gestione errori |
+
+### Lint e formattazione
+
+```bash
+# Formatta e corregge automaticamente (ruff format + ruff check --fix)
+bash scripts/lint
+```
+
 ## Risoluzione problemi
 
 - Verifica **Strumenti per sviluppatori → Log** per messaggi di errore o avviso.
 - Imposta `LOG_API_RESPONSES` o `LOG_TOKEN_RESPONSES` su `True` in `custom_components/octopus_energy_it/const.py` per log estesi (solo per debug temporaneo).
-- Se non compaiono entità, assicurati che almeno un POD o PDR sia attivo nell’area clienti Octopus Energy.
+- Se non compaiono entità, assicurati che almeno un POD o PDR sia attivo nell'area clienti Octopus Energy.
+- Se le entità degli switch risultano non disponibili dopo un aggiornamento, eliminale dall'**Entity Registry** (filtro "non disponibili") — i nuovi ID includono `<device_id>` per supportare più dispositivi per account.

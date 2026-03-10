@@ -7,10 +7,9 @@ electricity price information.
 
 import logging
 import re
-from datetime import UTC, datetime, time
-from typing import Any
-
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
+from typing import Any
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -20,13 +19,12 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.util.dt import as_utc
+from homeassistant.util.dt import as_utc, utcnow
 from homeassistant.util.dt import parse_datetime as _parse_dt
-from homeassistant.util.dt import utcnow
+
 from .const import DOMAIN
 from .entity import (
     OctopusCoordinatorEntity,
-    OctopusEntityMixin,
     OctopusPublicProductsEntity,
 )
 
@@ -173,6 +171,17 @@ def _find_next_dispatch(
     return None
 
 
+def _effective_dispatch_window(
+    account_data: dict,
+) -> tuple[datetime | None, datetime | None]:
+    """Return the most relevant dispatch window: active first, then next future."""
+    current_start = account_data.get("current_start")
+    current_end = account_data.get("current_end")
+    if current_start is not None:
+        return current_start, current_end
+    return account_data.get("next_start"), account_data.get("next_end")
+
+
 def _build_sensors_for_account(
     account_number,
     coordinator,
@@ -210,9 +219,7 @@ def _build_sensors_for_account(
         sensors.append(
             OctopusElectricityLastDailyReadingSensor(account_number, coordinator)
         )
-        sensors.append(
-            OctopusElectricityLastReadingSensor(account_number, coordinator)
-        )
+        sensors.append(OctopusElectricityLastReadingSensor(account_number, coordinator))
         sensors.append(
             OctopusElectricityLastReadingDateSensor(account_number, coordinator)
         )
@@ -591,7 +598,8 @@ class OctopusElectricityStandingChargeSensor(OctopusCoordinatorEntity, SensorEnt
         account_data = _get_account_data(self.coordinator, self._account_number)
         if not account_data:
             return None
-        return account_data.get("electricity_annual_standing_charge_units") or "€/anno"
+        key = "electricity_annual_standing_charge_units"
+        return account_data.get(key) or "€/anno"
 
     @property
     def available(self) -> bool:
@@ -739,7 +747,7 @@ class OctopusElectricityLastDailyReadingSensor(OctopusCoordinatorEntity, SensorE
         if value is None:
             return None
         try:
-            return round(float(value), 2)
+            return round(float(value), 3)
         except (TypeError, ValueError):
             return None
 
@@ -778,9 +786,7 @@ class OctopusElectricityLastReadingSensor(OctopusCoordinatorEntity, SensorEntity
 
     def __init__(self, account_number, coordinator) -> None:
         super().__init__(account_number, coordinator)
-        self._attr_unique_id = (
-            f"octopus_{account_number}_electricity_last_reading"
-        )
+        self._attr_unique_id = f"octopus_{account_number}_electricity_last_reading"
 
     def _reading(self):
         account_data = _get_account_data(self.coordinator, self._account_number)
@@ -797,7 +803,7 @@ class OctopusElectricityLastReadingSensor(OctopusCoordinatorEntity, SensorEntity
         if value is None:
             return None
         try:
-            return round(float(value), 2)
+            return round(float(value), 3)
         except (TypeError, ValueError):
             return None
 
@@ -834,9 +840,7 @@ class OctopusElectricityLastReadingDateSensor(OctopusCoordinatorEntity, SensorEn
 
     def __init__(self, account_number, coordinator) -> None:
         super().__init__(account_number, coordinator)
-        self._attr_unique_id = (
-            f"octopus_{account_number}_electricity_last_reading_date"
-        )
+        self._attr_unique_id = f"octopus_{account_number}_electricity_last_reading_date"
 
     def _reading(self):
         account_data = _get_account_data(self.coordinator, self._account_number)
@@ -1760,20 +1764,12 @@ class OctopusEvNextDispatchStartSensor(OctopusCoordinatorEntity, SensorEntity):
         super().__init__(account_number, coordinator)
         self._attr_unique_id = f"octopus_{account_number}_ev_next_dispatch_start"
 
-    def _effective_start_end(self, account_data: dict) -> tuple[datetime | None, datetime | None]:
-        """Return (effective_start, effective_end): next future dispatch, or current if active."""
-        next_start = account_data.get("next_start")
-        next_end = account_data.get("next_end")
-        if next_start is not None:
-            return next_start, next_end
-        return account_data.get("current_start"), account_data.get("current_end")
-
     @property
     def native_value(self) -> datetime | None:
         account_data = _get_account_data(self.coordinator, self._account_number)
         if not account_data:
             return None
-        start, _ = self._effective_start_end(account_data)
+        start, _ = _effective_dispatch_window(account_data)
         return start
 
     @property
@@ -1781,7 +1777,7 @@ class OctopusEvNextDispatchStartSensor(OctopusCoordinatorEntity, SensorEntity):
         account_data = _get_account_data(self.coordinator, self._account_number)
         if not account_data:
             return {}
-        eff_start, eff_end = self._effective_start_end(account_data)
+        eff_start, eff_end = _effective_dispatch_window(account_data)
         dispatch = _find_next_dispatch(
             account_data.get("planned_dispatches") or [], eff_start
         )
@@ -1794,9 +1790,13 @@ class OctopusEvNextDispatchStartSensor(OctopusCoordinatorEntity, SensorEntity):
     @property
     def available(self) -> bool:
         account_data = _get_account_data(self.coordinator, self._account_number)
-        if not self.coordinator or not self.coordinator.last_update_success or not account_data:
+        if (
+            not self.coordinator
+            or not self.coordinator.last_update_success
+            or not account_data
+        ):
             return False
-        start, _ = self._effective_start_end(account_data)
+        start, _ = _effective_dispatch_window(account_data)
         return start is not None
 
 
@@ -1812,20 +1812,12 @@ class OctopusEvNextDispatchEndSensor(OctopusCoordinatorEntity, SensorEntity):
         super().__init__(account_number, coordinator)
         self._attr_unique_id = f"octopus_{account_number}_ev_next_dispatch_end"
 
-    def _effective_start_end(self, account_data: dict) -> tuple[datetime | None, datetime | None]:
-        """Return (effective_start, effective_end): next future dispatch, or current if active."""
-        next_start = account_data.get("next_start")
-        next_end = account_data.get("next_end")
-        if next_start is not None:
-            return next_start, next_end
-        return account_data.get("current_start"), account_data.get("current_end")
-
     @property
     def native_value(self) -> datetime | None:
         account_data = _get_account_data(self.coordinator, self._account_number)
         if not account_data:
             return None
-        _, end = self._effective_start_end(account_data)
+        _, end = _effective_dispatch_window(account_data)
         return end
 
     @property
@@ -1833,7 +1825,7 @@ class OctopusEvNextDispatchEndSensor(OctopusCoordinatorEntity, SensorEntity):
         account_data = _get_account_data(self.coordinator, self._account_number)
         if not account_data:
             return {}
-        eff_start, eff_end = self._effective_start_end(account_data)
+        eff_start, eff_end = _effective_dispatch_window(account_data)
         dispatch = _find_next_dispatch(
             account_data.get("planned_dispatches") or [], eff_start
         )
@@ -1846,9 +1838,13 @@ class OctopusEvNextDispatchEndSensor(OctopusCoordinatorEntity, SensorEntity):
     @property
     def available(self) -> bool:
         account_data = _get_account_data(self.coordinator, self._account_number)
-        if not self.coordinator or not self.coordinator.last_update_success or not account_data:
+        if (
+            not self.coordinator
+            or not self.coordinator.last_update_success
+            or not account_data
+        ):
             return False
-        _, end = self._effective_start_end(account_data)
+        _, end = _effective_dispatch_window(account_data)
         return end is not None
 
 

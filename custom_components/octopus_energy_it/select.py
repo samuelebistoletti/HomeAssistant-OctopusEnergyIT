@@ -4,14 +4,17 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from typing import Any
+
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
 from .const import DOMAIN
 from .entity import (
     OctopusCoordinatorEntity,
+    OctopusDeviceScheduleMixin,
     device_schedule_setting,
     first_device_schedule,
     get_account_data,
@@ -91,7 +94,9 @@ async def async_setup_entry(
         async_add_entities(entities)
 
 
-class OctopusDeviceTargetTimeSelect(OctopusCoordinatorEntity, SelectEntity):
+class OctopusDeviceTargetTimeSelect(
+    OctopusDeviceScheduleMixin, OctopusCoordinatorEntity, SelectEntity
+):
     """Select per impostare l'orario di completamento SmartFlex."""
 
     _attr_entity_registry_enabled_default = True
@@ -106,72 +111,6 @@ class OctopusDeviceTargetTimeSelect(OctopusCoordinatorEntity, SelectEntity):
         self._attr_unique_id = (
             f"octopus_{account_number}_{device_id}_target_time_select"
         )
-
-    # Helpers --------------------------------------------------------------
-    def _current_device(self) -> dict[str, Any] | None:
-        account = get_account_data(self.coordinator, self._account_number)
-        if not account:
-            return None
-        devices = account.get("devices") or []
-        if not isinstance(devices, list):
-            return None
-        for device in devices:
-            if isinstance(device, dict) and device.get("id") == self._device_id:
-                return device
-        return None
-
-    def _current_schedule(self) -> dict[str, Any] | None:
-        device = self._current_device()
-        if not device:
-            return None
-        return first_device_schedule(device)
-
-    def _current_target_percentage(self) -> int | None:
-        schedule = self._current_schedule()
-        if not schedule:
-            return None
-        value = schedule.get("max")
-        if value is None:
-            return None
-        try:
-            return int(float(value))
-        except (TypeError, ValueError):
-            return None
-
-    def _current_time(self) -> str | None:
-        schedule = self._current_schedule()
-        if not schedule:
-            return None
-        time_val = schedule.get("time")
-        if not time_val:
-            return None
-        return str(time_val)[:5]
-
-    def _update_local_schedule(self, *, target_time: str | None = None) -> None:
-        account = get_account_data(self.coordinator, self._account_number)
-        if not account:
-            return
-        devices = account.get("devices") or []
-        if not isinstance(devices, list):
-            return
-        for device in devices:
-            if not isinstance(device, dict) or device.get("id") != self._device_id:
-                continue
-            preferences = device.setdefault("preferences", {})
-            if not isinstance(preferences, dict):
-                preferences = {}
-                device["preferences"] = preferences
-            schedules = preferences.setdefault("schedules", [])
-            if not isinstance(schedules, list) or not schedules:
-                break
-            schedule = schedules[0]
-            if not isinstance(schedule, dict):
-                break
-            if target_time is not None:
-                stored_time = target_time if len(target_time) > 5 else f"{target_time}:00"
-                schedule["time"] = stored_time
-            break
-        self.coordinator.async_set_updated_data(dict(self.coordinator.data))
 
     @property
     def translation_placeholders(self) -> dict[str, str]:
@@ -188,7 +127,7 @@ class OctopusDeviceTargetTimeSelect(OctopusCoordinatorEntity, SelectEntity):
 
     @property
     def current_option(self) -> str | None:
-        return self._current_time()
+        return self._current_target_time()
 
     async def async_select_option(self, option: str) -> None:
         if option not in self.options:

@@ -1,145 +1,147 @@
-# Octopus Energy Italy Integration - Technical Documentation
+# Octopus Energy Italy Integration — Note tecniche
 
-## Architecture Overview
+## Panoramica dell'architettura
 
-## Riferimenti API
+### Riferimenti API
+
 - Documentazione ufficiale: [developer portal Octopus Energy Italy](https://developer.oeit-kraken.energy/)
-- Endpoint GraphQL: [`https://api.oeit-kraken.energy/v1/graphql/`](https://api.oeit-kraken.energy/v1/graphql/) utilizzato tramite il client `python-graphql-client`
+- Endpoint GraphQL: `https://api.oeit-kraken.energy/v1/graphql/` — usato tramite `python-graphql-client`
 
-### Localization & Naming
-- Tutte le entità espongono `translation_key`, consentendo a Home Assistant di visualizzare nomi e stati in italiano o inglese senza duplicare logica.
-- Le funzioni `_normalize_supply_status` e `_normalize_ev_status` massaggiano gli stati restituiti da Kraken così che POD/PDR ed EV SmartFlex pubblichino sempre slug leggibili.
-- I ledger con etichette poco chiare (es. canone TV) ricevono translation key dedicate per evitare di usare i nomi grezzi del backend.
+### Componenti principali
 
-### Core Components
-- **Main Coordinator**: Central data coordinator using `DataUpdateCoordinator` with shared token management
-- **API Client** (`octopus_energy_it.py`): Handles GraphQL authentication, token refresh, and all API calls
-- **Platforms**: binary_sensor, sensor, switch, number, select - all sharing the main coordinator
-- **Token Management**: On-demand refresh with a 5-minute expiry margin and robust retry handling
-- **Public Tariff Device**: Single device (`Octopus Tariffe pubbliche`) shared across all config entries; sensors hook directly to it instead of per-account devices, refresh hourly with a 5-minute retry window after failures, and are enabled by default
+| File | Ruolo |
+|------|-------|
+| `octopus_energy_it.py` | Client GraphQL — autenticazione, refresh token, tutte le chiamate API |
+| `__init__.py` | Setup integrazione, `DataUpdateCoordinator`, scraper tariffe pubbliche |
+| `entity.py` | Classi base (`OctopusCoordinatorEntity`, `OctopusPublicProductsEntity`, `OctopusDeviceScheduleMixin`) |
+| `config_flow.py` | Validazione credenziali e config flow utente |
+| `sensor.py` | Prezzi, saldi, letture contatori, dispatch, tariffe pubbliche |
+| `switch.py` | Sospensione dispositivi + boost charge |
+| `binary_sensor.py` | Rilevamento finestra di dispatch attiva |
+| `number.py` | Target percentuale ricarica SmartFlex (10–100%) |
+| `select.py` | Selettore orario pronto SmartFlex |
+| `const.py` | Dominio, intervalli, costanti token, flag di debug |
 
-### Key Implementation Details
+### Flusso dati
 
-#### Token Management & Authentication
-- **Shared Token Strategy**: All platforms use `hass.data[DOMAIN][entry.entry_id]["coordinator"]`
-- **Token Refresh Logic**: Tokens refresh on demand when near expiry (5-minute margin, 50-minute fallback when exp missing)
-- **Error Handling**: 5 retry attempts with exponential backoff on login failures
-- **GraphQL Client**: Centralized `_get_graphql_client()` method for consistent authentication
-
-#### Data Flow Architecture
 ```
-API Client (octopus_energy_it.py)
-    ↓ (GraphQL + Token Management)
-Main Coordinator (DataUpdateCoordinator)
-    ↓ (Shared Data)
-├── Binary Sensor (intelligent dispatching)
-├── Sensors (price, balance, meter readings, device status)
-├── Switches (device suspension, boost charge)
-├── Number (SmartFlex target percentage)
-└── Select (SmartFlex target ready time)
+ConfigEntry (email + password)
+    → OctopusEnergyIT API client (octopus_energy_it.py)
+    → OctopusEnergyITDataUpdateCoordinator (__init__.py)
+    → Tutte le piattaforme (sensor, switch, binary_sensor, number, select)
 ```
 
-#### Critical Implementation Rules
+### Struttura dati del coordinator
 
-1. **Coordinator Access Pattern**:
-   ```python
-   # CORRECT - All platforms must use this pattern
-   data = hass.data[DOMAIN][entry.entry_id]
-   coordinator = data["coordinator"]
+```python
+coordinator.data = {
+    "account_number": {
+        "devices": [...],
+        "products": [...],
+        "ledgers": [...],
+        "properties": [...],
+        "planned_dispatches": [...],
+        "completed_dispatches": [...],
+        "meter_readings": {
+            "electricity": [...],
+            "gas": [...],
+        },
+    }
+}
+```
 
-   # WRONG - Never create separate coordinators for platforms
-   # coordinator = SeparateCoordinator(hass, client, account)
-   ```
+Tutte le chiavi usano **snake_case**. Non usare varianti camelCase (`plannedDispatches`, `meterReadings`): non esistono più nel codice.
 
-2. **Token Sharing**:
-   - Never create separate GraphQL clients in platform entities
-   - Always use `self.client._get_graphql_client()` for mutations
-   - Let the main API client handle all token management
+---
 
-3. **Data Structure**:
-   ```python
-   coordinator.data = {
-       "account_number": {
-           "devices": [...],
-           "products": [...],
-           "planned_dispatches": [...],
-           # ... other account data
-       }
-   }
-   ```
+## Dettagli implementativi
 
-#### Switch Platform Specifics
+### Accesso al coordinator
 
-##### Device Suspension Switches
-- Created for each device in coordinator data
-- Uses `change_device_suspension()` API method
-- Pending state management with 5-minute timeout
+Tutte le piattaforme devono usare questo pattern:
 
-##### Boost Charge Switches
-- **CRITICAL**: Only available when Smart Charge is enabled
-- Created only for devices with `deviceType` in `["ELECTRIC_VEHICLES", "CHARGE_POINTS"]`
-- Uses GraphQL `updateBoostCharge` mutations
-- **Availability Logic**:
-  ```python
-  # Device must be LIVE and either:
-  # - SMART_CONTROL_CAPABLE, OR
-  # - Already in BOOST state, OR
-  # - Currently BOOST_CHARGING
-  is_available = (
-      current == "LIVE" and
-      (has_smart_control or has_boost_state or has_boost_charging) and
-      not is_suspended
-  )
-  ```
+```python
+data = hass.data[DOMAIN][entry.entry_id]
+coordinator = data["coordinator"]
+api = data["api"]
+```
 
-#### Number & Select Platform Specifics
+Non creare coordinator separati per piattaforma. Il coordinator e il client API sono istanze singole condivise in `hass.data[DOMAIN][entry.entry_id]`.
 
-##### SmartFlex Target Number
-- One entity per SmartFlex-capable device exposing the charge target (`OctopusDeviceChargeTargetNumber`)
-- Reads limits from `preferenceSetting.scheduleSettings` (`min`, `max`, `timeFrom`, `step`) with granularity defaulting to 1% and floor/ceiling of 10-100%
-- Writes via `set_device_preferences()` to keep parity with the SmartFlex service layer
-- Locally mirrors the returned schedule in coordinator data so UI stays fresh between coordinator polls
+### Token management
 
-##### SmartFlex Ready-Time Select
-- One entity per SmartFlex-capable device exposing the ready-by time (`OctopusDeviceTargetTimeSelect`)
-- Builds options from `scheduleSettings.timeFrom/timeTo/timeStep`, defaulting to 30-minute increments when metadata is missing
-- Reuses the current charge target when only the time changes, calling the same `set_device_preferences()` mutation
-- Mirrors schedule updates locally using the shared coordinator to keep per-device data coherent
+La classe `TokenManager` in `octopus_energy_it.py` gestisce tutto il ciclo di vita del token:
 
-#### Services
+- Refresh automatico quando mancano meno di 5 minuti alla scadenza
+- Fallback su intervallo fisso di 50 minuti se il token non è un JWT decodificabile
+- Token memorizzati **solo in memoria** (mai su disco o config entry)
+- Non chiamare `_get_graphql_client()` direttamente dalle piattaforme — usare sempre i metodi pubblici del client API (es. `api.update_boost_charge()`) che gestiscono il refresh automatico
 
-##### set_device_preferences
-- **Current Service**: Uses new SmartFlexDeviceInterface API
-- **Parameters**: device_id, target_percentage (10-100%), target_time (04:00-17:00)
-- **GraphQL Mutation**: `setDevicePreferences`
-- **Validation**: Time format handling, percentage validation
+### Localizzazione ed entità
 
-#### Error Handling Patterns
+Tutte le entità espongono `_attr_translation_key`. I file di traduzione sono in `translations/it.json` e `translations/en.json`. Le funzioni `_normalize_supply_status` e `_normalize_ev_status` convertono gli stati grezzi del backend Kraken in slug leggibili.
 
-1. **Token Expiry**:
-   - Automatic retry with fresh token
-   - Graceful degradation to cached data
-   - User notification via logs
+### Switch: unique ID e disponibilità
 
-2. **GraphQL Errors**:
-   - Parse error messages from response
-   - Raise `HomeAssistantError` with user-friendly messages
-   - Log technical details for debugging
+Gli switch includono `<device_id>` nel `unique_id` per supportare correttamente più dispositivi (es. due veicoli elettrici) sullo stesso account:
 
-3. **API Rate Limiting**:
-   - Respect 90% of update interval before new API calls
-   - Throttling mechanism in coordinator
+- `{DOMAIN}_{account_number}_{device_id}_ev_charge_smart_control`
+- `{DOMAIN}_{account_number}_{device_id}_boost_charge`
 
-#### Testing & Validation
+Il boost switch è disponibile solo per dispositivi con `deviceType` in `["ELECTRIC_VEHICLES", "CHARGE_POINTS"]` e solo quando il dispositivo è `LIVE` con `SMART_CONTROL_CAPABLE`, stato `BOOST`, o in `BOOST_CHARGING`.
 
-##### Critical Test Scenarios
-1. **Token Expiry Recovery**: Simulate expired tokens, verify auto-refresh
-2. **Boost Switch Availability**: Test with/without Smart Charge enabled
-3. **Service Calls**: Validate both services with various parameters
-4. **Multi-Account Support**: Test with multiple Octopus accounts
-5. **Error Resilience**: Network issues, API errors, malformed responses
+### Mixin schedule dispositivo (number.py, select.py)
 
-##### Debug Settings
+La logica condivisa per accedere e aggiornare lo schedule di un dispositivo SmartFlex è in `OctopusDeviceScheduleMixin` (`entity.py`). Fornisce:
+
+- `_current_device()` — recupera il dict del dispositivo dal coordinator
+- `_current_schedule()` — primo entry degli schedule dal dict `preferences`
+- `_schedule_setting()` — limiti dello schedule da `preferenceSetting`
+- `_current_target_percentage()` / `_current_target_time()` — valori attuali
+- `_update_local_schedule()` — aggiorna i dati locali del coordinator dopo una mutazione, così la UI rimane coerente tra un poll e l'altro
+
+Non duplicare questa logica in `number.py` o `select.py`.
+
+### Tariffe pubbliche e retry
+
+Lo scraper in `__init__.py` legge `https://octopusenergy.it/le-nostre-tariffe` ogni ora, estraendo `__NEXT_DATA__` JSON e offerte PLACET dall'HTML.
+
+Il meccanismo di retry usa `hass.async_call_later()` (un timer one-shot affidabile). **Non** modificare `coordinator.update_interval` a runtime: la modifica non ha effetto sulla schedulazione già attiva del coordinator.
+
+Quando lo scraping fallisce:
+1. Se esiste una cache, viene restituita con un warning — i sensori mantengono il valore precedente
+2. Viene schedulato un retry dopo 5 minuti (`PUBLIC_PRODUCTS_RETRY_DELAY = 300`)
+3. Al successivo retry riuscito, la cache viene aggiornata e il retry annullato
+
+Il `public_products_retry_unsub` viene cancellato in `async_unload_entry` per evitare callback orfani.
+
+Un solo device pubblico per istanza HA (tracciato in `hass.data[DOMAIN]["public_owner"]`), indipendentemente da quante config entry sono caricate.
+
+### Gestione errori del coordinator principale
+
+Quando tutti gli account falliscono il fetch, il coordinator solleva `UpdateFailed` (non restituisce dati obsoleti con status verde). Questo fa segnare `last_update_success=False` e mostra il problema nell'UI di HA.
+
+```python
+if not all_accounts_data:
+    raise UpdateFailed("Failed to fetch data for any account")
+```
+
+Gli account che falliscono individualmente vengono loggati ma non bloccano il fetch degli altri.
+
+---
+
+## Flag di debug (const.py)
+
+Da impostare temporaneamente durante il debug:
+
+```python
+LOG_API_RESPONSES = True   # logga tutte le risposte GraphQL complete
+LOG_TOKEN_RESPONSES = True  # logga operazioni di login e refresh token
+DEBUG_ENABLED = True        # flag debug generale
+```
+
+Logging da `configuration.yaml`:
+
 ```yaml
 logger:
   logs:
@@ -148,62 +150,68 @@ logger:
     custom_components.octopus_energy_it.switch: debug
 ```
 
-#### Performance Considerations
+---
 
-- **Update Interval**: 1 minute (set via `UPDATE_INTERVAL` constant)
-- **API Call Throttling**: Prevents excessive requests
-- **Cached Data Fallback**: Returns last known data on API failures
-- **GraphQL Strategy**: Comprehensive base query plus targeted calls for dispatches and meter readings
+## Test
 
-#### Security Notes
+### Struttura
 
-- **Token Storage**: Tokens stored in memory only, not persisted
-- **Credential Handling**: Email/password from config entry, not logged
-- **GraphQL Endpoint**: Uses official Octopus Energy Kraken API
-- **HTTPS Only**: All API communication over TLS
+I test sono in `tests/` e non richiedono un'installazione di Home Assistant reale — tutte le dipendenze vengono simulate da stub in `tests/conftest.py`.
 
-#### Migration & Compatibility
+```
+tests/
+├── conftest.py           # stub HA + fixture condivise
+├── test_api_client.py    # client GraphQL (82 test)
+├── test_sensor.py        # logica sensori (27 test)
+├── test_switch.py        # switch: unique_id, disponibilità (13 test)
+├── test_binary_sensor.py # binary sensor dispatching (14 test)
+└── test_coordinator.py   # coordinator e tariffe pubbliche (58 test)
+```
 
-- **Breaking Changes**: Document in release notes
-- **Config Migration**: Handle old config entries gracefully
-- **API Versioning**: Monitor for Octopus API changes
-- **Backward Compatibility**: Maintain for at least 2 major versions
+### Esecuzione
 
-#### Maintenance Checklist
+```bash
+pip install -r requirements_test.txt
+python -m pytest tests/
+python -m pytest tests/ -v          # verboso
+python -m pytest tests/test_sensor.py -v  # singolo file
+```
 
-1. **Regular Updates**:
-   - Monitor Octopus API changes
-   - Update GraphQL schema if needed
-   - Test with Home Assistant core updates
+### Infrastruttura stub
 
-2. **Code Quality**:
-   - Follow Home Assistant coding standards
-   - Maintain test coverage
-   - Document all public APIs
+`conftest.py` installa gli stub in `sys.modules` prima di qualsiasi import dei moduli dell'integrazione. Il pattern cruciale:
 
-3. **User Support**:
-   - Clear error messages
-   - Comprehensive documentation
-   - Migration guides for breaking changes
+```python
+# custom_components deve essere registrato come package (con __path__)
+# altrimenti le sotto-import falliscono con "not a package"
+_oeit = types.ModuleType("custom_components.octopus_energy_it")
+_oeit.__path__ = [_oeit_path]
+_oeit.__package__ = "custom_components.octopus_energy_it"
+sys.modules["custom_components.octopus_energy_it"] = _oeit
+```
 
-## Known Issues & Workarounds
+Il file `const.py` non ha dipendenze HA e viene caricato direttamente da disco (non è necessario uno stub per esso).
 
-1. **Device Type Mapping**: Some devices may have unexpected `deviceType` values
-2. **Time Zone Handling**: API uses UTC, local conversion needed for UI
-3. **GraphQL Schema Evolution**: Monitor for field additions/deprecations
+### Copertura delle aree critiche
 
-#### Public Tariff Sensors
+I test coprono esplicitamente:
 
-- Device-level scraper reads `__NEXT_DATA__` JSON from `https://octopusenergy.it/le-nostre-tariffe` and augments it with PLACET offers parsed from the HTML section.
-- Only one device per integration; ownership of the device is tracked in `hass.data[DOMAIN]["public_owner"]`.
-- Entities follow the pattern `sensor.octopus_energy_public_tariffs_<tariff_slug>`.
-- State equals `charge_f1` (float with 4 decimal places). Attributes expose `charge_f1/2/3`, `standing_charge_annual`, `terms_url`, `product_type`, etc.
-- **Entities are enabled by default** (`_attr_entity_registry_enabled_default = True`).
-- Refresh interval: hourly, with a 5-minute retry window after fetch failures (last known values are returned from cache while the site is unreachable).
+1. **Correttezza unique_id switch** — due dispositivi dello stesso tipo producono ID distinti
+2. **Logica finestra di dispatch** — `_effective_dispatch_window()` con slot attivi vs futuri vs passati
+3. **Arrotondamento letture** — 3 decimali per `electricity_last_daily_reading` e `electricity_last_reading`
+4. **Retry tariffe pubbliche** — fallback su cache, scheduling del retry, annullamento al successo
+5. **Token management** — decode JWT, fallback su intervallo fisso, scadenza, validità
 
-## Future Considerations
+---
 
-- **WebSocket Support**: Real-time updates from Octopus API
-- **Advanced Scheduling**: More complex charge scheduling options
-- **Energy Dashboard**: Deeper integration with HA Energy features
-- **Automation Templates**: Pre-built automations for common scenarios
+## Sicurezza
+
+- I token sono conservati **solo in memoria**, mai persistiti
+- Email e password vengono lette dalla config entry e mai loggiate
+- Tutta la comunicazione API avviene su HTTPS (endpoint ufficiale Kraken)
+
+---
+
+## Note su breaking change
+
+Quando si modifica un `unique_id` di entità, documentarlo nel `CHANGELOG.md` con le istruzioni per rimuovere le entità orfane dall'Entity Registry di HA. Non aggiungere migration entry per retrocompatibilità: preferire la breaking change esplicita con istruzioni chiare per l'utente.

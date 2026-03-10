@@ -14,16 +14,14 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
 import aiohttp
-import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.helpers import config_validation as cv
+from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util.dt import as_utc, parse_datetime, utcnow
 
-from .const import CONF_EMAIL, CONF_PASSWORD, DEBUG_ENABLED, DOMAIN, UPDATE_INTERVAL
+from .const import DEBUG_ENABLED, DOMAIN, UPDATE_INTERVAL
 from .octopus_energy_it import OctopusEnergyIT
 
 _LOGGER = logging.getLogger(__name__)
@@ -39,7 +37,7 @@ PLATFORMS: list[Platform] = [
 TARIFFS_PAGE_URL = "https://octopusenergy.it/le-nostre-tariffe"
 NEXT_DATA_MARKER = '<script id="__NEXT_DATA__" type="application/json">'
 PUBLIC_PRODUCTS_UPDATE_INTERVAL = timedelta(hours=1)
-PUBLIC_PRODUCTS_RETRY_INTERVAL = timedelta(minutes=5)
+PUBLIC_PRODUCTS_RETRY_DELAY = 5 * 60  # seconds — used with async_call_later
 
 
 def _slice_html_block(html: str, marker: str, *, max_len: int = 20000) -> str | None:
@@ -76,12 +74,12 @@ def _monthly_to_annual(monthly: str | None) -> str | None:
         value = Decimal(monthly.replace(",", "."))
     except InvalidOperation:
         return None
-    annual = (value * Decimal("12")).quantize(Decimal("0.01"))
+    annual = (value * Decimal(12)).quantize(Decimal("0.01"))
     return format(annual, "f")
 
 
 def _find_link(block: str, token: str) -> str | None:
-    match = re.search(rf'href=\"([^\"]*{re.escape(token)}[^\"]*)\"', block)
+    match = re.search(rf"href=\"([^\"]*{re.escape(token)}[^\"]*)\"", block)
     return match.group(1) if match else None
 
 
@@ -107,7 +105,9 @@ def _extract_placet_products(html: str) -> dict[str, list[dict]]:
             electricity_block = block
             gas_block = ""
 
-        elec_comm_text = _extract_value(electricity_block, "Commercializzazione", "€/mese")
+        elec_comm_text = _extract_value(
+            electricity_block, "Commercializzazione", "€/mese"
+        )
         elec_comm_monthly = _extract_decimal(elec_comm_text)
         elec_comm_annual = _monthly_to_annual(elec_comm_monthly)
 
@@ -116,9 +116,7 @@ def _extract_placet_products(html: str) -> dict[str, list[dict]]:
             f23_text = _extract_value(electricity_block, "Materia prima F23:", "€/kWh")
             f1_value = _extract_decimal(f1_text)
             f23_value = _extract_decimal(f23_text)
-            elec_description = (
-                f"F1: {f1_text or 'n/d'}; F23: {f23_text or 'n/d'}"
-            )
+            elec_description = f"F1: {f1_text or 'n/d'}; F23: {f23_text or 'n/d'}"
             elec_params = {
                 "productType": product_type,
                 "annualStandingCharge": elec_comm_annual,
@@ -127,7 +125,9 @@ def _extract_placet_products(html: str) -> dict[str, list[dict]]:
                 "consumptionChargeF3": f23_value,
             }
         else:
-            elec_price_text = _extract_value(electricity_block, "Materia prima:", "€/kWh")
+            elec_price_text = _extract_value(
+                electricity_block, "Materia prima:", "€/kWh"
+            )
             elec_price = _extract_decimal(elec_price_text)
             elec_description = elec_price_text
             elec_params = {
@@ -182,7 +182,9 @@ def _extract_placet_products(html: str) -> dict[str, list[dict]]:
     return products
 
 
-async def _fetch_public_tariffs(session: aiohttp.ClientSession) -> dict[str, list] | None:
+async def _fetch_public_tariffs(
+    session: aiohttp.ClientSession,
+) -> dict[str, list] | None:
     """Scrape the Octopus public tariffs page to mirror frontend data."""
     try:
         async with session.get(TARIFFS_PAGE_URL, timeout=20) as response:
@@ -215,12 +217,7 @@ async def _fetch_public_tariffs(session: aiohttp.ClientSession) -> dict[str, lis
         _LOGGER.error("Unable to decode __NEXT_DATA__ payload: %s", err)
         return None
 
-    all_products = (
-        payload.get("props", {})
-        .get("pageProps", {})
-        .get("products")
-        or []
-    )
+    all_products = payload.get("props", {}).get("pageProps", {}).get("products") or []
 
     electricity: list[dict] = []
     gas: list[dict] = []
@@ -250,6 +247,7 @@ async def _fetch_public_tariffs(session: aiohttp.ClientSession) -> dict[str, lis
         len(gas),
     )
     return {"electricity": electricity, "gas": gas}
+
 
 # Service schemas
 SERVICE_SET_DEVICE_PREFERENCES = "set_device_preferences"
@@ -281,54 +279,40 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     public_products_coordinator = domain_data.get("public_products_coordinator")
 
     async def async_update_public_products():
+        def _cancel_retry():
+            unsub = domain_data.pop("public_products_retry_unsub", None)
+            if unsub is not None:
+                unsub()
+
+        def _schedule_retry():
+            _cancel_retry()
+
+            @callback
+            def _do_retry(_now):
+                domain_data.pop("public_products_retry_unsub", None)
+                coordinator = domain_data.get("public_products_coordinator")
+                if coordinator is not None:
+                    hass.async_create_task(coordinator.async_request_refresh())
+
+            domain_data["public_products_retry_unsub"] = hass.async_call_later(
+                PUBLIC_PRODUCTS_RETRY_DELAY, _do_retry
+            )
+            _LOGGER.debug(
+                "Scheduled public tariffs retry in %ds", PUBLIC_PRODUCTS_RETRY_DELAY
+            )
+
         products = await _fetch_public_tariffs(session)
         if products is None:
-            cached_products = domain_data.get("public_products_cache")
-            if cached_products:
+            _schedule_retry()
+            cached = domain_data.get("public_products_cache")
+            if cached:
                 _LOGGER.warning(
-                    "Unable to refresh public tariffs - using last known values"
+                    "Public tariffs unavailable - using cached data, retrying in %ds",
+                    PUBLIC_PRODUCTS_RETRY_DELAY,
                 )
-                if (
-                    public_products_coordinator
-                    and public_products_coordinator.update_interval
-                    != PUBLIC_PRODUCTS_RETRY_INTERVAL
-                ):
-                    _LOGGER.debug(
-                        "Shortening public tariffs retry interval to %s after failure",
-                        PUBLIC_PRODUCTS_RETRY_INTERVAL,
-                    )
-                    public_products_coordinator.update_interval = (
-                        PUBLIC_PRODUCTS_RETRY_INTERVAL
-                    )
-                return cached_products
-            _LOGGER.warning(
-                "Public tariffs data unavailable - sensors will remain empty until data loads"
-            )
-            if (
-                public_products_coordinator
-                and public_products_coordinator.update_interval
-                != PUBLIC_PRODUCTS_RETRY_INTERVAL
-            ):
-                _LOGGER.debug(
-                    "Shortening public tariffs retry interval to %s after failure",
-                    PUBLIC_PRODUCTS_RETRY_INTERVAL,
-                )
-                public_products_coordinator.update_interval = (
-                    PUBLIC_PRODUCTS_RETRY_INTERVAL
-                )
-            return {"electricity": [], "gas": []}
-        if (
-            public_products_coordinator
-            and public_products_coordinator.update_interval
-            != PUBLIC_PRODUCTS_UPDATE_INTERVAL
-        ):
-            _LOGGER.debug(
-                "Restoring public tariffs update interval to %s after successful refresh",
-                PUBLIC_PRODUCTS_UPDATE_INTERVAL,
-            )
-            public_products_coordinator.update_interval = (
-                PUBLIC_PRODUCTS_UPDATE_INTERVAL
-            )
+                return cached
+            raise UpdateFailed("Public tariffs unavailable and no cached data")
+        _cancel_retry()
         domain_data["public_products_cache"] = products
         return products
 
@@ -378,12 +362,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Create data update coordinator with improved error handling and retry logic
     async def async_update_data():
         """Fetch data from API with improved error handling for all accounts."""
-        current_time = datetime.now()
+        current_time = utcnow()
 
         # Add throttling to prevent too frequent API calls
         # Store last successful API call time on the function object
         if not hasattr(async_update_data, "last_api_call"):
-            async_update_data.last_api_call = datetime.now() - timedelta(
+            async_update_data.last_api_call = utcnow() - timedelta(
                 minutes=UPDATE_INTERVAL
             )
 
@@ -418,7 +402,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 caller_info = "Error getting caller info"
 
         _LOGGER.debug(
-            "Coordinator update called at %s (Update interval: %s minutes, Time since last API call: %.1f seconds, Caller: %s)",
+            "Coordinator update at %s (interval: %smin, "
+            "since last call: %.1fs, caller: %s)",
             current_time.strftime("%H:%M:%S"),
             UPDATE_INTERVAL,
             time_since_last_call,
@@ -470,25 +455,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             # Update last API call timestamp only on successful calls
             if all_accounts_data:
-                async_update_data.last_api_call = datetime.now()
+                async_update_data.last_api_call = utcnow()
 
             if not all_accounts_data:
-                _LOGGER.error(
-                    "Failed to fetch data from API for any account, returning last known data"
-                )
-                return coordinator.data if hasattr(coordinator, "data") else {}
+                raise UpdateFailed("Failed to fetch data for any account")
 
             _LOGGER.debug(
                 "Successfully fetched data from API at %s for %d accounts",
-                datetime.now().strftime("%H:%M:%S"),
+                utcnow().strftime("%H:%M:%S"),
                 len(all_accounts_data),
             )
             return all_accounts_data
 
+        except UpdateFailed:
+            raise
         except Exception as e:
-            _LOGGER.exception("Unexpected error during data update: %s", e)
-            # Return previous data if available, empty dict otherwise
-            return coordinator.data if hasattr(coordinator, "data") else {}
+            raise UpdateFailed(f"Unexpected error during data update: {e}") from e
 
     async def process_api_data(data, account_number, api, available_products):
         """Process raw API response into structured data."""
@@ -502,9 +484,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "account": {},
                 "electricity_balance": 0,
                 "planned_dispatches": [],
-                "plannedDispatches": [],
                 "completed_dispatches": [],
-                "completedDispatches": [],
                 "property_ids": [],
                 "properties": [],
                 "devices": [],
@@ -562,16 +542,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             }
         }
 
-        # Determine the previous calendar month boundaries for consumption metrics
-        today = datetime.now(tz=UTC).date()
-        first_day_this_month = today.replace(day=1)
-        last_day_previous_month = first_day_this_month - timedelta(days=1)
-        first_day_previous_month = last_day_previous_month.replace(day=1)
-
-        last_month_start = first_day_previous_month.isoformat()
-        last_month_end = last_day_previous_month.isoformat()
-
-        # Extract account data - this should be available even if device-related endpoints fail
+        # Extract account data (available even if devices fail)
         account_data = data.get("account", {})
 
         # Log what data we have - safely handle None values
@@ -584,7 +555,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # Only try to access account_data keys if it's not None and is a dictionary
         if account_data and isinstance(account_data, dict):
             result_data[account_number]["account"] = account_data
-            result_data[account_number]["properties"] = account_data.get("properties", [])
+            result_data[account_number]["properties"] = account_data.get(
+                "properties", []
+            )
             _LOGGER.debug("Account data fields: %s", list(account_data.keys()))
         else:
             _LOGGER.warning("Account data is missing or invalid: %s", account_data)
@@ -631,7 +604,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         result_data[account_number]["other_ledgers"] = other_ledgers
 
         _LOGGER.debug(
-            "Processed %d ledgers for account %s: electricity=%.2f, gas=%.2f, heat=%.2f, other=%d",
+            "Processed %d ledgers for account %s: "
+            "elec=%.2f, gas=%.2f, heat=%.2f, other=%d",
             len(ledgers),
             account_number,
             electricity_balance_eur,
@@ -655,14 +629,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if first_electricity_supply_point:
             electricity_pod = first_electricity_supply_point.get("pod")
             electricity_supply_id = first_electricity_supply_point.get("id")
-            result_data[account_number]["electricity_supply_point"] = first_electricity_supply_point
-            result_data[account_number]["electricity_supply_status"] = first_electricity_supply_point.get("status")
-            result_data[account_number]["electricity_enrolment_status"] = first_electricity_supply_point.get("enrolmentStatus")
-            result_data[account_number]["electricity_enrolment_start"] = first_electricity_supply_point.get("enrolmentStartDate")
-            result_data[account_number]["electricity_supply_start"] = first_electricity_supply_point.get("supplyStartDate")
-            result_data[account_number]["electricity_is_smart_meter"] = first_electricity_supply_point.get("isSmartMeter")
-            result_data[account_number]["electricity_cancellation_reason"] = first_electricity_supply_point.get("cancellationReason")
-            agreements = api.flatten_connection(first_electricity_supply_point.get("agreements"))
+            result_data[account_number]["electricity_supply_point"] = (
+                first_electricity_supply_point
+            )
+            result_data[account_number]["electricity_supply_status"] = (
+                first_electricity_supply_point.get("status")
+            )
+            result_data[account_number]["electricity_enrolment_status"] = (
+                first_electricity_supply_point.get("enrolmentStatus")
+            )
+            result_data[account_number]["electricity_enrolment_start"] = (
+                first_electricity_supply_point.get("enrolmentStartDate")
+            )
+            result_data[account_number]["electricity_supply_start"] = (
+                first_electricity_supply_point.get("supplyStartDate")
+            )
+            result_data[account_number]["electricity_is_smart_meter"] = (
+                first_electricity_supply_point.get("isSmartMeter")
+            )
+            result_data[account_number]["electricity_cancellation_reason"] = (
+                first_electricity_supply_point.get("cancellationReason")
+            )
+            agreements = api.flatten_connection(
+                first_electricity_supply_point.get("agreements")
+            )
             simplified_agreements = []
             for agreement in agreements or []:
                 if not isinstance(agreement, dict):
@@ -675,16 +665,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         "valid_to": agreement.get("validTo"),
                         "is_active": agreement.get("isActive"),
                         "product_code": product.get("code"),
-                        "product_name": product.get("displayName") or product.get("fullName"),
+                        "product_name": product.get("displayName")
+                        or product.get("fullName"),
                     }
                 )
-            result_data[account_number]["electricity_agreements"] = simplified_agreements
+            result_data[account_number]["electricity_agreements"] = (
+                simplified_agreements
+            )
 
         result_data[account_number]["electricity_pod"] = electricity_pod
-        result_data[account_number]["electricity_supply_point_id"] = electricity_supply_id
+        result_data[account_number]["electricity_supply_point_id"] = (
+            electricity_supply_id
+        )
         result_data[account_number]["electricity_property_id"] = electricity_property_id
 
         if electricity_property_id and electricity_pod:
+
             def _parse_read_at(entry: dict) -> datetime | None:
                 timestamp = entry.get("readAt")
                 if not timestamp:
@@ -702,7 +698,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if latest_measurements:
                 sorted_latest = sorted(
                     latest_measurements,
-                    key=lambda item: _parse_read_at(item) or datetime.min.replace(tzinfo=UTC),
+                    key=lambda item: (
+                        _parse_read_at(item) or datetime.min.replace(tzinfo=UTC)
+                    ),
                 )
                 latest = sorted_latest[-1]
                 previous = sorted_latest[-2] if len(sorted_latest) > 1 else None
@@ -724,8 +722,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     delta = latest["value"] - previous["value"]
                     if delta < 0:
                         _LOGGER.warning(
-                            "Negative electricity consumption delta (%.2f kWh) for account %s: "
-                            "start_register=%.2f end_register=%.2f — delta discarded.",
+                            "Negative elec delta (%.2f kWh) "
+                            "for account %s: start=%.2f "
+                            "end=%.2f — discarded.",
                             delta,
                             account_number,
                             previous["value"],
@@ -735,7 +734,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         latest_entry["value"] = delta
 
                 result_data[account_number]["electricity_last_reading"] = latest_entry
-
 
         gas_property_id = None
         first_gas_supply_point = None
@@ -750,13 +748,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if first_gas_supply_point:
             gas_pdr = first_gas_supply_point.get("pdr")
             result_data[account_number]["gas_supply_point"] = first_gas_supply_point
-            result_data[account_number]["gas_supply_status"] = first_gas_supply_point.get("status")
-            result_data[account_number]["gas_enrolment_status"] = first_gas_supply_point.get("enrolmentStatus")
-            result_data[account_number]["gas_enrolment_start"] = first_gas_supply_point.get("enrolmentStartDate")
-            result_data[account_number]["gas_supply_start"] = first_gas_supply_point.get("supplyStartDate")
-            result_data[account_number]["gas_is_smart_meter"] = first_gas_supply_point.get("isSmartMeter")
-            result_data[account_number]["gas_cancellation_reason"] = first_gas_supply_point.get("cancellationReason")
-            agreements = api.flatten_connection(first_gas_supply_point.get("agreements"))
+            result_data[account_number]["gas_supply_status"] = (
+                first_gas_supply_point.get("status")
+            )
+            result_data[account_number]["gas_enrolment_status"] = (
+                first_gas_supply_point.get("enrolmentStatus")
+            )
+            result_data[account_number]["gas_enrolment_start"] = (
+                first_gas_supply_point.get("enrolmentStartDate")
+            )
+            result_data[account_number]["gas_supply_start"] = (
+                first_gas_supply_point.get("supplyStartDate")
+            )
+            result_data[account_number]["gas_is_smart_meter"] = (
+                first_gas_supply_point.get("isSmartMeter")
+            )
+            result_data[account_number]["gas_cancellation_reason"] = (
+                first_gas_supply_point.get("cancellationReason")
+            )
+            agreements = api.flatten_connection(
+                first_gas_supply_point.get("agreements")
+            )
             simplified_agreements = []
             for agreement in agreements or []:
                 if not isinstance(agreement, dict):
@@ -769,7 +781,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         "valid_to": agreement.get("validTo"),
                         "is_active": agreement.get("isActive"),
                         "product_code": product.get("code"),
-                        "product_name": product.get("displayName") or product.get("fullName"),
+                        "product_name": product.get("displayName")
+                        or product.get("fullName"),
                     }
                 )
             result_data[account_number]["gas_agreements"] = simplified_agreements
@@ -787,11 +800,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 result_data[account_number]["gas_last_reading"] = latest_gas_readings[0]
 
         # Extract property IDs
-        property_ids = [
-            prop.get("id") for prop in account_data.get("properties", [])
-        ]
+        property_ids = [prop.get("id") for prop in account_data.get("properties", [])]
         result_data[account_number]["property_ids"] = property_ids
-
 
         # Handle device-related data if it exists (may be missing with KT-CT-4301 error)
         devices = data.get("devices", [])
@@ -820,13 +830,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if planned_dispatches is None:  # Handle explicit None value (from API error)
             planned_dispatches = []
         result_data[account_number]["planned_dispatches"] = planned_dispatches
-        result_data[account_number]["plannedDispatches"] = planned_dispatches
 
         completed_dispatches = data.get("completedDispatches", [])
         if completed_dispatches is None:  # Handle explicit None value (from API error)
             completed_dispatches = []
         result_data[account_number]["completed_dispatches"] = completed_dispatches
-        result_data[account_number]["completedDispatches"] = completed_dispatches
 
         # Calculate current and next dispatches
         now = utcnow()  # Use timezone-aware UTC now
@@ -867,7 +875,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if not products_list:
                 return None
 
-            now_iso = datetime.now().isoformat()
+            now_iso = datetime.now(tz=UTC).isoformat()
             valid_products = []
 
             for product in products_list:
@@ -890,11 +898,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         products = data.get("products") or []
         if products:
             _LOGGER.debug(
-                "Found %d electricity products for account %s", len(products), account_number
+                "Found %d electricity products for account %s",
+                len(products),
+                account_number,
             )
         else:
             _LOGGER.warning(
-                "No electricity products returned for account %s; registering fallback tariff",
+                "No electricity products for account %s; registering fallback tariff",
                 account_number,
             )
             products = [
@@ -932,18 +942,38 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         result_data[account_number]["products_raw"] = products
 
         current_electricity_product = select_current_product(products)
-        result_data[account_number]["current_electricity_product"] = current_electricity_product
+        result_data[account_number]["current_electricity_product"] = (
+            current_electricity_product
+        )
         if current_electricity_product:
-            result_data[account_number]["electricity_contract_start"] = current_electricity_product.get("validFrom")
-            result_data[account_number]["electricity_contract_end"] = current_electricity_product.get("validTo")
+            result_data[account_number]["electricity_contract_start"] = (
+                current_electricity_product.get("validFrom")
+            )
+            result_data[account_number]["electricity_contract_end"] = (
+                current_electricity_product.get("validTo")
+            )
             pricing = current_electricity_product.get("pricing") or {}
-            result_data[account_number]["electricity_annual_standing_charge"] = pricing.get("annualStandingCharge")
-            result_data[account_number]["electricity_annual_standing_charge_units"] = pricing.get("annualStandingChargeUnits")
-            result_data[account_number]["electricity_consumption_charge"] = pricing.get("base")
-            result_data[account_number]["electricity_consumption_charge_f2"] = pricing.get("f2")
-            result_data[account_number]["electricity_consumption_charge_f3"] = pricing.get("f3")
-            result_data[account_number]["electricity_consumption_units"] = pricing.get("units")
-            result_data[account_number]["electricity_terms_url"] = current_electricity_product.get("termsAndConditionsUrl")
+            result_data[account_number]["electricity_annual_standing_charge"] = (
+                pricing.get("annualStandingCharge")
+            )
+            result_data[account_number]["electricity_annual_standing_charge_units"] = (
+                pricing.get("annualStandingChargeUnits")
+            )
+            result_data[account_number]["electricity_consumption_charge"] = pricing.get(
+                "base"
+            )
+            result_data[account_number]["electricity_consumption_charge_f2"] = (
+                pricing.get("f2")
+            )
+            result_data[account_number]["electricity_consumption_charge_f3"] = (
+                pricing.get("f3")
+            )
+            result_data[account_number]["electricity_consumption_units"] = pricing.get(
+                "units"
+            )
+            result_data[account_number]["electricity_terms_url"] = (
+                current_electricity_product.get("termsAndConditionsUrl")
+            )
 
             valid_to = current_electricity_product.get("validTo")
             if valid_to:
@@ -951,7 +981,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     end_date = datetime.fromisoformat(valid_to.replace("Z", "+00:00"))
                     now_date = datetime.now(end_date.tzinfo)
                     days_diff = (end_date - now_date).days
-                    result_data[account_number]["electricity_contract_days_until_expiry"] = max(0, days_diff)
+                    result_data[account_number][
+                        "electricity_contract_days_until_expiry"
+                    ] = max(0, days_diff)
                 except (ValueError, TypeError):
                     pass
 
@@ -959,7 +991,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         gas_products = data.get("gas_products") or []
         if gas_products:
             _LOGGER.debug(
-                "Found %d gas products for account %s", len(gas_products), account_number
+                "Found %d gas products for account %s",
+                len(gas_products),
+                account_number,
             )
         else:
             _LOGGER.debug("No gas products found for account %s", account_number)
@@ -976,11 +1010,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         result_data[account_number]["current_gas_product"] = current_gas_product
         if current_gas_product:
             pricing = current_gas_product.get("pricing") or {}
-            base_rate = (
-                pricing.get("base")
-                if isinstance(pricing, dict)
-                else None
-            )
+            base_rate = pricing.get("base") if isinstance(pricing, dict) else None
             if base_rate is not None:
                 gas_price = base_rate
             else:
@@ -991,11 +1021,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     except (ValueError, TypeError):
                         gas_price = None
 
-            result_data[account_number]["gas_terms_url"] = current_gas_product.get("termsAndConditionsUrl")
+            result_data[account_number]["gas_terms_url"] = current_gas_product.get(
+                "termsAndConditionsUrl"
+            )
             if isinstance(pricing, dict):
-                result_data[account_number]["gas_annual_standing_charge"] = pricing.get("annualStandingCharge")
-                result_data[account_number]["gas_annual_standing_charge_units"] = pricing.get("annualStandingChargeUnits")
-                result_data[account_number]["gas_consumption_units"] = pricing.get("units")
+                result_data[account_number]["gas_annual_standing_charge"] = pricing.get(
+                    "annualStandingCharge"
+                )
+                result_data[account_number]["gas_annual_standing_charge_units"] = (
+                    pricing.get("annualStandingChargeUnits")
+                )
+                result_data[account_number]["gas_consumption_units"] = pricing.get(
+                    "units"
+                )
 
             gas_contract_start = current_gas_product.get("validFrom")
             gas_contract_end = current_gas_product.get("validTo")
@@ -1038,15 +1076,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             primary_account_number,
             list(coordinator.data[primary_account_number].keys()),
         )
-        if "plannedDispatches" in coordinator.data[primary_account_number]:
+        if "planned_dispatches" in coordinator.data[primary_account_number]:
             _LOGGER.info(
                 "Found %d planned dispatches",
-                len(coordinator.data[primary_account_number]["plannedDispatches"]),
+                len(coordinator.data[primary_account_number]["planned_dispatches"]),
             )
             _LOGGER.info(
                 "First planned dispatch: %s",
-                coordinator.data[primary_account_number]["plannedDispatches"][0]
-                if coordinator.data[primary_account_number]["plannedDispatches"]
+                coordinator.data[primary_account_number]["planned_dispatches"][0]
+                if coordinator.data[primary_account_number]["planned_dispatches"]
                 else "None",
             )
 
@@ -1074,14 +1112,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Register services
     async def handle_set_device_preferences(call: ServiceCall):
         """Handle the set_device_preferences service call."""
+        from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+
         device_id = call.data.get(ATTR_DEVICE_ID)
         target_percentage = call.data.get(ATTR_TARGET_PERCENTAGE)
         target_time = call.data.get(ATTR_TARGET_TIME)
 
         if not device_id:
             _LOGGER.error("Device ID is required for set_device_preferences")
-            from homeassistant.exceptions import ServiceValidationError
-
             raise ServiceValidationError(
                 "Device ID is required",
                 translation_domain=DOMAIN,
@@ -1097,31 +1135,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 target_percentage,
             )
 
-        if not 10 <= target_percentage <= 100:
-            _LOGGER.error(
-                f"Invalid target percentage: {target_percentage}. Must be between 10 and 100"
-            )
-            from homeassistant.exceptions import ServiceValidationError
-
-            raise ServiceValidationError(
-                f"Invalid target percentage: {target_percentage}. Must be between 10 and 100",
-                translation_domain=DOMAIN,
-            )
-
         # Validate time format
         try:
             api.format_time_to_hh_mm(target_time)
         except ValueError as time_error:
             _LOGGER.error("Time validation error: %s", time_error)
-            from homeassistant.exceptions import ServiceValidationError
-
             raise ServiceValidationError(
                 f"Invalid time format: {time_error!s}",
                 translation_domain=DOMAIN,
             )
 
         _LOGGER.debug(
-            "Service call set_device_preferences with device_id=%s, target_percentage=%s, target_time=%s",
+            "Service set_device_preferences: device=%s, pct=%s, time=%s",
             device_id,
             target_percentage,
             target_time,
@@ -1153,24 +1178,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 await coordinator.async_request_refresh()
                 return {"success": True}
             _LOGGER.error("Failed to set device preferences")
-            from homeassistant.exceptions import ServiceValidationError
-
             raise ServiceValidationError(
                 "Failed to set device preferences. Check the log for details.",
                 translation_domain=DOMAIN,
             )
+        except (ServiceValidationError, HomeAssistantError):
+            raise
         except ValueError as e:
             _LOGGER.error("Validation error: %s", e)
-            from homeassistant.exceptions import ServiceValidationError
-
             raise ServiceValidationError(
                 f"Invalid parameters: {e}",
                 translation_domain=DOMAIN,
             )
         except Exception as e:
             _LOGGER.exception("Unexpected error setting device preferences: %s", e)
-            from homeassistant.exceptions import HomeAssistantError
-
             raise HomeAssistantError(f"Error setting device preferences: {e}")
 
     hass.services.async_register(
@@ -1198,6 +1219,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             else:
                 domain_data.pop("public_owner", None)
         if not remaining_entries:
+            unsub = domain_data.pop("public_products_retry_unsub", None)
+            if unsub is not None:
+                unsub()
             domain_data.pop("public_products_coordinator", None)
             domain_data.pop("public_products_cache", None)
 

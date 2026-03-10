@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.0] - 2026-03-10
+
+### Fixed
+- Public tariff sensors no longer stay in **Unknown** after a temporary site outage. The retry logic now uses `hass.async_call_later()` (a reliable one-shot timer) instead of manipulating `coordinator.update_interval`, which had no effect at runtime. Cached data is served while the site is down; once it recovers the coordinator is refreshed within 5 minutes automatically.
+- When all accounts fail to fetch data the coordinator now raises `UpdateFailed` (marking `last_update_success=False` and surfacing the repair in the UI) instead of silently returning stale data with a green status.
+
+### Breaking
+- **Entity unique IDs changed for multi-device accounts** — this resolves a bug (issue #9) where users with two electric vehicles or charge points under the same account got duplicate entity IDs, causing one device to be silently ignored.
+  - `switch.<account>_ev_charge_smart_control` → `switch.<account>_<device_id>_ev_charge_smart_control`
+  - `switch.<account>_boost_charge` → `switch.<account>_<device_id>_boost_charge`
+  - After updating, HA will create new entities with the correct IDs. The old orphaned entities can be removed from **Settings → Devices & Services → Entities** (filter by "unavailable").
+
 ## [1.1.0] - 2026-02-26
 
 ### Added

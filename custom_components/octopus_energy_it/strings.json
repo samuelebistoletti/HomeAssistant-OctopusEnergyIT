@@ -168,6 +168,15 @@
       },
       "vehicle_battery_size": {
         "name": "Vehicle battery capacity"
+      },
+      "ev_next_dispatch_start": {
+        "name": "Next EV dispatch start"
+      },
+      "ev_next_dispatch_end": {
+        "name": "Next EV dispatch end"
+      },
+      "ev_planned_dispatches": {
+        "name": "Planned EV dispatches"
       }
     },
     "binary_sensor": {

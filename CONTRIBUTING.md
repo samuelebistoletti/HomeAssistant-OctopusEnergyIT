@@ -1,61 +1,91 @@
-# Contribution guidelines
+# Linee guida per contribuire
 
-Contributing to this project should be as easy and transparent as possible, whether it's:
+Contribuire a questo progetto deve essere il più semplice e trasparente possibile, che si tratti di:
 
-- Reporting a bug
-- Discussing the current state of the code
-- Submitting a fix
-- Proposing new features
+- Segnalare un bug
+- Discutere lo stato attuale del codice
+- Inviare una correzione
+- Proporre nuove funzionalità
 
-## Github is used for everything
+## GitHub è usato per tutto
 
-Github is used to host code, to track issues and feature requests, as well as accept pull requests.
+GitHub è usato per ospitare il codice, tracciare issue e richieste di funzionalità e accettare pull request.
 
-Pull requests are the best way to propose changes to the codebase.
+Le pull request sono il modo migliore per proporre modifiche al codebase.
 
-1. Fork the repo and create your branch from `main`.
-2. If you've changed something, update the documentation.
-3. Make sure your code lints (using `scripts/lint`).
-4. Test you contribution.
-5. Issue that pull request!
+1. Fai un fork del repository e crea il tuo branch da `main`.
+2. Se hai cambiato qualcosa, aggiorna la documentazione di conseguenza.
+3. Assicurati che il codice passi il linter (`bash scripts/lint`).
+4. Assicurati che tutti i test passino (`python -m pytest tests/`).
+5. Apri la pull request!
 
-## Any contributions you make will be under the MIT Software License
+## Tutte le contribuzioni sono sotto la licenza MIT
 
-In short, when you submit code changes, your submissions are understood to be under the same [MIT License](http://choosealicense.com/licenses/mit/) that covers the project. Feel free to contact the maintainers if that's a concern.
+In breve, quando invii modifiche al codice, le tue contribuzioni si intendono sotto la stessa [licenza MIT](http://choosealicense.com/licenses/mit/) che copre il progetto. Contatta i maintainer se questo è un problema.
 
-## Report bugs using Github's [issues](../../issues)
+## Segnalare bug usando le [issue](../../issues) di GitHub
 
-GitHub issues are used to track public bugs.
-Report a bug by [opening a new issue](../../issues/new/choose); it's that easy!
+Le issue GitHub vengono usate per tracciare i bug pubblici.
+Segnala un bug [aprendo una nuova issue](../../issues/new/choose).
 
-## Write bug reports with detail, background, and sample code
+**Le buone segnalazioni di bug** tendono ad avere:
 
-**Great Bug Reports** tend to have:
+- Un breve riepilogo e/o contesto
+- Passaggi per riprodurre il problema (il più specifici possibile)
+- Cosa ti aspettavi che accadesse
+- Cosa accade invece
+- Note (incluso eventualmente perché pensi che stia succedendo o cosa hai già provato)
 
-- A quick summary and/or background
-- Steps to reproduce
-  - Be specific!
-  - Give sample code if you can.
-- What you expected would happen
-- What actually happens
-- Notes (possibly including why you think this might be happening, or stuff you tried that didn't work)
+## Stile del codice
 
-People *love* thorough bug reports. I'm not even kidding.
+Il progetto usa [ruff](https://github.com/astral-sh/ruff) per la formattazione e il linting.
 
-## Use a Consistent Coding Style
+```bash
+# Formatta e corregge automaticamente
+bash scripts/lint
+```
 
-Use [black](https://github.com/ambv/black) to make sure the code follows the style.
+Non usare `black`, `flake8` o `pylint` direttamente: `ruff` li sostituisce tutti.
 
-## Test your code modification
+## Testare le modifiche
 
-This custom component is based on [integration_blueprint template](https://github.com/ludeeus/integration_blueprint).
+### Test automatici
 
-It comes with development environment in a container, easy to launch
-if you use Visual Studio Code. With this container you will have a stand alone
-Home Assistant instance running and already configured with the included
-[`configuration.yaml`](./config/configuration.yaml)
-file.
+La suite di test usa `pytest` e `pytest-asyncio`. Tutte le dipendenze di Home Assistant vengono simulate tramite stub, quindi non è necessaria alcuna installazione di HA.
 
-## License
+```bash
+# Installa le dipendenze di test
+pip install -r requirements_test.txt
 
-By contributing, you agree that your contributions will be licensed under its MIT License.
+# Esegui tutti i test
+python -m pytest tests/
+
+# Con output verboso
+python -m pytest tests/ -v
+
+# Solo un modulo
+python -m pytest tests/test_api_client.py -v
+```
+
+I test coprono il client API, i sensori, gli switch, i binary sensor e il coordinator. Aggiungi o aggiorna i test quando modifichi la logica di questi componenti.
+
+### Ambiente di sviluppo locale (Home Assistant)
+
+Per testare manualmente l'integrazione in un'istanza Home Assistant locale:
+
+```bash
+# Installa dipendenze di sviluppo
+bash scripts/setup
+
+# Avvia Home Assistant su http://localhost:8123
+docker-compose up
+
+# Segui i log
+docker-compose logs -f homeassistant
+```
+
+La configurazione di sviluppo è in `config/configuration.yaml`.
+
+## Licenza
+
+Contribuendo, accetti che le tue contribuzioni saranno licenziate sotto la licenza MIT del progetto.
