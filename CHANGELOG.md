@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.1] - 2026-03-10
+
+### Added
+- CI/CD security pipeline: SAST con bandit (soglia medium), audit dipendenze con pip-audit, secret scanning con gitleaks e analisi CodeQL con query pack `security-extended` — tutti eseguiti su ogni push/PR e settimanalmente.
+- La release è ora bloccata se i test o la security scan falliscono (`needs: [test, security]`).
+
 ## [1.2.0] - 2026-03-10
 
 ### Fixed
