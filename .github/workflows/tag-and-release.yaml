@@ -8,6 +8,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - uses: actions/checkout@v4
@@ -24,6 +26,8 @@ jobs:
 
   security:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - uses: actions/checkout@v4
@@ -114,7 +118,7 @@ jobs:
 
       - name: Create GitHub Release
         if: env.EXISTS == 'false'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b  # v2
         with:
           tag_name: v${{ env.VERSION }}
           name: v${{ env.VERSION }}

@@ -448,7 +448,7 @@ class TestExtractPlacetProducts:
         if result["electricity"]:
             url = result["electricity"][0]["termsAndConditionsUrl"]
             if url:
-                assert url.startswith("https://octopusenergy.it")
+                assert url.startswith("https://octopusenergy.it/")
 
 
 # ---------------------------------------------------------------------------
