@@ -6,8 +6,25 @@ on:
       - 'custom_components/octopus_energy_it/manifest.json'
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install -r requirements_test.txt
+
+      - name: Run tests
+        run: python -m pytest tests/ -v
+
   tag-and-release:
     runs-on: ubuntu-latest
+    needs: test
     permissions:
       contents: write
 
