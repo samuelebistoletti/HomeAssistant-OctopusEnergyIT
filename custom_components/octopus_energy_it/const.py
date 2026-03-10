@@ -3,7 +3,7 @@
 DOMAIN = "octopus_energy_it"
 
 CONF_EMAIL = "email"
-CONF_PASSWORD = "password"
+CONF_PASSWORD = "password"  # nosec B105 — config key name, not a hardcoded credential
 
 # Debug interval settings
 UPDATE_INTERVAL = 1  # Update interval in minutes
