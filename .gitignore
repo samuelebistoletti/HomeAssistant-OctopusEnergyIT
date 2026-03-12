@@ -4,12 +4,22 @@ __pycache__
 *.egg-info
 */build/*
 */dist/*
+*.zip
+
+# CI generated files
+bandit-report.json
+release_body.md
 
 # misc
 .coverage
 .vscode
 coverage.xml
 .ruff_cache
+.venv
+.env
+
+# Claude Code
+.claude
 
 # Home Assistant configuration
 config/*

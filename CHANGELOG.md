@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.2.2] - 2026-03-12
+
+### Changed
+- Updated `actions/checkout` from v4 to v6 across all CI workflows to eliminate the Node.js 20 deprecation warning (Node.js 24 becomes mandatory on GitHub Actions from June 2, 2026).
+
 ## [1.2.1] - 2026-03-10
 
 ### Added

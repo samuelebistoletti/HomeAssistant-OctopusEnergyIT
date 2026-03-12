@@ -15,12 +15,14 @@ bash scripts/setup
 # Format and lint (ruff format + ruff check --fix)
 bash scripts/lint
 
+# Run the automated test suite
+pip install -r requirements_test.txt
+python -m pytest tests/ -v
+
 # Run local Home Assistant instance (http://localhost:8123)
 docker-compose up
 docker-compose logs -f homeassistant
 ```
-
-There is no automated test suite — validation is done manually via the local Home Assistant dev container.
 
 ## Architecture
 
