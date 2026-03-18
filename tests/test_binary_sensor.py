@@ -313,3 +313,50 @@ class TestIntelligentDispatchingBinarySensorIsOn:
         coordinator.last_update_success = True
         sensor = _make_sensor(coordinator)
         assert sensor.is_on is False
+
+
+# ---------------------------------------------------------------------------
+# OctopusIntelligentDispatchingBinarySensor.available
+# ---------------------------------------------------------------------------
+
+
+class TestIntelligentDispatchingBinarySensorAvailable:
+    """Tests for OctopusIntelligentDispatchingBinarySensor.available."""
+
+    def test_available_when_coordinator_ok_and_account_present(self):
+        coordinator = _make_coordinator([])
+        coordinator.last_update_success = True
+        sensor = _make_sensor(coordinator)
+        assert sensor.available is True
+
+    def test_unavailable_when_coordinator_update_failed(self):
+        coordinator = _make_coordinator([])
+        coordinator.last_update_success = False
+        sensor = _make_sensor(coordinator)
+        assert sensor.available is False
+
+    def test_unavailable_when_coordinator_data_is_none(self):
+        coordinator = MagicMock()
+        coordinator.data = None
+        coordinator.last_update_success = True
+        sensor = _make_sensor(coordinator)
+        assert sensor.available is False
+
+    def test_unavailable_when_coordinator_data_not_dict(self):
+        coordinator = MagicMock()
+        coordinator.data = ["not", "a", "dict"]
+        coordinator.last_update_success = True
+        sensor = _make_sensor(coordinator)
+        assert sensor.available is False
+
+    def test_unavailable_when_account_not_in_data(self):
+        coordinator = MagicMock()
+        coordinator.data = {"OTHER-ACCOUNT": {}}
+        coordinator.last_update_success = True
+        sensor = _make_sensor(coordinator)
+        assert sensor.available is False
+
+    def test_unavailable_when_coordinator_is_none(self):
+        sensor = _make_sensor(MagicMock())
+        sensor.coordinator = None
+        assert sensor.available is False

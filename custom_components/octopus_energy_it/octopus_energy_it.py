@@ -6,6 +6,7 @@ managing devices, and retrieving electricity usage and tariff data.
 """
 
 import asyncio
+import copy
 import json
 import logging
 from datetime import UTC, datetime
@@ -15,6 +16,9 @@ from homeassistant.exceptions import ConfigEntryNotReady
 from python_graphql_client import GraphqlClient
 
 from .const import (
+    LOGIN_INITIAL_DELAY,
+    LOGIN_MAX_DELAY,
+    LOGIN_RETRIES,
     LOG_API_RESPONSES,
     LOG_TOKEN_RESPONSES,
     TOKEN_AUTO_REFRESH_INTERVAL,
@@ -449,6 +453,9 @@ class TokenManager:
             return
 
         try:
+            # Signature verification is intentionally skipped: we trust the token
+            # because it was obtained over HTTPS from the Kraken API moments ago.
+            # We only need the `exp` claim to schedule a proactive refresh.
             decoded = jwt.decode(token, options={"verify_signature": False})
             exp = decoded.get("exp")
             self._expiry = float(exp) if exp is not None else None
@@ -547,13 +554,112 @@ class OctopusEnergyIT:
 
         return response
 
+    @staticmethod
+    def _mask_token_response(response: dict) -> dict:
+        """Return a deep copy of *response* with the token value masked for logging."""
+        safe = copy.deepcopy(response)
+        token_container = safe.get("data", {}).get("obtainKrakenToken")
+        if isinstance(token_container, dict) and token_container.get("token"):
+            token_container["token"] = token_container["token"][:8] + "..." + "*" * 12
+        return safe
+
+    async def _attempt_login(
+        self,
+        query: str,
+        variables: dict,
+        attempt: int,
+        retries: int,
+        delay: float,
+    ) -> tuple[bool, bool, float]:
+        """
+        Execute one login attempt.
+
+        Returns ``(success, abort, new_delay)`` where:
+        - success: token was stored; caller should return True.
+        - abort: unrecoverable error; caller should return False immediately.
+        - new_delay: updated exponential-backoff delay for the next attempt.
+        """
+        _LOGGER.debug("Making login attempt %s of %s", attempt, retries)
+        response = await self._execute_graphql(
+            query=query,
+            variables=variables,
+            require_auth=False,
+            retry_on_token_error=False,
+        )
+
+        if LOG_TOKEN_RESPONSES:
+            _LOGGER.info(
+                "Token response (partial): %s",
+                json.dumps(self._mask_token_response(response), indent=2),
+            )
+
+        next_delay = min(delay * 2, LOGIN_MAX_DELAY)
+
+        if not isinstance(response, dict):
+            _LOGGER.error(
+                "Unexpected login response type at attempt %s: %s", attempt, response
+            )
+            await asyncio.sleep(delay)
+            return False, False, next_delay
+
+        if "errors" in response:
+            first_error = response["errors"][0]
+            error_code = first_error.get("extensions", {}).get("errorCode")
+            error_message = first_error.get("message", "Unknown error")
+
+            if error_code == "KT-CT-1138":  # Invalid credentials - no point retrying
+                _LOGGER.error(
+                    "Login failed: %s (attempt %s/%s). Invalid credentials; aborting.",
+                    error_message,
+                    attempt,
+                    retries,
+                )
+                return False, True, next_delay
+
+            if error_code == "KT-CT-1199":  # Rate limit
+                _LOGGER.warning(
+                    "Rate limit hit. Retrying in %ss... (attempt %s of %s)",
+                    delay,
+                    attempt,
+                    retries,
+                )
+            else:
+                _LOGGER.error(
+                    "Login failed: %s (attempt %s of %s)",
+                    error_message,
+                    attempt,
+                    retries,
+                )
+
+            await asyncio.sleep(delay)
+            return False, False, next_delay
+
+        if "data" in response and "obtainKrakenToken" in response["data"]:
+            token_data = response["data"]["obtainKrakenToken"]
+            token = token_data.get("token")
+            payload = token_data.get("payload")
+            if token:
+                if payload and isinstance(payload, dict) and "exp" in payload:
+                    self._token_manager.set_token(token, payload["exp"])
+                else:
+                    self._token_manager.set_token(token)
+                return True, False, next_delay
+            _LOGGER.error(
+                "No token in response despite success (attempt %s of %s)",
+                attempt,
+                retries,
+            )
+        else:
+            _LOGGER.error(
+                "Unexpected API response format at attempt %s: %s", attempt, response
+            )
+
+        await asyncio.sleep(delay)
+        return False, False, next_delay
+
     async def login(self) -> bool:
         """Login and obtain a new token."""
-        # Import constants for logging options
-
-        # Use a lock to prevent multiple concurrent login attempts
         async with self._login_lock:
-            # Check if token is still valid after waiting for the lock
             if self._token_manager.is_valid:
                 _LOGGER.debug("Token still valid after lock, skipping login")
                 return True
@@ -571,139 +677,23 @@ class OctopusEnergyIT:
             }
             """
             variables = {"email": self._email, "password": self._password}
-            retries = 5  # Reduced from 10 to 5 retries for simpler logic
-            attempt = 0
-            delay = 1  # Start with 1 second delay
-            max_delay = 30  # Cap the delay at 30 seconds
+            delay = float(LOGIN_INITIAL_DELAY)
 
-            while attempt < retries:
-                attempt += 1
+            for attempt in range(1, LOGIN_RETRIES + 1):
                 try:
-                    _LOGGER.debug("Making login attempt %s of %s", attempt, retries)
-                    response = await self._execute_graphql(
-                        query=query,
-                        variables=variables,
-                        require_auth=False,
-                        retry_on_token_error=False,
+                    success, abort, delay = await self._attempt_login(
+                        query, variables, attempt, LOGIN_RETRIES, delay
                     )
-
-                    # Log token response when LOG_TOKEN_RESPONSES is enabled
-                    if LOG_TOKEN_RESPONSES:
-                        # Create a safe copy of the response for logging
-                        import copy
-
-                        safe_response = copy.deepcopy(response)
-                        if isinstance(safe_response, dict):
-                            # Check for token and mask it for logging
-                            token_container = safe_response.get("data", {}).get(
-                                "obtainKrakenToken"
-                            )
-                            if isinstance(token_container, dict) and "token" in (
-                                token_container
-                            ):
-                                token = token_container["token"]
-                                if token and len(token) > 10:
-                                    # Keep first 5 and last 5 chars, mask the rest
-                                    mask_length = len(token) - 10
-                                    masked_token = (
-                                        token[:5] + "*" * mask_length + token[-5:]
-                                    )
-                                    token_container["token"] = masked_token
-                        _LOGGER.info(
-                            "Token response (partial): %s",
-                            json.dumps(safe_response, indent=2),
-                        )
-
-                    if not isinstance(response, dict):
-                        _LOGGER.error(
-                            "Unexpected login response type at attempt %s: %s",
-                            attempt,
-                            response,
-                        )
-                        await asyncio.sleep(delay)
-                        delay = min(delay * 2, max_delay)
-                        continue
-
-                    if "errors" in response:
-                        first_error = response["errors"][0]
-                        extensions = first_error.get("extensions", {})
-                        error_code = extensions.get("errorCode")
-                        error_message = first_error.get("message", "Unknown error")
-
-                        if error_code == "KT-CT-1138":  # Invalid credentials
-                            _LOGGER.error(
-                                "Login failed: %s (attempt %s/%s)."
-                                " Invalid credentials; aborting.",
-                                error_message,
-                                attempt,
-                                retries,
-                            )
-                            return False
-
-                        if error_code == "KT-CT-1199":  # Too many requests
-                            _LOGGER.warning(
-                                "Rate limit hit. Retrying in %ss... (attempt %s of %s)",
-                                delay,
-                                attempt,
-                                retries,
-                            )
-                            await asyncio.sleep(delay)
-                            delay = min(
-                                delay * 2, max_delay
-                            )  # Exponential backoff with max cap
-                            continue
-                        _LOGGER.error(
-                            "Login failed: %s (attempt %s of %s)",
-                            error_message,
-                            attempt,
-                            retries,
-                        )
-                        # For other types of errors, continue with retries
-                        await asyncio.sleep(delay)
-                        delay = min(delay * 2, max_delay)
-                        continue
-
-                    if "data" in response and "obtainKrakenToken" in response["data"]:
-                        token_data = response["data"]["obtainKrakenToken"]
-                        token = token_data.get("token")
-                        payload = token_data.get("payload")
-
-                        if token:
-                            # Pass both token and expiration time to the token manager
-                            if (
-                                payload
-                                and isinstance(payload, dict)
-                                and "exp" in payload
-                            ):
-                                expiration = payload["exp"]
-                                self._token_manager.set_token(token, expiration)
-                            else:
-                                # Fall back to JWT decoding if no payload available
-                                self._token_manager.set_token(token)
-
-                            return True
-                        _LOGGER.error(
-                            "No token in response despite success (attempt %s of %s)",
-                            attempt,
-                            retries,
-                        )
-                    else:
-                        _LOGGER.error(
-                            "Unexpected API response format at attempt %s: %s",
-                            attempt,
-                            response,
-                        )
-
-                    # If we got here with an invalid response, try again
-                    await asyncio.sleep(delay)
-                    delay = min(delay * 2, max_delay)
-
+                    if success:
+                        return True
+                    if abort:
+                        return False
                 except Exception as e:
                     _LOGGER.error("Error during login attempt %s: %s", attempt, e)
                     await asyncio.sleep(delay)
-                    delay = min(delay * 2, max_delay)
+                    delay = min(delay * 2, LOGIN_MAX_DELAY)
 
-            _LOGGER.error("All %s login attempts failed.", retries)
+            _LOGGER.error("All %s login attempts failed.", LOGIN_RETRIES)
             return False
 
     async def ensure_token(self):
@@ -821,61 +811,60 @@ class OctopusEnergyIT:
                 result["devices"] = data.get("devices") or []
                 result["completedDispatches"] = data.get("completedDispatches") or []
 
-                # Fetch flex planned dispatches for all devices with the new API
+                # Fetch flex planned dispatches for all devices in parallel
                 result["plannedDispatches"] = []
                 if result["devices"]:
+                    device_entries = [
+                        (d.get("id"), d.get("name", "Unknown"))
+                        for d in result["devices"]
+                        if d.get("id")
+                    ]
                     _LOGGER.debug(
                         "Fetching flex planned dispatches for %d devices",
-                        len(result["devices"]),
+                        len(device_entries),
                     )
-                    for device in result["devices"]:
-                        device_id = device.get("id")
-                        device_name = device.get("name", "Unknown")
-                        if device_id:
-                            try:
-                                flex_dispatches = (
-                                    await self.fetch_flex_planned_dispatches(device_id)
-                                )
-                                if flex_dispatches:
-                                    # Transform new API format for
-                                    # backward compatibility
-                                    for dispatch in flex_dispatches:
-                                        # Map new to old field names
-                                        transformed_dispatch = {
-                                            "start": dispatch.get("start"),
-                                            "startDt": dispatch.get(
-                                                "start"
-                                            ),  # Same as start
-                                            "end": dispatch.get("end"),
-                                            "endDt": dispatch.get("end"),  # Same as end
-                                            "deltaKwh": dispatch.get("energyAddedKwh"),
-                                            "delta": dispatch.get(
-                                                "energyAddedKwh"
-                                            ),  # Same as deltaKwh
-                                            "type": dispatch.get(
-                                                "type", "UNKNOWN"
-                                            ),  # Add type as top-level attribute
-                                            "meta": {
-                                                "source": "flex_api",
-                                                "type": dispatch.get("type", "UNKNOWN"),
-                                                "deviceId": device_id,
-                                            },
-                                        }
-                                        result["plannedDispatches"].append(
-                                            transformed_dispatch
-                                        )
-                                    _LOGGER.debug(
-                                        "Added %d flex dispatches from device %s (%s)",
-                                        len(flex_dispatches),
-                                        device_id,
-                                        device_name,
-                                    )
-                            except Exception as e:
-                                _LOGGER.warning(
-                                    "Failed to fetch flex dispatches for device %s: %s",
-                                    device_id,
-                                    e,
-                                )
+                    dispatch_results = await asyncio.gather(
+                        *[
+                            self.fetch_flex_planned_dispatches(did)
+                            for did, _ in device_entries
+                        ],
+                        return_exceptions=True,
+                    )
+                    for (device_id, device_name), flex_dispatches in zip(
+                        device_entries, dispatch_results, strict=True
+                    ):
+                        if isinstance(flex_dispatches, Exception):
+                            _LOGGER.warning(
+                                "Failed to fetch flex dispatches for device %s: %s",
+                                device_id,
+                                flex_dispatches,
+                            )
+                            continue
+                        if not flex_dispatches:
+                            continue
+                        for dispatch in flex_dispatches:
+                            result["plannedDispatches"].append(
+                                {
+                                    "start": dispatch.get("start"),
+                                    "startDt": dispatch.get("start"),
+                                    "end": dispatch.get("end"),
+                                    "endDt": dispatch.get("end"),
+                                    "deltaKwh": dispatch.get("energyAddedKwh"),
+                                    "delta": dispatch.get("energyAddedKwh"),
+                                    "type": dispatch.get("type", "UNKNOWN"),
+                                    "meta": {
+                                        "source": "flex_api",
+                                        "type": dispatch.get("type", "UNKNOWN"),
+                                        "deviceId": device_id,
+                                    },
+                                }
+                            )
+                        _LOGGER.debug(
+                            "Added %d flex dispatches from device %s (%s)",
+                            len(flex_dispatches),
+                            device_id,
+                            device_name,
+                        )
                 else:
                     _LOGGER.debug(
                         "No devices found, skipping flex planned dispatches fetch"
@@ -924,32 +913,11 @@ class OctopusEnergyIT:
                     if other_errors:
                         _LOGGER.error("API returned critical errors: %s", other_errors)
 
-                        # Check for token expiry in the other errors
-                        for error in other_errors:
-                            error_code = error.get("extensions", {}).get("errorCode")
-                            if error_code == "KT-CT-1124":  # JWT expired
-                                _LOGGER.warning("Token expired, refreshing...")
-                                self._token_manager.clear()
-                                success = await self.login()
-                                if success:
-                                    # Retry with new token
-                                    return await self.fetch_all_data(account_number)
-
                 return result
             if "errors" in response:
                 # Handle critical errors that prevent any data from being returned
-                error = response.get("errors", [{}])[0]
-                error_code = error.get("extensions", {}).get("errorCode")
-
-                # Check if token expired error
-                if error_code == "KT-CT-1124":  # JWT expired
-                    _LOGGER.warning("Token expired, refreshing...")
-                    self._token_manager.clear()
-                    success = await self.login()
-                    if success:
-                        # Retry with new token
-                        return await self.fetch_all_data(account_number)
-
+                # Note: KT-CT-1124 (token expiry) is already retried inside
+                # _execute_graphql — no need to handle it here again.
                 _LOGGER.error(
                     "API returned critical errors with no data: %s",
                     response.get("errors"),
@@ -1453,19 +1421,6 @@ class OctopusEnergyIT:
             return None
 
         return result.get("id")
-
-    async def _fetch_account_and_devices(self, account_number: str):
-        """Fetch account and device data (legacy helper)."""
-        _LOGGER.info(
-            "Using _fetch_account_and_devices (deprecated - using comprehensive query)"
-        )
-        all_data = await self.fetch_all_data(account_number)
-        if not all_data:
-            return {"account": {}, "devices": []}
-        return {
-            "account": all_data.get("account", {}),
-            "devices": all_data.get("devices", []),
-        }
 
     async def fetch_gas_meter_readings(
         self,

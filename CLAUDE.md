@@ -1,117 +1,98 @@
-# CLAUDE.md
+# Claude Context — Claudify
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This project uses Claudify, a professional operating system for Claude Code.
+Always read `.claude/memory.md` before taking action.
 
-## Project Overview
+## Quick Start
+- Run `/start` to begin work
+- Run `/sync` mid-day to refresh memory
+- Run `/wrap-up` at end of day
+- Run `/audit` to verify recent work quality
+- Run `/clear` to safely flush context and resume fresh
+- Run `/unstick` when stuck on a problem
+- Run `/retro` for sprint retrospective
+- Run `/system-audit` for deep infrastructure audit
 
-Home Assistant custom integration for Octopus Energy Italy. Domain: `octopus_energy_it`. Communicates with the official Kraken GraphQL API at `https://api.oeit-kraken.energy/v1/graphql/` via `python-graphql-client`.
+## Key Files
+- Memory: `.claude/memory.md` (read this for current context)
+- Knowledge Base: `.claude/knowledge-base.md` (system-wide learned rules — read before every task)
+- Task Board: `Task Board.md`
+- Scratchpad: `Scratchpad.md` (quick capture, processed during /sync, cleared at /wrap-up)
+- Daily Notes: `Daily Notes/` (created automatically by /start)
+- Knowledge Nominations: `.claude/knowledge-nominations.md` (candidate learnings — auditor reviews)
+- Command Index: `.claude/command-index.md` (all commands with triggers and tools)
 
-## Commands
+## System Architecture
+- **Agents** (`.claude/agents/`): Specialist subagents with persistent memory
+  - `auditor` — Quality gate. Reviews work, promotes knowledge, proposes SOP revisions
+  - `unsticker` — Unblocks you when stuck. Root-cause analysis, fresh approaches
+  - `error-whisperer` — Translates cryptic errors into fixes. Pattern matching across sessions
+  - `rubber-duck` — Forces you to articulate the real problem. Socratic debugging
+  - `pr-ghostwriter` — Writes PR descriptions, commit messages, changelogs from diffs
+  - `yak-shave-detector` — Catches scope creep. "You started doing X but now you're doing Y"
+  - `debt-collector` — Tracks tech debt. Catalogues shortcuts, suggests when to pay them down
+  - `onboarding-sherpa` — Learns a new codebase fast. Architecture maps, key-file identification
+  - `archaeologist` — Excavates why code exists. Git blame + context reconstruction
+- **Commands** (`.claude/commands/`): Workflow rituals and utilities
+- **Hooks** (`.claude/hooks/`): Deterministic safety enforcement (logging, verification)
+- **Logs** (`.claude/logs/`): Audit trail + incident log — auto-populated by hooks
+- **Skills** (`.claude/skills/`): Domain knowledge, loaded on demand
 
-```bash
-# Install dev dependencies
-bash scripts/setup
+## Memory Architecture (6 Tiers)
+1. **memory.md** — Active session context (what you're doing now)
+2. **Agent Memory** (`.claude/agent-memory/`) — Per-agent persistent knowledge across sessions
+3. **Knowledge Base** (`.claude/knowledge-base.md`) — System-wide learned rules (auditor-gated)
+4. **Knowledge Nominations** (`.claude/knowledge-nominations.md`) — Candidate learnings pipeline
+5. **MCP Knowledge Graph** — Structured entities and relations (if memory MCP enabled)
+6. **Daily Notes** — Chronological session history and handoff records
 
-# Format and lint (ruff format + ruff check --fix)
-bash scripts/lint
+## Command Awareness
 
-# Run the automated test suite
-pip install -r requirements_test.txt
-python -m pytest tests/ -v
+All agents can invoke system commands. Read `.claude/command-index.md` for the full catalog.
 
-# Run local Home Assistant instance (http://localhost:8123)
-docker-compose up
-docker-compose logs -f homeassistant
-```
+- **Self-execute**: If you have the tools a command requires, read `.claude/commands/{name}.md` and follow the procedure directly.
+- **Recommend**: If you lack the tools, output `RECOMMEND: /command [args] — [reason]` for the orchestrator.
+- Agents should proactively invoke commands when trigger conditions match.
 
-## Architecture
+## Retrieval Map — Where to look for what
 
-All code lives in `custom_components/octopus_energy_it/`. Key files:
+| You need... | Check first | Then |
+|---|---|---|
+| What am I doing right now? | `memory.md` → Now | Task Board → Today |
+| How to do a procedure | `.claude/commands/` or `.claude/skills/` | CLAUDE.md |
+| A fact or learned rule | `knowledge-base.md` | Agent memory |
+| What happened on a specific day | `Daily Notes/MMDDYY.md` | Audit trail |
+| What went wrong before | `knowledge-base.md` → Hard Rules | Agent memory → Known Patterns |
+| What commands exist | `.claude/command-index.md` | `.claude/commands/{name}.md` |
 
-| File | Role |
-|------|------|
-| `octopus_energy_it.py` | GraphQL API client — auth, token refresh, all API calls |
-| `__init__.py` | Integration setup, `DataUpdateCoordinator`, public tariff scraper |
-| `entity.py` | Base entity classes (`OctopusCoordinatorEntity`, `OctopusPublicProductsEntity`, `OctopusDeviceScheduleMixin`) |
-| `config_flow.py` | User auth/credential validation during setup |
-| `sensor.py` | Prices, balance, meter readings, dispatch info, public tariffs |
-| `switch.py` | Device suspension + boost charge switches |
-| `binary_sensor.py` | Intelligent dispatch window detection |
-| `number.py` | SmartFlex charge target (10–100%) |
-| `select.py` | SmartFlex ready-by time selector |
-| `const.py` | Domain, update interval, token constants, debug flags |
+## Context Health
 
-### Data Flow
+Sessions have finite context. Heavy operations consume it fast.
 
-```
-ConfigEntry (email + password)
-    → OctopusEnergyIT API client (octopus_energy_it.py)
-    → OctopusEnergyITDataUpdateCoordinator (__init__.py)
-    → All platforms (sensor, switch, binary_sensor, number, select)
-```
+**Automatic safety net (hooks):**
+- `PreCompact` hook saves state before auto-compaction
+- `SessionStart(compact)` hook restores context after compaction
+- `SessionStart(user)` hook resets stale gate files on every fresh session
 
-### Coordinator Data Structure
+**Completeness gates (PreToolUse Write|Edit — hard blocks):**
+- **knowledge-base.md**: Every entry needs `[Source:]` provenance, max 200 lines, no TBD/TODO
+- **memory.md**: Max 100 lines (Write only)
+- **settings.json**: Must be valid JSON (broken JSON breaks all hooks)
+- **Agent defs** (`.claude/agents/*.md`): No TBD/TODO — instructions must be definitive
+- **Ungated** (iterative by nature): Daily Notes, Scratchpad, Templates, Logs, Commands, Skills
 
-```python
-coordinator.data = {
-    "account_number": {
-        "devices": [...],
-        "products": [...],
-        "ledgers": [...],
-        "properties": [...],
-        "planned_dispatches": [...],
-        "completed_dispatches": [...],
-        "meter_readings": {...},
-    }
-}
-```
+**Self-monitoring (soft signals — Claude's responsibility):**
+- After ~30+ tool calls or 3+ large file reads: run `/clear` proactively
+- If you see a "compacting conversation" warning: run `/clear` immediately
+- If output quality degrades (repetition, missed details): run `/clear`
+- When a discrete multi-step task completes: consider `/clear` before starting the next unrelated task
+- When switching between different task domains: acknowledge the boundary, prefer `/clear` for heavy switches
 
-All keys use **snake_case**. Do not use camelCase variants (`plannedDispatches`, `meterReadings`) — they no longer exist.
+**How /clear works:** Distills session state into memory.md + daily note handoff, preserving retrieval paths. Then automatically resumes work by reloading compressed context and executing the next action. Seamless to the user.
 
-### Critical Patterns
-
-**Always access coordinator via:**
-```python
-data = hass.data[DOMAIN][entry.entry_id]
-coordinator = data["coordinator"]
-api = data["api"]
-```
-
-Never create per-platform coordinators or separate GraphQL clients. All platforms share the single coordinator and API client instance stored in `hass.data[DOMAIN][entry.entry_id]`.
-
-**Token management** is handled entirely inside `OctopusEnergyIT` — tokens refresh automatically when within 5 minutes of expiry (or after 50 minutes if expiry is unknown). Tokens live in memory only.
-
-**Entity naming** — always use `translation_key`/`_attr_translation_key`. Translation files are at `translations/it.json` and `translations/en.json`.
-
-### Public Tariffs
-
-A separate hourly coordinator in `__init__.py` scrapes `https://octopusenergy.it/le-nostre-tariffe`, extracting `__NEXT_DATA__` JSON + PLACET offers from HTML. Creates sensors named `sensor.octopus_energy_public_tariffs_<tariff_slug>` under a single shared device. Only one `public_owner` entry exists in `hass.data[DOMAIN]` regardless of how many config entries are loaded.
-
-**Shared device-schedule logic** (`number.py`, `select.py`) lives in `OctopusDeviceScheduleMixin` (entity.py). It provides `_current_device()`, `_current_schedule()`, `_schedule_setting()`, `_current_target_percentage()`, `_current_target_time()`, and `_update_local_schedule()`. Do not duplicate these in number/select.
-
-**Boost charge API calls** go through `api.update_boost_charge(device_id, action)` — never call `_get_graphql_client()` directly, as it bypasses automatic token refresh.
-
-### Boost Charge Switch Availability
-
-The boost switch is only created for devices with `deviceType` in `["ELECTRIC_VEHICLES", "CHARGE_POINTS"]`, and is only available when the device is `LIVE` and has `SMART_CONTROL_CAPABLE`, a `BOOST` state, or is currently `BOOST_CHARGING`.
-
-### Debug Flags (const.py)
-
-Set temporarily when debugging:
-- `LOG_API_RESPONSES = True` — logs full GraphQL responses
-- `LOG_TOKEN_RESPONSES = True` — logs token operations
-- `DEBUG_ENABLED = True` — general debug flag
-
-### Debug Logging (configuration.yaml)
-
-```yaml
-logger:
-  logs:
-    custom_components.octopus_energy_it: debug
-```
-
-## Release Process
-
-1. Bump version in `manifest.json`
-2. Add entry to `CHANGELOG.md`
-3. Push to `main` — GitHub Actions auto-creates the git tag, ZIP, and GitHub Release
+## Maintenance
+- Keep memory.md compact (<100 lines)
+- Aggressively prune stale items
+- Done list cleared on Fridays
+- Review incident log during /sync and /wrap-up
+- Auditor proposes SOP revisions — user approves before changes apply

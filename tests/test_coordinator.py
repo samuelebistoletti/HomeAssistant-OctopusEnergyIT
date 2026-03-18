@@ -60,6 +60,7 @@ def _make_ha_stubs():
         pass
 
     ha_exceptions.ConfigEntryNotReady = _ConfigEntryNotReady
+    ha_exceptions.ServiceValidationError = Exception
 
     ha_helpers = types.ModuleType("homeassistant.helpers")
     ha_helpers_aiohttp = types.ModuleType("homeassistant.helpers.aiohttp_client")
@@ -125,16 +126,17 @@ _UpdateFailed = _make_ha_stubs()
 
 # Now import the integration module (and its public helpers)
 import custom_components.octopus_energy_it.__init__ as init_mod  # noqa: E402
+import custom_components.octopus_energy_it.tariff_scraper as tariff_mod  # noqa: E402
 
-_slice_html_block = init_mod._slice_html_block
-_extract_value = init_mod._extract_value
-_extract_decimal = init_mod._extract_decimal
-_monthly_to_annual = init_mod._monthly_to_annual
-_find_link = init_mod._find_link
-_extract_placet_products = init_mod._extract_placet_products
-_fetch_public_tariffs = init_mod._fetch_public_tariffs
-NEXT_DATA_MARKER = init_mod.NEXT_DATA_MARKER
-TARIFFS_PAGE_URL = init_mod.TARIFFS_PAGE_URL
+_slice_html_block = tariff_mod._slice_html_block
+_extract_value = tariff_mod._extract_value
+_extract_decimal = tariff_mod._extract_decimal
+_monthly_to_annual = tariff_mod._monthly_to_annual
+_find_link = tariff_mod._find_link
+_extract_placet_products = tariff_mod._extract_placet_products
+_fetch_public_tariffs = tariff_mod.fetch_public_tariffs
+NEXT_DATA_MARKER = tariff_mod._NEXT_DATA_MARKER
+TARIFFS_PAGE_URL = tariff_mod.TARIFFS_PAGE_URL
 PUBLIC_PRODUCTS_RETRY_DELAY = init_mod.PUBLIC_PRODUCTS_RETRY_DELAY
 
 

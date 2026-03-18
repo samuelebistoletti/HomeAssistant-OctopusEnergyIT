@@ -124,7 +124,7 @@ def _select_current_product(products):
     if not products:
         return None
 
-    now_iso = datetime.now().isoformat()
+    now_iso = datetime.now(UTC).isoformat()
     valid_products = []
 
     for product in products:
@@ -1610,7 +1610,7 @@ class OctopusEVChargeStatusSensor(OctopusCoordinatorEntity, SensorEntity):
             "target_percentage": None,
             "boost_active": False,
             "boost_available": False,
-            "last_synced_at": datetime.now().isoformat(),
+            "last_synced_at": datetime.now(UTC).isoformat(),
         }
 
         account_data = _get_account_data(self.coordinator, self._account_number)
@@ -1666,7 +1666,7 @@ class OctopusEVChargeStatusSensor(OctopusCoordinatorEntity, SensorEntity):
             "target_percentage": schedule.get("max") if schedule else None,
             "boost_active": boost_charge_active,
             "boost_available": boost_charge_available,
-            "last_synced_at": datetime.now().isoformat(),
+            "last_synced_at": datetime.now(UTC).isoformat(),
         }
 
     @callback

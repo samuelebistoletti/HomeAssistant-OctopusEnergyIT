@@ -14,6 +14,11 @@ TOKEN_REFRESH_MARGIN = (
 )
 TOKEN_AUTO_REFRESH_INTERVAL = 50 * 60  # Auto refresh token every 50 minutes
 
+# Login retry settings
+LOGIN_RETRIES = 5
+LOGIN_INITIAL_DELAY = 1  # seconds
+LOGIN_MAX_DELAY = 30  # seconds
+
 # Debug options
 DEBUG_ENABLED = False
 LOG_API_RESPONSES = False  # Set to True to log full API responses

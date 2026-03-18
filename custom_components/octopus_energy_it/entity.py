@@ -186,6 +186,10 @@ class OctopusDeviceScheduleMixin:
                 )
                 schedule["time"] = stored_time
             break
+        # The nested device dict was mutated in-place above, so all subscribers
+        # already see the new values via the shared reference.  We wrap the top-level
+        # dict in a new object solely to satisfy async_set_updated_data's expectation
+        # of a "new" data object, which triggers the coordinator update signal.
         self.coordinator.async_set_updated_data(dict(self.coordinator.data))
 
 

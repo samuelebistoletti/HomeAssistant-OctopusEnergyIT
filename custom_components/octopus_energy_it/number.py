@@ -23,7 +23,7 @@ from .entity import (
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    """Configura le entità number."""
+    """Configure number entities."""
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator = data["coordinator"]
     api = data["api"]
@@ -147,7 +147,10 @@ class OctopusDeviceChargeTargetNumber(
             target_time,
         )
         if not success:
-            raise HomeAssistantError("Impossibile aggiornare il target di carica")
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="charge_target_update_failed",
+            )
 
         self._update_local_schedule(
             target_percentage=target_percentage, target_time=f"{target_time}:00"

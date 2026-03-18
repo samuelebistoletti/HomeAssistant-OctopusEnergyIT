@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.2.3] - 2026-03-18
+
+### Changed
+- Estratta la logica di scraping HTML per le tariffe pubbliche in un modulo dedicato `tariff_scraper.py`, separata dalla logica del coordinatore.
+- Estratta la funzione `process_api_data` in un modulo dedicato `data_processor.py`, rendendola testabile in isolamento. `__init__.py` ridotto da ~1170 a ~290 righe.
+- Le date ISO8601 nei confronti di scadenza contratto ora usano `as_utc(parse_datetime(...))` anziché `datetime.fromisoformat(...)`, coerenti con il resto del codebase.
+- Import di `HomeAssistantError` e `ServiceValidationError` spostati a livello di modulo in `__init__.py` (erano dentro il corpo della funzione).
+- Le fetch dei dispatch SmartFlex per dispositivi multipli ora avvengono in parallelo con `asyncio.gather(return_exceptions=True)`.
+- Log di debug verbosi rimossi dal path hot di `binary_sensor.is_on`; riepilogo spostato in `_handle_coordinator_update`.
+- Stringhe di errore hardcoded in italiano in `number.py` e `select.py` sostituite con chiavi di traduzione.
+- Attributi `device_id` e `device_name` di `BoostChargeSwitch` resi privati (`_device_id`, `_device_name`).
+- Rimosso il metodo `_update_attributes()` inutilizzato da `OctopusSwitch`.
+- Rimosso doppio trigger `async_set_updated_data` + `async_request_refresh` (l'aggiornamento ottimistico non è necessario quando segue subito il refresh completo).
+- Import dinamico `__import__` sostituito con import statico di `utcnow` a livello di modulo.
+
+### Fixed
+- `asyncio.TimeoutError` non veniva catturato in `tariff_scraper.py`: in caso di timeout il coordinatore andava in crash. Ora viene gestito correttamente.
+- Chiamata a `round(target_percentage)` in `handle_set_device_preferences` non era protetta contro `None`: sollevava `TypeError` se il servizio veniva chiamato senza il campo. Aggiunto controllo esplicito con `ServiceValidationError`.
+- Due blocchi di retry per il token in `octopus_energy_it.py` ridondanti con `_execute_graphql` rimossi.
+- Confronto date ISO8601 per scadenza contratto ora gestisce correttamente tutti i formati di offset (incluso `Z`).
+- Fallback di riconfigurazione in `config_flow.py` non selezionava silenziosamente la prima entry: corretta la logica.
+
+### Added
+- Blocco `exceptions` in `strings.json` / `translations/en.json` / `translations/it.json` con 3 nuove chiavi per errori di validazione.
+- Commento sul token JWT aggiunto in `octopus_energy_it.py`; mascheramento token migliorato (solo i primi 8 caratteri).
+
+### Tests
+- Suite di test estesa da 194 a 272 test (+78).
+- Nuovo file `tests/test_data_processor.py` (42 test): copertura completa di `_select_current_product` e `process_api_data` (ledger, punti di prelievo, dispatch, tariffe fallback, scadenze contratto, dispositivi, letture elettricità, prodotti disponibili).
+- `tests/test_switch.py` +35 test: `OctopusSwitch.available`, `is_on` (pending/timeout), `turn_on/off`, `_handle_coordinator_update`; `BoostChargeSwitch.is_on` (pending/timeout), `turn_on/off`.
+- `tests/test_binary_sensor.py` +6 test: proprietà `available` (tutti i rami).
+
 ## [1.2.2] - 2026-03-12
 
 ### Changed

@@ -3,7 +3,7 @@
 import sys
 import types
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -141,9 +141,9 @@ def _make_boost_switch(device_id: str, device_name: str = "My Car",
         switch._account_number = account
         switch.coordinator = coordinator
         switch._attr_device_info = {}
-        switch.client = client
-        switch.device_id = device_id
-        switch.device_name = device_name
+        switch._api = client
+        switch._device_id = device_id
+        switch._device_name = device_name
         switch.account_number = account
         switch._attr_unique_id = f"{DOMAIN}_{account}_{device_id}_boost_charge"
         switch._is_switching = False
@@ -329,3 +329,337 @@ class TestBoostChargeSwitchAvailable:
         switch = _make_boost_switch(DEVICE_ID_1, coordinator=coordinator)
         # DEVICE_ID_1 is not in the coordinator's device list
         assert switch.available is False
+
+
+# ---------------------------------------------------------------------------
+# OctopusSwitch.available
+# ---------------------------------------------------------------------------
+
+
+class TestOctopusSwitchAvailable:
+    """Tests for OctopusSwitch.available."""
+
+    def test_available_when_coordinator_has_data_and_device_found(self):
+        device = {"id": DEVICE_ID_1, "status": {"isSuspended": False}}
+        coordinator = _make_coordinator({"devices": [device]})
+        coordinator.last_update_success = True
+        switch = _make_octopus_switch(device, coordinator=coordinator)
+        assert switch.available is True
+
+    def test_unavailable_when_coordinator_update_failed(self):
+        device = {"id": DEVICE_ID_1, "status": {"isSuspended": False}}
+        coordinator = _make_coordinator({"devices": [device]})
+        coordinator.last_update_success = False
+        switch = _make_octopus_switch(device, coordinator=coordinator)
+        assert switch.available is False
+
+    def test_unavailable_when_device_not_in_coordinator(self):
+        device = {"id": DEVICE_ID_1, "status": {"isSuspended": False}}
+        coordinator = _make_coordinator({"devices": []})  # empty list
+        switch = _make_octopus_switch(device, coordinator=coordinator)
+        assert switch.available is False
+
+    def test_unavailable_when_account_not_in_coordinator(self):
+        device = {"id": DEVICE_ID_1, "status": {"isSuspended": False}}
+        coordinator = MagicMock()
+        coordinator.data = {"OTHER-ACCOUNT": {"devices": [device]}}
+        coordinator.last_update_success = True
+        switch = _make_octopus_switch(device, coordinator=coordinator)
+        assert switch.available is False
+
+
+# ---------------------------------------------------------------------------
+# OctopusSwitch.is_on
+# ---------------------------------------------------------------------------
+
+
+class TestOctopusSwitchIsOn:
+    """Tests for OctopusSwitch.is_on."""
+
+    _UTCNOW = "custom_components.octopus_energy_it.switch.utcnow"
+
+    def _make(self, is_suspended: bool) -> "OctopusSwitch":
+        device = {"id": DEVICE_ID_1, "status": {"isSuspended": is_suspended}}
+        return _make_octopus_switch(device)
+
+    def test_not_suspended_is_on_true(self):
+        switch = self._make(is_suspended=False)
+        assert switch.is_on is True
+
+    def test_suspended_is_on_false(self):
+        switch = self._make(is_suspended=True)
+        assert switch.is_on is False
+
+    def test_pending_state_returned_before_timeout(self):
+        """While _is_switching, is_on returns _pending_state instead of API state."""
+        switch = self._make(is_suspended=True)  # API says off
+        switch._is_switching = True
+        switch._pending_state = True  # optimistic: we want it on
+        switch._pending_until = datetime(2099, 1, 1, tzinfo=_UTC)
+        with patch(self._UTCNOW, return_value=datetime(2026, 1, 1, tzinfo=_UTC)):
+            assert switch.is_on is True  # pending overrides API
+
+    def test_pending_state_cleared_after_timeout(self):
+        """After timeout, pending is cleared and API state wins."""
+        switch = self._make(is_suspended=True)  # API says off
+        switch._is_switching = True
+        switch._pending_state = True
+        switch._pending_until = datetime(2020, 1, 1, tzinfo=_UTC)  # past
+        with patch(self._UTCNOW, return_value=datetime(2026, 1, 1, tzinfo=_UTC)):
+            result = switch.is_on
+        # After timeout expiry, pending cleared, device is suspended → False
+        assert result is False
+        assert switch._is_switching is False
+        assert switch._pending_state is None
+
+    def test_no_device_returns_false(self):
+        device = {"id": DEVICE_ID_1, "status": {"isSuspended": False}}
+        coordinator = _make_coordinator({"devices": []})  # device gone
+        switch = _make_octopus_switch(device, coordinator=coordinator)
+        assert switch.is_on is False
+
+
+# ---------------------------------------------------------------------------
+# OctopusSwitch.async_turn_on / async_turn_off
+# ---------------------------------------------------------------------------
+
+
+class TestOctopusSwitchTurnOnOff:
+    """Tests for OctopusSwitch.async_turn_on and async_turn_off."""
+
+    from unittest.mock import AsyncMock as _AsyncMock
+
+    _UTCNOW = "custom_components.octopus_energy_it.switch.utcnow"
+    _FIXED_NOW = datetime(2026, 3, 18, 12, 0, 0, tzinfo=_UTC)
+
+    def _make(self, is_suspended=False):
+        device = {"id": DEVICE_ID_1, "status": {"isSuspended": is_suspended}}
+        switch = _make_octopus_switch(device)
+        switch.async_write_ha_state = MagicMock()
+        switch.coordinator.async_request_refresh = AsyncMock()
+        return switch
+
+    @pytest.mark.asyncio
+    async def test_turn_on_calls_api_unsuspend(self):
+        switch = self._make()
+        switch._api.change_device_suspension = AsyncMock(return_value=True)
+        with patch(self._UTCNOW, return_value=self._FIXED_NOW):
+            await switch.async_turn_on()
+        switch._api.change_device_suspension.assert_awaited_once_with(DEVICE_ID_1, "UNSUSPEND")
+
+    @pytest.mark.asyncio
+    async def test_turn_on_sets_pending_state(self):
+        switch = self._make()
+        switch._api.change_device_suspension = AsyncMock(return_value=True)
+        with patch(self._UTCNOW, return_value=self._FIXED_NOW):
+            await switch.async_turn_on()
+        # After success, coordinator refresh is requested; pending may be cleared by coordinator update
+        switch.coordinator.async_request_refresh.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_turn_on_api_failure_clears_pending(self):
+        switch = self._make()
+        switch._api.change_device_suspension = AsyncMock(return_value=False)
+        with patch(self._UTCNOW, return_value=self._FIXED_NOW):
+            await switch.async_turn_on()
+        assert switch._is_switching is False
+        assert switch._pending_state is None
+
+    @pytest.mark.asyncio
+    async def test_turn_on_api_exception_clears_pending(self):
+        switch = self._make()
+        switch._api.change_device_suspension = AsyncMock(side_effect=Exception("boom"))
+        with patch(self._UTCNOW, return_value=self._FIXED_NOW):
+            await switch.async_turn_on()
+        assert switch._is_switching is False
+        assert switch._pending_state is None
+
+    @pytest.mark.asyncio
+    async def test_turn_off_calls_api_suspend(self):
+        switch = self._make()
+        switch._api.change_device_suspension = AsyncMock(return_value=True)
+        with patch(self._UTCNOW, return_value=self._FIXED_NOW):
+            await switch.async_turn_off()
+        switch._api.change_device_suspension.assert_awaited_once_with(DEVICE_ID_1, "SUSPEND")
+
+    @pytest.mark.asyncio
+    async def test_turn_off_api_failure_clears_pending(self):
+        switch = self._make()
+        switch._api.change_device_suspension = AsyncMock(return_value=False)
+        with patch(self._UTCNOW, return_value=self._FIXED_NOW):
+            await switch.async_turn_off()
+        assert switch._is_switching is False
+        assert switch._pending_state is None
+
+
+# ---------------------------------------------------------------------------
+# OctopusSwitch._handle_coordinator_update
+# ---------------------------------------------------------------------------
+
+
+class TestOctopusSwitchCoordinatorUpdate:
+
+    def _make_with_device(self, is_suspended: bool) -> "OctopusSwitch":
+        device = {"id": DEVICE_ID_1, "status": {"isSuspended": is_suspended}}
+        switch = _make_octopus_switch(device)
+        switch.async_write_ha_state = MagicMock()
+        return switch
+
+    def test_state_updated_from_coordinator(self):
+        switch = self._make_with_device(is_suspended=False)
+        switch._current_state = False  # stale
+        # Coordinator now says not suspended (on)
+        switch._handle_coordinator_update()
+        assert switch._current_state is True
+
+    def test_switching_confirmed_clears_pending(self):
+        """When API confirms the pending state, _is_switching is cleared."""
+        device = {"id": DEVICE_ID_1, "status": {"isSuspended": False}}
+        coordinator = _make_coordinator({"devices": [device]})
+        switch = _make_octopus_switch(device, coordinator=coordinator)
+        switch.async_write_ha_state = MagicMock()
+        switch._is_switching = True
+        switch._pending_state = True  # wanted: on (not suspended)
+        switch._handle_coordinator_update()
+        assert switch._is_switching is False
+        assert switch._pending_state is None
+
+    def test_always_writes_ha_state(self):
+        switch = self._make_with_device(is_suspended=False)
+        switch._handle_coordinator_update()
+        switch.async_write_ha_state.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# BoostChargeSwitch.is_on
+# ---------------------------------------------------------------------------
+
+
+class TestBoostChargeSwitchIsOn:
+
+    _UTCNOW = "custom_components.octopus_energy_it.switch.utcnow"
+
+    def _switch_with_state(self, current_state: str) -> "BoostChargeSwitch":
+        device = {
+            "id": DEVICE_ID_1,
+            "status": {
+                "current": "LIVE",
+                "currentState": current_state,
+                "isSuspended": False,
+            },
+        }
+        return _make_boost_switch(DEVICE_ID_1, coordinator=_make_coordinator({"devices": [device]}))
+
+    def test_boost_charging_is_on_true(self):
+        switch = self._switch_with_state("BOOST_CHARGING")
+        assert switch.is_on is True
+
+    def test_boost_state_is_on_true(self):
+        switch = self._switch_with_state("BOOST")
+        assert switch.is_on is True
+
+    def test_smart_control_capable_is_on_false(self):
+        switch = self._switch_with_state("SMART_CONTROL_CAPABLE")
+        assert switch.is_on is False
+
+    def test_no_device_data_is_on_false(self):
+        coordinator = _make_coordinator({"devices": []})
+        switch = _make_boost_switch(DEVICE_ID_1, coordinator=coordinator)
+        assert switch.is_on is False
+
+    def test_pending_state_overrides_before_timeout(self):
+        switch = self._switch_with_state("SMART_CONTROL_CAPABLE")  # API: off
+        switch._is_switching = True
+        switch._pending_state = True
+        switch._pending_until = datetime(2099, 1, 1, tzinfo=_UTC)
+        with patch(self._UTCNOW, return_value=datetime(2026, 1, 1, tzinfo=_UTC)):
+            assert switch.is_on is True
+
+    def test_pending_cleared_after_timeout(self):
+        switch = self._switch_with_state("SMART_CONTROL_CAPABLE")
+        switch._is_switching = True
+        switch._pending_state = True
+        switch._pending_until = datetime(2020, 1, 1, tzinfo=_UTC)  # past
+        with patch(self._UTCNOW, return_value=datetime(2026, 1, 1, tzinfo=_UTC)):
+            result = switch.is_on
+        assert result is False
+        assert switch._is_switching is False
+
+
+# ---------------------------------------------------------------------------
+# BoostChargeSwitch.async_turn_on / async_turn_off
+# ---------------------------------------------------------------------------
+
+
+class TestBoostChargeSwitchTurnOnOff:
+
+    _UTCNOW = "custom_components.octopus_energy_it.switch.utcnow"
+    _FIXED_NOW = datetime(2026, 3, 18, 12, 0, 0, tzinfo=_UTC)
+
+    def _make(self, current_state="SMART_CONTROL_CAPABLE"):
+        device = {
+            "id": DEVICE_ID_1,
+            "status": {"current": "LIVE", "currentState": current_state, "isSuspended": False},
+        }
+        coordinator = _make_coordinator({"devices": [device]})
+        switch = _make_boost_switch(DEVICE_ID_1, coordinator=coordinator)
+        switch.async_write_ha_state = MagicMock()
+        switch.coordinator.async_request_refresh = AsyncMock()
+        return switch
+
+    @pytest.mark.asyncio
+    async def test_turn_on_calls_boost_api(self):
+        switch = self._make()
+        switch._api.update_boost_charge = AsyncMock(return_value="ok")
+        with patch(self._UTCNOW, return_value=self._FIXED_NOW):
+            await switch.async_turn_on()
+        switch._api.update_boost_charge.assert_awaited_once_with(DEVICE_ID_1, "BOOST")
+
+    @pytest.mark.asyncio
+    async def test_turn_on_requests_coordinator_refresh(self):
+        switch = self._make()
+        switch._api.update_boost_charge = AsyncMock(return_value="ok")
+        with patch(self._UTCNOW, return_value=self._FIXED_NOW):
+            await switch.async_turn_on()
+        switch.coordinator.async_request_refresh.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_turn_on_api_returns_none_clears_pending(self):
+        import sys
+        ha_exc = sys.modules["homeassistant.exceptions"]
+        switch = self._make()
+        switch._api.update_boost_charge = AsyncMock(return_value=None)
+        with patch(self._UTCNOW, return_value=self._FIXED_NOW):
+            with pytest.raises(ha_exc.HomeAssistantError):
+                await switch.async_turn_on()
+        assert switch._is_switching is False
+
+    @pytest.mark.asyncio
+    async def test_turn_on_api_exception_clears_pending(self):
+        import sys
+        ha_exc = sys.modules["homeassistant.exceptions"]
+        switch = self._make()
+        switch._api.update_boost_charge = AsyncMock(side_effect=RuntimeError("api down"))
+        with patch(self._UTCNOW, return_value=self._FIXED_NOW):
+            with pytest.raises(ha_exc.HomeAssistantError):
+                await switch.async_turn_on()
+        assert switch._is_switching is False
+
+    @pytest.mark.asyncio
+    async def test_turn_off_calls_cancel_api(self):
+        switch = self._make()
+        switch._api.update_boost_charge = AsyncMock(return_value="ok")
+        with patch(self._UTCNOW, return_value=self._FIXED_NOW):
+            await switch.async_turn_off()
+        switch._api.update_boost_charge.assert_awaited_once_with(DEVICE_ID_1, "CANCEL")
+
+    @pytest.mark.asyncio
+    async def test_turn_off_no_device_data_raises_no_error(self):
+        """turn_off does not check device data before acting (unlike turn_on)."""
+        coordinator = _make_coordinator({"devices": []})
+        switch = _make_boost_switch(DEVICE_ID_1, coordinator=coordinator)
+        switch.async_write_ha_state = MagicMock()
+        switch.coordinator.async_request_refresh = AsyncMock()
+        switch._api.update_boost_charge = AsyncMock(return_value="ok")
+        with patch(self._UTCNOW, return_value=self._FIXED_NOW):
+            await switch.async_turn_off()  # should not raise

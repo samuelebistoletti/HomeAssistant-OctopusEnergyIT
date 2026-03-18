@@ -28,7 +28,7 @@ _ha_exceptions.ConfigEntryNotReady = ConfigEntryNotReady
 
 _ha = types.ModuleType("homeassistant")
 sys.modules.setdefault("homeassistant", _ha)
-sys.modules["homeassistant.exceptions"] = _ha_exceptions
+sys.modules.setdefault("homeassistant.exceptions", _ha_exceptions)
 
 # python_graphql_client stub (replaced per-test via patch)
 _graphql_mod = types.ModuleType("python_graphql_client")

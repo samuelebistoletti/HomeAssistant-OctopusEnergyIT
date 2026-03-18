@@ -41,7 +41,6 @@ class OctopusEnergyITConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Octopus Energy Italy."""
 
     VERSION = 1
-    CONNECTION_CLASS = config_entries.CONN_CLASS_CLOUD_POLL
 
     @staticmethod
     def async_get_options_flow(config_entry):
@@ -88,15 +87,10 @@ class OctopusEnergyITConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # Get the entry from the context
         entry_id = self.context.get("entry_id")
         if not entry_id:
-            # Try to get from unique_id if entry_id is not available
-            entries = self.hass.config_entries.async_entries(DOMAIN)
-            if not entries:
-                return self.async_abort(reason="reconfigure_failed")
-            reconfigure_entry = entries[0]  # Use first entry if only one exists
-        else:
-            reconfigure_entry = self.hass.config_entries.async_get_entry(entry_id)
-            if reconfigure_entry is None:
-                return self.async_abort(reason="reconfigure_failed")
+            return self.async_abort(reason="reconfigure_failed")
+        reconfigure_entry = self.hass.config_entries.async_get_entry(entry_id)
+        if reconfigure_entry is None:
+            return self.async_abort(reason="reconfigure_failed")
 
         if user_input is not None:
             email = user_input[CONF_EMAIL]

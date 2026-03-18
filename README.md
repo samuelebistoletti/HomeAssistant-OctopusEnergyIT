@@ -200,9 +200,10 @@ I test coprono:
 | --- | --- |
 | `tests/test_api_client.py` | Client GraphQL: autenticazione, token management, fetch dati, mutazioni |
 | `tests/test_sensor.py` | Logica sensori: dispatch window, arrotondamenti letture, sensor states |
-| `tests/test_switch.py` | Switch: unique_id, disponibilità boost, logica sospensione |
-| `tests/test_binary_sensor.py` | Binary sensor dispatching: finestre attive/future/passate |
+| `tests/test_switch.py` | Switch: available, is_on (pending/timeout), turn_on/off, coordinator update, boost charge |
+| `tests/test_binary_sensor.py` | Binary sensor: finestre attive/future/passate, proprietà available (tutti i rami) |
 | `tests/test_coordinator.py` | Coordinator: fetch dati, retry tariffe pubbliche, gestione errori |
+| `tests/test_data_processor.py` | Elaborazione dati API: ledger, punti di prelievo, dispatch, tariffe fallback, scadenze contratto, dispositivi, letture elettricità, prodotti disponibili |
 
 ### Lint e formattazione
 

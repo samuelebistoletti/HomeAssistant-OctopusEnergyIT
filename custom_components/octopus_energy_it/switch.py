@@ -65,7 +65,7 @@ async def async_setup_entry(
                 _LOGGER.warning("Device missing ID field: %s", device)
                 continue
             switches.append(
-                OctopusSwitch(api, device, coordinator, config_entry, acc_num)
+                OctopusSwitch(api, device, coordinator, acc_num)
             )
 
     # Only add entities if we have any
@@ -126,16 +126,14 @@ class OctopusSwitch(OctopusCoordinatorEntity, SwitchEntity):
     _attr_translation_key = "ev_charge_smart_control"
     _attr_icon = "mdi:car-electric"
 
-    def __init__(self, api, device, coordinator, config_entry, account_number) -> None:
+    def __init__(self, api, device, coordinator, account_number) -> None:
         """Initialize the Octopus switch entity."""
         super().__init__(account_number, coordinator)
         self._api = api
-        self._device = device
-        self._config_entry = config_entry
         self._device_id = device["id"]
+        self._device_name: str = device.get("name") or device["id"]
         self._current_state = not device.get("status", {}).get("isSuspended", True)
 
-        # Add flag to track if switching is in progress
         self._is_switching = False
         self._pending_state = None
         self._pending_until = None
@@ -143,16 +141,6 @@ class OctopusSwitch(OctopusCoordinatorEntity, SwitchEntity):
         self._attr_unique_id = (
             f"octopus_{self._account_number}_{self._device_id}_ev_charge_smart_control"
         )
-        self._update_attributes()
-
-    def _update_attributes(self):
-        """Update device attributes based on the latest data."""
-        device = self._get_device()
-        if not device:
-            return
-
-        # Update extra state attributes
-        self._attr_extra_state_attributes = {}
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -170,9 +158,6 @@ class OctopusSwitch(OctopusCoordinatorEntity, SwitchEntity):
                     self._device_id,
                 )
                 self._current_state = new_state
-
-            # Update attributes with fresh data
-            self._update_attributes()
 
             # Check if we're waiting for a state change and it's been confirmed
             if self._is_switching:
@@ -331,7 +316,7 @@ class OctopusSwitch(OctopusCoordinatorEntity, SwitchEntity):
     @property
     def translation_placeholders(self) -> dict[str, str]:
         placeholders = super().translation_placeholders
-        placeholders["device"] = self._device.get("name") or self._device_id
+        placeholders["device"] = self._device_name
         return placeholders
 
 
@@ -351,11 +336,9 @@ class BoostChargeSwitch(OctopusCoordinatorEntity, SwitchEntity):
     ) -> None:
         """Initialize the switch."""
         super().__init__(account_number, coordinator)
-        self.coordinator = coordinator
-        self.client = client
-        self.device_id = device_id
-        self.device_name = device_name
-        self.account_number = account_number
+        self._api = client
+        self._device_id = device_id
+        self._device_name = device_name
         self._attr_unique_id = f"{DOMAIN}_{account_number}_{device_id}_boost_charge"
         self._is_switching = False
         self._pending_state: bool | None = None
@@ -366,12 +349,12 @@ class BoostChargeSwitch(OctopusCoordinatorEntity, SwitchEntity):
         if not self.coordinator.data:
             return {}
 
-        account_data = self.coordinator.data.get(self.account_number, {})
+        account_data = self.coordinator.data.get(self._account_number, {})
         devices = account_data.get("devices", [])
 
         # Find our device in the devices list
         for device in devices:
-            if device.get("id") == self.device_id:
+            if device.get("id") == self._device_id:
                 return device
 
         return {}
@@ -431,13 +414,9 @@ class BoostChargeSwitch(OctopusCoordinatorEntity, SwitchEntity):
         return not status.get("isSuspended", True)
 
     @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        return {}
-
-    @property
     def translation_placeholders(self) -> dict[str, str]:
         placeholders = super().translation_placeholders
-        placeholders["device"] = self.device_name
+        placeholders["device"] = self._device_name
         return placeholders
 
     def _clear_pending(self) -> None:
@@ -453,7 +432,7 @@ class BoostChargeSwitch(OctopusCoordinatorEntity, SwitchEntity):
             if self._pending_state is not None and boost_active == self._pending_state:
                 _LOGGER.debug(
                     "Immediate charge state confirmed for device %s -> %s",
-                    self.device_id,
+                    self._device_id,
                     "on" if boost_active else "off",
                 )
                 self._clear_pending()
@@ -482,12 +461,12 @@ class BoostChargeSwitch(OctopusCoordinatorEntity, SwitchEntity):
     async def _async_trigger_boost_charge(self) -> None:
         """Trigger boost charging via the API client."""
         try:
-            result = await self.client.update_boost_charge(self.device_id, "BOOST")
+            result = await self._api.update_boost_charge(self._device_id, "BOOST")
             if result is None:
                 raise HomeAssistantError("Failed to trigger boost charge")
 
             _LOGGER.info(
-                "Successfully triggered boost charge for device %s", self.device_id
+                "Successfully triggered boost charge for device %s", self._device_id
             )
             await self.coordinator.async_request_refresh()
 
@@ -497,7 +476,7 @@ class BoostChargeSwitch(OctopusCoordinatorEntity, SwitchEntity):
             raise
         except Exception as err:
             _LOGGER.error(
-                "Failed to trigger boost charge for device %s: %s", self.device_id, err
+                "Failed to trigger boost charge for device %s: %s", self._device_id, err
             )
             self._clear_pending()
             self.async_write_ha_state()
@@ -506,12 +485,12 @@ class BoostChargeSwitch(OctopusCoordinatorEntity, SwitchEntity):
     async def _async_cancel_boost_charge(self) -> None:
         """Cancel boost charging via the API client."""
         try:
-            result = await self.client.update_boost_charge(self.device_id, "CANCEL")
+            result = await self._api.update_boost_charge(self._device_id, "CANCEL")
             if result is None:
                 raise HomeAssistantError("Failed to cancel boost charge")
 
             _LOGGER.info(
-                "Successfully canceled boost charge for device %s", self.device_id
+                "Successfully canceled boost charge for device %s", self._device_id
             )
             await self.coordinator.async_request_refresh()
 
@@ -521,7 +500,7 @@ class BoostChargeSwitch(OctopusCoordinatorEntity, SwitchEntity):
             raise
         except Exception as err:
             _LOGGER.error(
-                "Failed to cancel boost charge for device %s: %s", self.device_id, err
+                "Failed to cancel boost charge for device %s: %s", self._device_id, err
             )
             self._clear_pending()
             self.async_write_ha_state()

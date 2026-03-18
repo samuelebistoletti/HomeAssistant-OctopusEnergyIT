@@ -44,6 +44,17 @@
       }
     }
   },
+  "exceptions": {
+    "charge_target_update_failed": {
+      "message": "Unable to update the charge target. Check the log for details."
+    },
+    "invalid_ready_time": {
+      "message": "The selected time is not valid for this device."
+    },
+    "ready_time_update_failed": {
+      "message": "Unable to update the charge end time. Check the log for details."
+    }
+  },
   "entity": {
     "sensor": {
       "electricity_price": {

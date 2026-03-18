@@ -53,7 +53,7 @@ def _build_time_options(setting: dict[str, Any] | None) -> list[str]:
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    """Configura le entità select."""
+    """Configure select entities."""
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator = data["coordinator"]
     api = data["api"]
@@ -131,7 +131,10 @@ class OctopusDeviceTargetTimeSelect(
 
     async def async_select_option(self, option: str) -> None:
         if option not in self.options:
-            raise HomeAssistantError("Orario non valido per il dispositivo")
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="invalid_ready_time",
+            )
 
         percentage = self._current_target_percentage()
         if percentage is None:
@@ -143,7 +146,10 @@ class OctopusDeviceTargetTimeSelect(
             option,
         )
         if not success:
-            raise HomeAssistantError("Impossibile aggiornare l'orario di ricarica")
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="ready_time_update_failed",
+            )
 
         self._update_local_schedule(target_time=f"{option}:00")
         await self.coordinator.async_request_refresh()

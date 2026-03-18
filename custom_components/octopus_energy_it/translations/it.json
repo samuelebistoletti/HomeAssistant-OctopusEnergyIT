@@ -44,6 +44,17 @@
       }
     }
   },
+  "exceptions": {
+    "charge_target_update_failed": {
+      "message": "Impossibile aggiornare il target di carica. Controlla i log per i dettagli."
+    },
+    "invalid_ready_time": {
+      "message": "L'orario selezionato non è valido per questo dispositivo."
+    },
+    "ready_time_update_failed": {
+      "message": "Impossibile aggiornare l'orario di fine ricarica. Controlla i log per i dettagli."
+    }
+  },
   "entity": {
     "sensor": {
       "electricity_price": {

@@ -76,6 +76,12 @@ def _install_stubs() -> None:
         _aiohttp.ClientResponseError = _ClientResponseError
         _aiohttp.ClientConnectionError = Exception
 
+        class _ClientTimeout:
+            def __init__(self, *, total=None, connect=None, sock_read=None, sock_connect=None):
+                self.total = total
+
+        _aiohttp.ClientTimeout = _ClientTimeout
+
     _jwt = _stub("jwt")
     if not hasattr(_jwt, "decode"):
         _jwt.decode = MagicMock(return_value={})
@@ -115,6 +121,9 @@ def _install_stubs() -> None:
     if not hasattr(_exc, "HomeAssistantError"):
         _exc.HomeAssistantError = Exception
         _exc.ConfigEntryNotReady = Exception
+    # Always ensure ServiceValidationError is present (needed by __init__.py top-level import)
+    if not hasattr(_exc, "ServiceValidationError"):
+        _exc.ServiceValidationError = Exception
 
     _dt = _stub("homeassistant.util.dt")
     if not hasattr(_dt, "utcnow"):
