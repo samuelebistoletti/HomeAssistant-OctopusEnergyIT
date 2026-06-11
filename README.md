@@ -43,6 +43,10 @@ logger:
     custom_components.octopus_energy_it: debug
 ```
 
+> [!WARNING]  
+>Se utilizzi un DNS personalizzato, potrebbero verificarsi problemi di collegamento all’API di Octopus Energy Italy, con errori di login anche quando le credenziali inserite sono corrette.
+>In questo caso, è necessario aggiungere al tuo DNS la seguente regola di esclusione: `@@||oeit-kraken.energy^v`
+
 ## Installazione
 
 ### HACS (consigliata)
