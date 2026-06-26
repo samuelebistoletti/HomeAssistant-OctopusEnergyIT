@@ -66,6 +66,7 @@ async def process_api_data(
             "devices_raw": [],
             "products": [],
             "products_raw": [],
+            "has_electricity_tariff": False,
             "gas_products": [],
             "vehicle_battery_size_in_kwh": None,
             "current_start": None,
@@ -426,42 +427,14 @@ async def process_api_data(
         )
     else:
         _LOGGER.info(
-            "No electricity products for account %s; registering fallback tariff "
+            "No electricity products for account %s "
             "(expected during onboarding or supplier transition)",
             account_number,
         )
-        products = [
-            {
-                "code": "FALLBACK_ELECTRICITY",
-                "description": "Fallback electricity tariff",
-                "name": "Fallback Electricity Tariff",
-                "displayName": "Fallback Electricity Tariff",
-                "validFrom": None,
-                "validTo": None,
-                "agreementId": None,
-                "productType": None,
-                "isTimeOfUse": False,
-                "type": "Simple",
-                "timeslots": [],
-                "termsAndConditionsUrl": None,
-                "pricing": {
-                    "base": 0.30,
-                    "f2": None,
-                    "f3": None,
-                    "units": "EUR/kWh",
-                    "annualStandingCharge": None,
-                    "annualStandingChargeUnits": None,
-                },
-                "params": {},
-                "rawPrices": {},
-                "supplyPoint": {},
-                "unitRateForecast": [],
-                "grossRate": "30",
-            }
-        ]
 
     result_data[account_number]["products"] = products
     result_data[account_number]["products_raw"] = products
+    result_data[account_number]["has_electricity_tariff"] = bool(products)
 
     current_electricity_product = _select_current_product(products)
     result_data[account_number]["current_electricity_product"] = (

@@ -55,6 +55,12 @@
       "message": "Impossibile aggiornare l'orario di fine ricarica. Controlla i log per i dettagli."
     }
   },
+  "issues": {
+    "no_electricity_tariff": {
+      "title": "Nessuna tariffa elettrica attiva",
+      "description": "Non è stato trovato nessun prodotto elettrico attivo per l'account {account_number}. È normale durante l'onboarding o il passaggio da un altro operatore, prima che Octopus registri una tariffa attiva: i sensori di prezzo e tariffa elettrica resteranno non disponibili fino ad allora. Questo avviso si chiude automaticamente quando viene registrata una tariffa, non è richiesta alcuna azione."
+    }
+  },
   "entity": {
     "sensor": {
       "electricity_price": {

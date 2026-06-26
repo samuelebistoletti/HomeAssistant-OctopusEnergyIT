@@ -3,7 +3,8 @@
 ## [1.2.4] - 2026-06-26
 
 ### Changed
-- The "No electricity products for account ...; registering fallback tariff" log entry is now emitted at `INFO` level instead of `WARNING`. This is an expected, handled condition (e.g. during onboarding or while transitioning from another supplier, before Octopus has registered an active tariff) and was previously showing up as a recurring warning in the Home Assistant log on every coordinator refresh. (Fixes #15)
+- Replaced the fabricated "Fallback Electricity Tariff" (a hardcoded, made-up 0.30 EUR/kWh product) with a proper Home Assistant repair issue. When an account has no active electricity product — e.g. during onboarding or while transitioning from another supplier, before Octopus has registered an active tariff — the integration no longer invents fake pricing data. Instead it raises a non-fixable `no_electricity_tariff` repair issue (Settings → System → Repairs) that clears itself automatically once a real tariff is registered. The electricity price/product sensors correctly report as unavailable in the meantime instead of showing fictitious values.
+- The related log entry ("No electricity products for account ...") is now emitted at `INFO` level instead of `WARNING`, since this is an expected, handled condition rather than an error; it previously showed up as a recurring warning on every coordinator refresh. (Fixes #15)
 
 ## [1.2.3] - 2026-03-18
 

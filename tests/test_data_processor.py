@@ -328,17 +328,17 @@ class TestProcessApiDataElectricitySupplyPoint:
 class TestProcessApiDataFallbackTariff:
 
     @pytest.mark.asyncio
-    async def test_no_products_inserts_fallback(self):
+    async def test_no_products_leaves_products_empty(self):
         api = _make_api()
         data = _minimal_account_data()
         data["products"] = []
         result = await process_api_data(data, ACCOUNT, api, {})
-        products = result[ACCOUNT]["products"]
-        assert len(products) == 1
-        assert products[0]["code"] == "FALLBACK_ELECTRICITY"
+        assert result[ACCOUNT]["products"] == []
+        assert result[ACCOUNT]["current_electricity_product"] is None
+        assert result[ACCOUNT]["has_electricity_tariff"] is False
 
     @pytest.mark.asyncio
-    async def test_with_products_no_fallback(self):
+    async def test_with_products_sets_has_electricity_tariff(self):
         api = _make_api()
         data = _minimal_account_data()
         data["products"] = [
@@ -351,8 +351,8 @@ class TestProcessApiDataFallbackTariff:
         ]
         result = await process_api_data(data, ACCOUNT, api, {})
         codes = [p["code"] for p in result[ACCOUNT]["products"]]
-        assert "FALLBACK_ELECTRICITY" not in codes
         assert "FLEX" in codes
+        assert result[ACCOUNT]["has_electricity_tariff"] is True
 
 
 # ---------------------------------------------------------------------------

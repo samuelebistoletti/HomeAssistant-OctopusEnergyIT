@@ -948,3 +948,40 @@ class TestProcessDispatchData:
         ]
         result = _process_dispatches(dispatches, self._now())
         assert result["planned_dispatches"] is dispatches
+
+
+# ---------------------------------------------------------------------------
+# _update_electricity_tariff_issue — repair issue create/clear
+# ---------------------------------------------------------------------------
+
+
+class TestUpdateElectricityTariffIssue:
+
+    def test_no_tariff_creates_issue(self):
+        from homeassistant.helpers import issue_registry as ir
+
+        ir.async_create_issue.reset_mock()
+        ir.async_delete_issue.reset_mock()
+        hass = MagicMock()
+
+        init_mod._update_electricity_tariff_issue(hass, "A-1234", False)
+
+        ir.async_create_issue.assert_called_once()
+        ir.async_delete_issue.assert_not_called()
+        _, kwargs = ir.async_create_issue.call_args
+        assert kwargs["translation_key"] == "no_electricity_tariff"
+        assert kwargs["translation_placeholders"] == {"account_number": "A-1234"}
+
+    def test_has_tariff_clears_issue(self):
+        from homeassistant.helpers import issue_registry as ir
+
+        ir.async_create_issue.reset_mock()
+        ir.async_delete_issue.reset_mock()
+        hass = MagicMock()
+
+        init_mod._update_electricity_tariff_issue(hass, "A-1234", True)
+
+        ir.async_delete_issue.assert_called_once_with(
+            hass, init_mod.DOMAIN, "no_electricity_tariff_A-1234"
+        )
+        ir.async_create_issue.assert_not_called()

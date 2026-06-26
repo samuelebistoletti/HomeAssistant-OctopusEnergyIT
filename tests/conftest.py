@@ -161,6 +161,14 @@ def _install_stubs() -> None:
     if not hasattr(_dr, "DeviceInfo"):
         _dr.DeviceInfo = dict
 
+    _ir = _stub("homeassistant.helpers.issue_registry")
+    if not hasattr(_ir, "async_create_issue"):
+        _ir.async_create_issue = MagicMock()
+        _ir.async_delete_issue = MagicMock()
+        _ir.IssueSeverity = types.SimpleNamespace(
+            CRITICAL="critical", ERROR="error", WARNING="warning"
+        )
+
     _ep = _stub("homeassistant.helpers.entity_platform")
     if not hasattr(_ep, "AddEntitiesCallback"):
         _ep.AddEntitiesCallback = type("AddEntitiesCallback", (), {})
