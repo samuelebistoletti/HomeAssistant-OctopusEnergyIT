@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.2.4] - 2026-06-26
+
+### Changed
+- The "No electricity products for account ...; registering fallback tariff" log entry is now emitted at `INFO` level instead of `WARNING`. This is an expected, handled condition (e.g. during onboarding or while transitioning from another supplier, before Octopus has registered an active tariff) and was previously showing up as a recurring warning in the Home Assistant log on every coordinator refresh. (Fixes #15)
+
 ## [1.2.3] - 2026-03-18
 
 ### Changed

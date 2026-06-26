@@ -425,8 +425,9 @@ async def process_api_data(
             account_number,
         )
     else:
-        _LOGGER.warning(
-            "No electricity products for account %s; registering fallback tariff",
+        _LOGGER.info(
+            "No electricity products for account %s; registering fallback tariff "
+            "(expected during onboarding or supplier transition)",
             account_number,
         )
         products = [
