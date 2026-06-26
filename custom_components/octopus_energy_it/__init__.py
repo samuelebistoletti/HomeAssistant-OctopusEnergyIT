@@ -12,6 +12,7 @@ from datetime import timedelta
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall, callback
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util.dt import utcnow
@@ -42,6 +43,25 @@ ATTR_ACCOUNT_NUMBER = "account_number"
 ATTR_DEVICE_ID = "device_id"
 ATTR_TARGET_PERCENTAGE = "target_percentage"
 ATTR_TARGET_TIME = "target_time"
+
+
+def _update_electricity_tariff_issue(
+    hass: HomeAssistant, account_number: str, has_tariff: bool
+) -> None:
+    """Create or clear the repair issue for an account with no active tariff."""
+    issue_id = f"no_electricity_tariff_{account_number}"
+    if has_tariff:
+        ir.async_delete_issue(hass, DOMAIN, issue_id)
+    else:
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            issue_id,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="no_electricity_tariff",
+            translation_placeholders={"account_number": account_number},
+        )
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -164,6 +184,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             account_data, account_num, api, available_products
                         )
                         all_accounts_data.update(processed)
+                        _update_electricity_tariff_issue(
+                            hass,
+                            account_num,
+                            processed[account_num].get(
+                                "has_electricity_tariff", False
+                            ),
+                        )
                     else:
                         _LOGGER.warning(
                             "Failed to fetch data for account %s", account_num
@@ -329,6 +356,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+        account_numbers = entry.data.get("account_numbers") or (
+            [entry.data["account_number"]] if entry.data.get("account_number") else []
+        )
+        for account_num in account_numbers:
+            ir.async_delete_issue(hass, DOMAIN, f"no_electricity_tariff_{account_num}")
+
         domain_data = hass.data[DOMAIN]
         domain_data.pop(entry.entry_id, None)
         remaining_entries = [

@@ -53,6 +53,12 @@
       "message": "Unable to update the charge end time. Check the log for details."
     }
   },
+  "issues": {
+    "no_electricity_tariff": {
+      "title": "No active electricity tariff",
+      "description": "No active electricity product was found for account {account_number}. This is expected while onboarding or during a transition from another supplier, before Octopus registers an active tariff — electricity price and tariff sensors will be unavailable until then. This issue clears automatically once a tariff is registered, no action is required."
+    }
+  },
   "entity": {
     "sensor": {
       "electricity_price": {

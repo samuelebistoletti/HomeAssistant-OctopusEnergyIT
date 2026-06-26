@@ -2,6 +2,7 @@ name: Tag and Release on manifest.json version change
 
 on:
   push:
+    branches: [main]
     paths:
       - 'custom_components/octopus_energy_it/manifest.json'
 
