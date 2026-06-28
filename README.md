@@ -17,7 +17,7 @@ A differenza dell'integrazione nativa tra V2C e Home Assistant, questa soluzione
 
 Se vuoi connettere Home Assistant direttamente al cloud V2C, prova l'integrazione complementare [HomeAssistant-V2C-Cloud](https://github.com/samuelebistoletti/HomeAssistant-V2C-Cloud): porta in HA telemetrie e controlli nativi della wallbox.
 
-Per saperne di più sui miei progetti vai su https://samuele.bistoletti.me/.
+Per saperne di più sui miei progetti vai su [https://samuele.bistoletti.me/](https://samuele.bistoletti.me/).
 
 ---
 
