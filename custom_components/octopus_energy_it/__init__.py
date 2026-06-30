@@ -22,6 +22,10 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from .const import DOMAIN, UPDATE_INTERVAL
 from .data_processor import process_api_data
 from .octopus_energy_it import OctopusEnergyIT
+from .statistics import (
+    async_import_electricity_cost_statistics,
+    async_import_electricity_statistics,
+)
 from .tariff_scraper import fetch_public_tariffs
 
 _LOGGER = logging.getLogger(__name__)
@@ -190,6 +194,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             processed[account_num].get(
                                 "has_electricity_tariff", False
                             ),
+                        )
+                        await async_import_electricity_statistics(
+                            hass,
+                            account_num,
+                            processed[account_num].get("electricity_last_reading"),
+                        )
+                        await async_import_electricity_cost_statistics(
+                            hass,
+                            account_num,
+                            processed[account_num].get("electricity_last_reading"),
+                            processed[account_num],
                         )
                     else:
                         _LOGGER.warning(
