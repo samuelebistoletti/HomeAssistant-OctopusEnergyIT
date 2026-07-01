@@ -1,5 +1,40 @@
 # Changelog
 
+## [1.3.0] - 2026-07-01
+
+### Added
+- New `statistics.py` module that imports electricity consumption and cost
+  as *external long-term statistics* using the real meter reading date
+  instead of the coordinator polling time. This fixes the Energy dashboard
+  showing daily consumption attributed to the wrong day (the API publishes
+  readings with a delay of 1–4 days; the old sensor-based approach
+  timestamped statistics at wall-clock refresh time). Closes #19.
+  - `octopus_energy_it:<account>_electricity_consumption` (kWh) — selectable
+    as electricity source in Settings → Energy Dashboard → Configure grid
+    connection, in place of `sensor.<account>_electricity_last_reading`.
+  - `octopus_energy_it:<account>_electricity_cost` (EUR) — selectable as
+    cost tracking source; computed as consumption delta × current base price.
+  - Both statistics are written as a single daily point at local midnight of
+    the day the reading belongs to, so daily/weekly/monthly Energy dashboard
+    views attribute consumption to the correct calendar day.
+  - Cumulative totals are bootstrapped from the last value already stored in
+    the recorder (`get_last_statistics`) on the first run after a restart,
+    so neither consumption nor cost resets to zero after a Home Assistant
+    reboot.
+  - `statistic_id` is sanitized to lowercase + underscores to accommodate
+    account numbers containing uppercase letters and hyphens (e.g.
+    `A-XXXXXXXX`).
+  - Compatible with both recent HA core (`mean_type`) and older versions
+    (`has_mean` fallback).
+
+### Notes
+- Gas statistics are not yet covered by this change.
+- Cost is calculated on the base (flat-rate) price (`pricing.base`) only;
+  time-of-use tariffs (F1/F2/F3) are not yet supported.
+- Historical backfill (importing past readings retroactively) is not
+  included; statistics accumulate from the first coordinator refresh after
+  installation.
+
 ## [1.2.5] - 2026-06-26
 
 ### Changed
