@@ -53,7 +53,7 @@ def _sanitize_account(account_number: str) -> str:
 
     statistic_id must only contain lowercase letters, digits and
     underscores after the domain prefix (e.g. account numbers like
-    'A-XXXXX' must be sanitized).
+    'A-XXXXXX' must be sanitized).
     """
     return _INVALID_STAT_ID_CHARS.sub("_", account_number.lower()).strip("_")
 
@@ -170,7 +170,11 @@ def _get_recorder_imports():
 
 
 def _build_metadata(
-    statistic_id: str, name: str, unit_of_measurement: str, statistic_meta_data_cls
+    statistic_id: str,
+    name: str,
+    unit_of_measurement: str,
+    unit_class: str,
+    statistic_meta_data_cls,
 ):
     """Build StatisticMetaData, handling both old and new HA core APIs."""
     try:
@@ -183,6 +187,7 @@ def _build_metadata(
             source=DOMAIN,
             statistic_id=statistic_id,
             unit_of_measurement=unit_of_measurement,
+            unit_class=unit_class,
         )
     except ImportError:
         # Older HA core versions (pre mean_type) still expect has_mean.
@@ -193,14 +198,19 @@ def _build_metadata(
             source=DOMAIN,
             statistic_id=statistic_id,
             unit_of_measurement=unit_of_measurement,
+            unit_class=unit_class,
         )
 
 
-async def _async_get_last_cumulative(hass: HomeAssistant, statistic_id: str) -> float:
-    """Return the last cumulative 'sum' already stored for a statistic.
+async def _async_get_last_stat(
+    hass: HomeAssistant, statistic_id: str
+) -> tuple[float, date | None]:
+    """Return (last_sum, last_date) already stored for a statistic.
 
-    Used to resume the running cost total after a Home Assistant restart,
-    instead of resetting it to zero.
+    Used both to resume the running cumulative total after a Home Assistant
+    restart and to deduplicate imports: if the last stored point already
+    covers today's reading date, there is nothing to import.
+    Returns (0.0, None) when the statistic has no data yet.
     """
     try:
         from homeassistant.components.recorder import get_instance
@@ -208,25 +218,39 @@ async def _async_get_last_cumulative(hass: HomeAssistant, statistic_id: str) -> 
             get_last_statistics,
         )
     except ImportError:
-        return 0.0
+        return 0.0, None
 
     def _query():
-        return get_last_statistics(hass, 1, statistic_id, True, {"sum"})
+        return get_last_statistics(hass, 1, statistic_id, True, {"sum", "start"})
 
     try:
         result = await get_instance(hass).async_add_executor_job(_query)
     except Exception:  # noqa: BLE001
         _LOGGER.debug("Could not fetch last statistics for %s", statistic_id)
-        return 0.0
+        return 0.0, None
 
     rows = result.get(statistic_id) if result else None
     if not rows:
-        return 0.0
-    last_sum = rows[0].get("sum")
+        return 0.0, None
+
+    row = rows[0]
+
+    last_sum = row.get("sum")
     try:
-        return float(last_sum) if last_sum is not None else 0.0
+        cumulative = float(last_sum) if last_sum is not None else 0.0
     except (TypeError, ValueError):
-        return 0.0
+        cumulative = 0.0
+
+    last_start = row.get("start")
+    last_date: date | None = None
+    if last_start is not None:
+        try:
+            last_dt = dt_util.utc_from_timestamp(float(last_start))
+            last_date = dt_util.as_local(last_dt).date()
+        except (TypeError, ValueError):
+            last_date = None
+
+    return cumulative, last_date
 
 
 async def async_import_electricity_statistics(
@@ -274,16 +298,19 @@ async def async_import_electricity_statistics(
     statistic_id = _consumption_statistic_id(account_number)
 
     domain_data = hass.data.setdefault(DOMAIN, {})
-    imported = domain_data.setdefault("_imported_reading_dates", {})
-    if imported.get(statistic_id) == target_date:
+    running_sums = domain_data.setdefault("_imported_consumption_sums", {})
+
+    # Bootstrap from recorder on first call after a restart, and use the
+    # stored date for deduplication — not an in-memory flag — so repeated
+    # coordinator refreshes within the same day never double-count.
+    if statistic_id not in running_sums:
+        last_sum, last_date = await _async_get_last_stat(hass, statistic_id)
+        running_sums[statistic_id] = (last_sum, last_date)
+
+    start_value, last_imported_date = running_sums[statistic_id]
+    if last_imported_date == target_date:
         return
 
-    running_sums = domain_data.setdefault("_imported_consumption_sums", {})
-    if statistic_id not in running_sums:
-        running_sums[statistic_id] = await _async_get_last_cumulative(
-            hass, statistic_id
-        )
-    start_value = running_sums[statistic_id]
     end_value = start_value + delta_kwh
 
     recorder_imports = _get_recorder_imports()
@@ -298,6 +325,7 @@ async def async_import_electricity_statistics(
         statistic_id,
         CONSUMPTION_STAT_NAME_TEMPLATE.format(account=account_number),
         "kWh",
+        "energy",
         statistic_meta_data_cls,
     )
     stats = [
@@ -317,8 +345,7 @@ async def async_import_electricity_statistics(
         )
         return
 
-    imported[statistic_id] = target_date
-    running_sums[statistic_id] = end_value
+    running_sums[statistic_id] = (end_value, target_date)
     _LOGGER.debug(
         "Imported electricity statistic '%s' for %s "
         "(%.3f -> %.3f kWh)",
@@ -375,16 +402,16 @@ async def async_import_electricity_cost_statistics(
     cost_statistic_id = _cost_statistic_id(account_number)
 
     domain_data = hass.data.setdefault(DOMAIN, {})
-    imported = domain_data.setdefault("_imported_cost_dates", {})
-    if imported.get(cost_statistic_id) == target_date:
+    running_sums = domain_data.setdefault("_imported_cost_sums", {})
+
+    if cost_statistic_id not in running_sums:
+        last_sum, last_date = await _async_get_last_stat(hass, cost_statistic_id)
+        running_sums[cost_statistic_id] = (last_sum, last_date)
+
+    previous_cumulative, last_imported_date = running_sums[cost_statistic_id]
+    if last_imported_date == target_date:
         return
 
-    running_sums = domain_data.setdefault("_imported_cost_sums", {})
-    if cost_statistic_id not in running_sums:
-        running_sums[cost_statistic_id] = await _async_get_last_cumulative(
-            hass, cost_statistic_id
-        )
-    previous_cumulative = running_sums[cost_statistic_id]
     new_cumulative = previous_cumulative + (delta_kwh * price)
 
     recorder_imports = _get_recorder_imports()
@@ -399,6 +426,7 @@ async def async_import_electricity_cost_statistics(
         cost_statistic_id,
         COST_STAT_NAME_TEMPLATE.format(account=account_number),
         "EUR",
+        "monetary",
         statistic_meta_data_cls,
     )
     stats = [
@@ -418,8 +446,7 @@ async def async_import_electricity_cost_statistics(
         )
         return
 
-    running_sums[cost_statistic_id] = new_cumulative
-    imported[cost_statistic_id] = target_date
+    running_sums[cost_statistic_id] = (new_cumulative, target_date)
     _LOGGER.debug(
         "Imported electricity cost statistic '%s' for %s "
         "(+%.4f EUR, cumulative %.4f -> %.4f EUR, price=%.5f €/kWh)",
