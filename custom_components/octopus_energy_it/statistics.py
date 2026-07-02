@@ -53,7 +53,7 @@ def _sanitize_account(account_number: str) -> str:
 
     statistic_id must only contain lowercase letters, digits and
     underscores after the domain prefix (e.g. account numbers like
-    'A-XXXXXX' must be sanitized).
+    'A-1A2B3C4D' must be sanitized).
     """
     return _INVALID_STAT_ID_CHARS.sub("_", account_number.lower()).strip("_")
 
@@ -173,10 +173,15 @@ def _build_metadata(
     statistic_id: str,
     name: str,
     unit_of_measurement: str,
-    unit_class: str,
+    unit_class: str | None,
     statistic_meta_data_cls,
 ):
-    """Build StatisticMetaData, handling both old and new HA core APIs."""
+    """Build StatisticMetaData, handling both old and new HA core APIs.
+
+    unit_class must match one of the recorder's supported unit conversion
+    classes (e.g. "energy" for kWh). Monetary units have no unit converter
+    in Home Assistant, so cost statistics must pass None.
+    """
     try:
         from homeassistant.components.recorder.models import StatisticMeanType
 
@@ -426,7 +431,7 @@ async def async_import_electricity_cost_statistics(
         cost_statistic_id,
         COST_STAT_NAME_TEMPLATE.format(account=account_number),
         "EUR",
-        "monetary",
+        None,
         statistic_meta_data_cls,
     )
     stats = [
