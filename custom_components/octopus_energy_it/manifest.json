@@ -9,8 +9,6 @@
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/samuelebistoletti/HomeAssistant-OctopusEnergyIT/issues",
-  "requirements": [
-    "python-graphql-client==0.4.3"
-  ],
-  "version": "1.2.5"
+  "requirements": [],
+  "version": "1.2.6"
 }

@@ -11,9 +11,9 @@ import json
 import logging
 from datetime import UTC, datetime
 
+import aiohttp
 import jwt
 from homeassistant.exceptions import ConfigEntryNotReady
-from python_graphql_client import GraphqlClient
 
 from .const import (
     LOGIN_INITIAL_DELAY,
@@ -474,6 +474,43 @@ class TokenManager:
         self._expiry = None
 
 
+class _GraphQLClient:
+    """Minimal async GraphQL client backed by aiohttp.
+
+    Dependency-free replacement for the abandoned ``python-graphql-client``
+    package (issue #23). It implements only the ``execute_async`` surface this
+    integration uses. ``aiohttp`` ships with Home Assistant core, so unlike the
+    external package it can never fail to install — which was the cause of the
+    "No module named 'python_graphql_client'" error that broke the config flow.
+    """
+
+    def __init__(self, endpoint: str, headers: dict | None = None) -> None:
+        """Store the GraphQL *endpoint* and default request *headers*."""
+        self.endpoint = endpoint
+        self.headers = headers or {}
+
+    async def execute_async(
+        self,
+        query: str,
+        variables: dict | None = None,
+        operation_name: str | None = None,
+        headers: dict | None = None,
+    ) -> dict:
+        """Execute a GraphQL request and return the parsed JSON response."""
+        body: dict = {"query": query}
+        if variables:
+            body["variables"] = variables
+        if operation_name:
+            body["operationName"] = operation_name
+
+        request_headers = {**self.headers, **(headers or {})}
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                self.endpoint, json=body, headers=request_headers
+            ) as response:
+                return await response.json()
+
+
 class OctopusEnergyIT:
     def __init__(self, email: str, password: str):
         """
@@ -505,7 +542,7 @@ class OctopusEnergyIT:
         headers = self._get_auth_headers() if use_auth else {}
         if additional_headers:
             headers.update(additional_headers)
-        return GraphqlClient(endpoint=GRAPH_QL_ENDPOINT, headers=headers)
+        return _GraphQLClient(endpoint=GRAPH_QL_ENDPOINT, headers=headers)
 
     async def _execute_graphql(
         self,

@@ -5,7 +5,7 @@
 ### API References
 
 - Official documentation: [Octopus Energy Italy developer portal](https://developer.oeit-kraken.energy/)
-- GraphQL endpoint: `https://api.oeit-kraken.energy/v1/graphql/` — accessed via `python-graphql-client`
+- GraphQL endpoint: `https://api.oeit-kraken.energy/v1/graphql/` — accessed via a small in-tree `aiohttp`-based client (`_GraphQLClient` in `octopus_energy_it.py`); the integration declares no external `requirements` in `manifest.json`
 
 ### Key Files
 

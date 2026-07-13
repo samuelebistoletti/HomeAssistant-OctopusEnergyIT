@@ -30,21 +30,6 @@ _ha = types.ModuleType("homeassistant")
 sys.modules.setdefault("homeassistant", _ha)
 sys.modules.setdefault("homeassistant.exceptions", _ha_exceptions)
 
-# python_graphql_client stub (replaced per-test via patch)
-_graphql_mod = types.ModuleType("python_graphql_client")
-
-
-class _StubGraphqlClient:
-    def __init__(self, endpoint, headers=None):
-        pass
-
-    async def execute_async(self, query, variables=None):
-        return {}
-
-
-_graphql_mod.GraphqlClient = _StubGraphqlClient
-sys.modules.setdefault("python_graphql_client", _graphql_mod)
-
 # Import the module under test using importlib to handle the relative imports
 import importlib
 import importlib.util
@@ -69,6 +54,7 @@ _spec.loader.exec_module(_mod)
 
 OctopusEnergyIT = _mod.OctopusEnergyIT
 TokenManager = _mod.TokenManager
+_GraphQLClient = _mod._GraphQLClient
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -329,6 +315,95 @@ class TestLogin:
 
         assert result is False
         assert call_count == 5
+
+
+# ---------------------------------------------------------------------------
+# _GraphQLClient — the aiohttp-backed replacement for python-graphql-client
+# (regression coverage for issue #23)
+# ---------------------------------------------------------------------------
+
+
+class _FakeResponse:
+    def __init__(self, payload):
+        self._payload = payload
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def json(self):
+        return self._payload
+
+
+class _FakeSession:
+    """Records the POST call and returns a canned JSON payload."""
+
+    def __init__(self, payload, recorder):
+        self._payload = payload
+        self._recorder = recorder
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    def post(self, url, json=None, headers=None):
+        self._recorder.update(url=url, json=json, headers=headers)
+        return _FakeResponse(self._payload)
+
+
+class TestGraphQLClient:
+    async def test_execute_async_posts_query_and_parses_json(self):
+        rec = {}
+        client = _GraphQLClient(
+            "https://api.example/graphql/", headers={"Authorization": "tok"}
+        )
+        with patch.object(
+            _mod.aiohttp,
+            "ClientSession",
+            return_value=_FakeSession({"data": {"ok": 1}}, rec),
+        ):
+            result = await client.execute_async(
+                "query { ok }", variables={"accountNumber": "A-1"}
+            )
+
+        assert result == {"data": {"ok": 1}}
+        assert rec["url"] == "https://api.example/graphql/"
+        assert rec["json"] == {
+            "query": "query { ok }",
+            "variables": {"accountNumber": "A-1"},
+        }
+        assert rec["headers"]["Authorization"] == "tok"
+
+    async def test_execute_async_omits_empty_variables(self):
+        """Empty variables are omitted, matching python-graphql-client behaviour."""
+        rec = {}
+        client = _GraphQLClient("https://api.example/graphql/")
+        with patch.object(
+            _mod.aiohttp,
+            "ClientSession",
+            return_value=_FakeSession({"data": {}}, rec),
+        ):
+            await client.execute_async("query { ping }", variables={})
+
+        assert rec["json"] == {"query": "query { ping }"}
+
+    async def test_execute_async_merges_per_request_headers(self):
+        rec = {}
+        client = _GraphQLClient(
+            "https://api.example/graphql/", headers={"Authorization": "tok"}
+        )
+        with patch.object(
+            _mod.aiohttp,
+            "ClientSession",
+            return_value=_FakeSession({"data": {}}, rec),
+        ):
+            await client.execute_async("query { ok }", headers={"X-Extra": "1"})
+
+        assert rec["headers"] == {"Authorization": "tok", "X-Extra": "1"}
 
 
 # ---------------------------------------------------------------------------

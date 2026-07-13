@@ -35,8 +35,8 @@ import pytest
 def _make_ha_stubs():
     """Inject minimal homeassistant stub modules into sys.modules.
 
-    Also stubs third-party deps (jwt, python_graphql_client) that are imported
-    by the integration sub-module but are not required for the functions under test.
+    Also stubs third-party deps (jwt) that are imported by the integration
+    sub-module but are not required for the functions under test.
     """
     from datetime import timezone, datetime as _datetime
 
@@ -99,9 +99,6 @@ def _make_ha_stubs():
     jwt_stub = types.ModuleType("jwt")
     jwt_stub.decode = MagicMock(return_value={})
 
-    graphql_stub = types.ModuleType("python_graphql_client")
-    graphql_stub.GraphqlClient = MagicMock()
-
     for name, mod in [
         ("homeassistant", ha),
         ("homeassistant.config_entries", ha_config_entries),
@@ -114,7 +111,6 @@ def _make_ha_stubs():
         ("homeassistant.util", ha_util),
         ("homeassistant.util.dt", ha_util_dt),
         ("jwt", jwt_stub),
-        ("python_graphql_client", graphql_stub),
     ]:
         sys.modules.setdefault(name, mod)
 
