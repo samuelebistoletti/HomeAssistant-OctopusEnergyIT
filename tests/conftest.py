@@ -87,10 +87,6 @@ def _install_stubs() -> None:
         _jwt.decode = MagicMock(return_value={})
         _jwt.PyJWTError = Exception
 
-    _gql = _stub("python_graphql_client")
-    if not hasattr(_gql, "GraphqlClient"):
-        _gql.GraphqlClient = object
-
     # ---- homeassistant hierarchy ----
     _stub("homeassistant")
     _stub("homeassistant.components")

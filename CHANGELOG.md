@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+- The integration could not be added: the config flow failed with `No module named 'python_graphql_client'` when Home Assistant was unable to install the external `python-graphql-client` package. That abandoned dependency (last released in 2021) has been removed entirely and replaced with a small in-tree GraphQL client built on `aiohttp`, which ships with Home Assistant core and therefore can never fail to install. `manifest.json` now declares no external `requirements`. (Fixes #23)
+
 ## [1.2.5] - 2026-06-26
 
 ### Changed
