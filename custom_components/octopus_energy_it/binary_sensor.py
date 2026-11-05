@@ -9,7 +9,6 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util.dt import as_utc, parse_datetime, utcnow
 
-from .const import DOMAIN
 from .entity import OctopusCoordinatorEntity, resolve_account_numbers
 
 _LOGGER = logging.getLogger(__name__)

@@ -107,10 +107,10 @@ def _ensure_ha_stubs():
 
 _ensure_ha_stubs()
 
-from custom_components.octopus_energy_it.binary_sensor import (  # noqa: E402
+from custom_components.octopus_energy_it.binary_sensor import (
     OctopusIntelligentDispatchingBinarySensor,
 )
-from custom_components.octopus_energy_it.entity import OctopusCoordinatorEntity  # noqa: E402
+from custom_components.octopus_energy_it.entity import OctopusCoordinatorEntity
 
 # ---------------------------------------------------------------------------
 # Helpers

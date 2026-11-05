@@ -143,7 +143,7 @@ def _select_current_product(products_list: list[dict]) -> dict | None:
     return valid_products[0]
 
 
-async def process_api_data(
+async def process_api_data(  # noqa: C901 - sequential extraction steps
     data: dict[str, Any],
     account_number: str,
     api: Any,

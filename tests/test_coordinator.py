@@ -27,7 +27,7 @@ def _make_ha_stubs():
     Also stubs third-party deps (jwt) that are imported by the integration
     sub-module but are not required for the functions under test.
     """
-    from datetime import datetime as _datetime, timezone
+    from datetime import UTC, datetime as _datetime
 
     # ---- homeassistant package ----
     ha = types.ModuleType("homeassistant")
@@ -69,16 +69,16 @@ def _make_ha_stubs():
         if dt is None:
             return dt
         if dt.tzinfo is None:
-            return dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc)
+            return dt.replace(tzinfo=UTC)
+        return dt.astimezone(UTC)
 
     def _parse_datetime(s):
         if s is None:
             return None
-        return _datetime.fromisoformat(s.replace("Z", "+00:00"))
+        return _datetime.fromisoformat(s)
 
     def _utcnow():
-        return _datetime.now(timezone.utc)
+        return _datetime.now(UTC)
 
     ha_util_dt.as_utc = _as_utc
     ha_util_dt.parse_datetime = _parse_datetime
@@ -110,11 +110,9 @@ def _make_ha_stubs():
 _UpdateFailed = _make_ha_stubs()
 
 # Now import the integration module (and its public helpers)
-import custom_components.octopus_energy_it.coordinator as coord_mod  # noqa: E402
-from custom_components.octopus_energy_it.data_processor import (  # noqa: E402
-    process_api_data,
-)
-import custom_components.octopus_energy_it.tariff_scraper as tariff_mod  # noqa: E402
+import custom_components.octopus_energy_it.coordinator as coord_mod
+from custom_components.octopus_energy_it.data_processor import process_api_data
+import custom_components.octopus_energy_it.tariff_scraper as tariff_mod
 
 _slice_html_block = tariff_mod._slice_html_block
 _extract_value = tariff_mod._extract_value
@@ -604,7 +602,7 @@ class TestFetchPublicTariffs:
 # Public-tariffs updater (coordinator.build_public_products_updater)
 # ---------------------------------------------------------------------------
 
-from homeassistant.helpers.update_coordinator import UpdateFailed  # noqa: E402 (stub)
+from homeassistant.helpers.update_coordinator import UpdateFailed
 
 
 async def _make_update_fn(hass, domain_data, fetch_result):
@@ -766,8 +764,8 @@ class unittest_any_callable:
 # process_api_data dispatch windows
 # ---------------------------------------------------------------------------
 
-from datetime import UTC, datetime, timedelta  # noqa: E402
-from unittest.mock import patch  # noqa: E402
+from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 
 
 async def _process_dispatches(planned_dispatches_raw, now):

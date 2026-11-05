@@ -5,13 +5,21 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryNotReady,
+    HomeAssistantError,
+    ServiceValidationError,
+)
+from homeassistant.helpers.update_coordinator import UpdateFailed
 import pytest
 
-import custom_components.octopus_energy_it.__init__ as init_mod
 from custom_components.octopus_energy_it import (
     coordinator as coord_mod,
     services as services_mod,
 )
+import custom_components.octopus_energy_it.__init__ as init_mod
 from custom_components.octopus_energy_it.const import DOMAIN
 from custom_components.octopus_energy_it.coordinator import (
     OctopusEnergyITDataUpdateCoordinator,
@@ -21,14 +29,6 @@ from custom_components.octopus_energy_it.octopus_energy_it import (
     OctopusEnergyITAuthError,
     OctopusEnergyITConnectionError,
 )
-from homeassistant.config_entries import ConfigEntryState
-from homeassistant.exceptions import (
-    ConfigEntryAuthFailed,
-    ConfigEntryNotReady,
-    HomeAssistantError,
-    ServiceValidationError,
-)
-from homeassistant.helpers.update_coordinator import UpdateFailed
 
 ACCOUNT = "A-1234ABCD"
 DEVICE_ID = "device-1"

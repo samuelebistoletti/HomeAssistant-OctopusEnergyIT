@@ -202,8 +202,8 @@ combine-as-imports = true
 split-on-trailing-comma = false
 
 [lint.per-file-ignores]
-"custom_components/**" = ["PTH"]
-"tests/**" = ["S101", "SLF001", "PLR2004", "D", "PTH"]
+"custom_components/**" = ["PTH", "D102", "D107"]  # entity properties/inits: docstrings would only restate the name
+"tests/**" = ["S101", "SLF001", "PLR2004", "D", "PTH", "PLC0415", "E402", "C901", "BLE001"]  # stub bootstrapping imports inside functions
 "scripts/*" = ["T201", "INP001"]
 "scripts/dev-bootstrap" = ["T201", "INP001", "EXE001"]
 

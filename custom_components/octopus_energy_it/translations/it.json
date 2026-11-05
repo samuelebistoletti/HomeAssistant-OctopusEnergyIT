@@ -72,6 +72,15 @@
     },
     "set_preferences_failed": {
       "message": "Octopus Energy Italy non ha accettato le nuove preferenze di ricarica. Controlla i log per i dettagli."
+    },
+    "boost_charge_failed": {
+      "message": "Octopus Energy Italy non ha avviato la ricarica boost. Controlla i log per i dettagli."
+    },
+    "boost_cancel_failed": {
+      "message": "Octopus Energy Italy non ha annullato la ricarica boost. Controlla i log per i dettagli."
+    },
+    "device_unavailable": {
+      "message": "I dati di questo dispositivo smart Octopus non sono disponibili al momento."
     }
   },
   "issues": {

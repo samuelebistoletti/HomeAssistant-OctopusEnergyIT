@@ -16,6 +16,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
+import itertools
 import logging
 import re
 from typing import Any
@@ -79,7 +80,7 @@ def period_rows(
     ordered = sorted(points, key=lambda point: point[0])
     rows: list[dict[str, Any]] = []
     running = cursor.sum
-    for (prev_at, prev_value), (_at, value) in zip(ordered, ordered[1:], strict=False):
+    for (prev_at, prev_value), (_at, value) in itertools.pairwise(ordered):
         start = dt_util.as_utc(dt_util.start_of_local_day(dt_util.as_local(prev_at)))
         if cursor.start is not None and start <= cursor.start:
             continue

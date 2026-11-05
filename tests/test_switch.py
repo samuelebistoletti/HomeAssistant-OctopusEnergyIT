@@ -18,7 +18,7 @@ def _ensure_ha_stubs():
             sys.modules[name] = types.ModuleType(name)
         return sys.modules[name]
 
-    ha = _stub("homeassistant")
+    _stub("homeassistant")
     _stub("homeassistant.components")
     _stub("homeassistant.config_entries")
     _stub("homeassistant.core")
@@ -82,9 +82,9 @@ def _ensure_ha_stubs():
 
 _ensure_ha_stubs()
 
-from custom_components.octopus_energy_it.const import DOMAIN  # noqa: E402
-from custom_components.octopus_energy_it.entity import OctopusCoordinatorEntity  # noqa: E402
-from custom_components.octopus_energy_it.switch import BoostChargeSwitch, OctopusSwitch  # noqa: E402
+from custom_components.octopus_energy_it.const import DOMAIN
+from custom_components.octopus_energy_it.entity import OctopusCoordinatorEntity
+from custom_components.octopus_energy_it.switch import BoostChargeSwitch, OctopusSwitch
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -651,9 +651,11 @@ class TestBoostChargeSwitchTurnOnOff:
         ha_exc = sys.modules["homeassistant.exceptions"]
         switch = self._make()
         switch._api.update_boost_charge = AsyncMock(return_value=None)
-        with patch(self._UTCNOW, return_value=self._FIXED_NOW):
-            with pytest.raises(ha_exc.HomeAssistantError):
-                await switch.async_turn_on()
+        with (
+            patch(self._UTCNOW, return_value=self._FIXED_NOW),
+            pytest.raises(ha_exc.HomeAssistantError),
+        ):
+            await switch.async_turn_on()
         assert switch._is_switching is False
 
     @pytest.mark.asyncio
@@ -665,9 +667,11 @@ class TestBoostChargeSwitchTurnOnOff:
         switch._api.update_boost_charge = AsyncMock(
             side_effect=RuntimeError("api down")
         )
-        with patch(self._UTCNOW, return_value=self._FIXED_NOW):
-            with pytest.raises(ha_exc.HomeAssistantError):
-                await switch.async_turn_on()
+        with (
+            patch(self._UTCNOW, return_value=self._FIXED_NOW),
+            pytest.raises(ha_exc.HomeAssistantError),
+        ):
+            await switch.async_turn_on()
         assert switch._is_switching is False
 
     @pytest.mark.asyncio

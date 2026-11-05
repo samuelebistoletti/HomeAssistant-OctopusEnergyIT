@@ -505,7 +505,7 @@ class TokenManager:
             decoded = jwt.decode(token, options={"verify_signature": False})
             exp = decoded.get("exp")
             self._expiry = float(exp) if exp is not None else None
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - any undecodable token: use a fixed lifetime
             now = datetime.now(UTC).timestamp()
             self._expiry = now + TOKEN_AUTO_REFRESH_INTERVAL
             _LOGGER.debug(
@@ -626,6 +626,8 @@ class _GraphQLClient:
 
 
 class OctopusEnergyIT:
+    """Client for the Octopus Energy Italy (Kraken) GraphQL API."""
+
     def __init__(
         self,
         email: str,
@@ -704,7 +706,7 @@ class OctopusEnergyIT:
                     continue
                 _LOGGER.error("GraphQL request failed: %s", exc)
                 return None
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - API errors are reported as None
                 _LOGGER.error("GraphQL request failed: %s", exc)
                 return None
 
@@ -902,7 +904,7 @@ class OctopusEnergyIT:
                         return True
                     if abort:
                         return False
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 - retried with backoff
                     _LOGGER.error("Error during login attempt %s: %s", attempt, e)
                     await asyncio.sleep(delay)
                     delay = min(delay * 2, LOGIN_MAX_DELAY)
@@ -1136,20 +1138,19 @@ class OctopusEnergyIT:
                     response.get("errors"),
                 )
                 return None
-            _LOGGER.error("API response contains neither data nor errors")
-            return None
-
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - the coordinator treats None as a failed account
             _LOGGER.error("Error fetching all data: %s", e)
             return None
+
+        _LOGGER.error("API response contains neither data nor errors")
+        return None
 
     @staticmethod
     def flatten_connection(connection):
         """Convert Relay-style connections to plain lists of nodes."""
         if isinstance(connection, dict):
             edges = connection.get("edges") or []
-            nodes = [edge.get("node") for edge in edges if edge and edge.get("node")]
-            return nodes
+            return [edge.get("node") for edge in edges if edge and edge.get("node")]
         return connection if isinstance(connection, list) else []
 
     def normalise_account_properties(self, account_data):
@@ -1185,10 +1186,9 @@ class OctopusEnergyIT:
             return "0"
         try:
             cents = float(amount) * 100.0
-            formatted = f"{cents:.6f}".rstrip("0").rstrip(".")
-            return formatted or "0"
         except (TypeError, ValueError):
             return "0"
+        return f"{cents:.6f}".rstrip("0").rstrip(".") or "0"
 
     def build_electricity_product_entry(self, supply_point, agreement):
         """Create a simplified product descriptor for electricity tariffs."""
@@ -1454,7 +1454,7 @@ class OctopusEnergyIT:
     async def set_device_preferences(
         self,
         device_id: str,
-        target_percentage: int,
+        target_percentage: float,
         target_time: str,
     ) -> bool:
         """Set device charging preferences using the SmartFlex API."""
@@ -1463,8 +1463,7 @@ class OctopusEnergyIT:
             return False
 
         original_percentage = target_percentage
-        target_percentage = int(round(target_percentage))
-        target_percentage = max(10, min(100, target_percentage))
+        target_percentage = max(10, min(100, round(target_percentage)))
         if target_percentage != original_percentage:
             _LOGGER.debug(
                 "Adjusted target percentage from %s to %s to satisfy API constraints",
@@ -1823,37 +1822,35 @@ class OctopusEnergyIT:
         return measurements
 
     @staticmethod
-    def format_time_to_hh_mm(time_str: str) -> str:
-        """Normalise user-provided time values to HH:MM format."""
-        try:
-            if isinstance(time_str, (int, float)):
-                if 0 <= time_str <= 23:
-                    return f"{int(time_str):02d}:00"
-                raise ValueError("Numeric hour values must be between 0 and 23")
+    def format_time_to_hh_mm(time_str: str | float) -> str:
+        """Normalise user-provided time values to HH:MM format.
 
-            if isinstance(time_str, str):
-                stripped = time_str.strip()
-                if stripped.isdigit() and len(stripped) <= 2:
-                    hour = int(stripped)
-                    if 0 <= hour <= 23:
-                        return f"{hour:02d}:00"
-                    raise ValueError("Hour component must be between 0 and 23")
+        Raises ``ValueError`` for values that are not a time of day.
+        """
+        if isinstance(time_str, bool) or not isinstance(time_str, (str, int, float)):
+            msg = f"Unsupported time value type: {type(time_str).__name__}"
+            raise ValueError(msg)  # noqa: TRY004 - ValueError is the documented contract
 
-                for fmt in ("%H:%M:%S", "%H:%M", "%I:%M %p", "%I:%M:%S %p"):
-                    try:
-                        dt = datetime.strptime(stripped, fmt)
-                        return f"{dt.hour:02d}:{dt.minute:02d}"
-                    except ValueError:
-                        continue
+        if isinstance(time_str, (int, float)):
+            if not 0 <= time_str <= 23:
+                msg = "Numeric hour values must be between 0 and 23"
+                raise ValueError(msg)
+            return f"{int(time_str):02d}:00"
 
-                raise ValueError(
-                    f"Could not parse time: '{time_str}'."
-                    " Use HH:MM format (e.g. '05:00')"
-                )
+        stripped = time_str.strip()
+        if stripped.isdigit() and len(stripped) <= 2:
+            hour = int(stripped)
+            if not 0 <= hour <= 23:
+                msg = "Hour component must be between 0 and 23"
+                raise ValueError(msg)
+            return f"{hour:02d}:00"
 
-            raise ValueError(f"Unsupported time value type: {type(time_str).__name__}")
+        for fmt in ("%H:%M:%S", "%H:%M", "%I:%M %p", "%I:%M:%S %p"):
+            try:
+                parsed = datetime.strptime(stripped, fmt)
+            except ValueError:
+                continue
+            return f"{parsed.hour:02d}:{parsed.minute:02d}"
 
-        except Exception as exc:
-            if isinstance(exc, ValueError):
-                raise
-            raise ValueError(f"Error processing time '{time_str}': {exc!s}")
+        msg = f"Could not parse time: '{time_str}'. Use HH:MM format (e.g. '05:00')"
+        raise ValueError(msg)

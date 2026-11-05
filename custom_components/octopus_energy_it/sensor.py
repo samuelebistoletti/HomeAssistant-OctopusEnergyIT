@@ -1,8 +1,4 @@
-"""This module provides integration with Octopus Energy Italy for Home Assistant.
-
-It defines the coordinator and sensor entities to fetch and display
-electricity price information.
-"""
+"""Sensor platform of the Octopus Energy Italy integration."""
 
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
@@ -21,7 +17,6 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util.dt import as_utc, parse_datetime as _parse_dt, utcnow
 
-from .const import DOMAIN
 from .data_processor import device_battery_size_kwh, device_model
 from .entity import OctopusCoordinatorEntity, OctopusPublicProductsEntity
 
@@ -179,7 +174,7 @@ def _effective_dispatch_window(
     return account_data.get("next_start"), account_data.get("next_end")
 
 
-def _build_sensors_for_account(
+def _build_sensors_for_account(  # noqa: C901 - flat list of optional sensors
     account_number,
     coordinator,
     account_data,
@@ -308,10 +303,10 @@ def _build_sensors_for_account(
         sensors.append(OctopusHeatBalanceSensor(account_number, coordinator))
 
     other_ledgers = account_data.get("other_ledgers") or {}
-    for ledger_type in other_ledgers:
-        sensors.append(
-            OctopusLedgerBalanceSensor(account_number, coordinator, ledger_type)
-        )
+    sensors.extend(
+        OctopusLedgerBalanceSensor(account_number, coordinator, ledger_type)
+        for ledger_type in other_ledgers
+    )
 
     if account_data.get("vehicle_battery_size_in_kwh") is not None:
         sensors.append(OctopusVehicleBatterySizeSensor(account_number, coordinator))
@@ -1822,7 +1817,7 @@ class OctopusEvNextDispatchEndSensor(OctopusCoordinatorEntity, SensorEntity):
         account_data = _get_account_data(self.coordinator, self._account_number)
         if not account_data:
             return {}
-        eff_start, eff_end = _effective_dispatch_window(account_data)
+        eff_start, _eff_end = _effective_dispatch_window(account_data)
         dispatch = _find_next_dispatch(
             account_data.get("planned_dispatches") or [], eff_start
         )

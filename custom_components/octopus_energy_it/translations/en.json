@@ -72,6 +72,15 @@
     },
     "set_preferences_failed": {
       "message": "Octopus Energy Italy did not accept the new charging preferences. Check the log for details."
+    },
+    "boost_charge_failed": {
+      "message": "Octopus Energy Italy did not start the boost charge. Check the log for details."
+    },
+    "boost_cancel_failed": {
+      "message": "Octopus Energy Italy did not cancel the boost charge. Check the log for details."
+    },
+    "device_unavailable": {
+      "message": "The data of this Octopus smart device is not available right now."
     }
   },
   "issues": {

@@ -126,8 +126,8 @@ def _make_ha_stubs():
 _make_ha_stubs()
 
 # Now we can import from the integration
-from custom_components.octopus_energy_it.entity import OctopusCoordinatorEntity  # noqa: E402
-from custom_components.octopus_energy_it.sensor import (  # noqa: E402
+from custom_components.octopus_energy_it.entity import OctopusCoordinatorEntity
+from custom_components.octopus_energy_it.sensor import (
     OctopusElectricityLastDailyReadingSensor,
     OctopusElectricityLastReadingSensor,
     OctopusEvNextDispatchEndSensor,

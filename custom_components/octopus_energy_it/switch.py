@@ -113,7 +113,7 @@ async def _setup_boost_charge_switches(
                 "No electric vehicles or charge points found for boost charge switches"
             )
 
-    except Exception as err:
+    except Exception as err:  # noqa: BLE001 - boost switches are optional
         _LOGGER.error("Failed to set up boost charge switches: %s", err)
 
 
@@ -235,8 +235,8 @@ class OctopusSwitch(OctopusCoordinatorEntity, SwitchEntity):
                 self._pending_state = None
                 self._pending_until = None
                 self.async_write_ha_state()
-        except Exception as ex:
-            _LOGGER.exception("Error turning on device %s: %s", self._device_id, ex)
+        except Exception:
+            _LOGGER.exception("Error turning on device %s", self._device_id)
             # On exception: Reset pending state
             self._is_switching = False
             self._pending_state = None
@@ -276,8 +276,8 @@ class OctopusSwitch(OctopusCoordinatorEntity, SwitchEntity):
                 self._pending_state = None
                 self._pending_until = None
                 self.async_write_ha_state()
-        except Exception as ex:
-            _LOGGER.exception("Error turning off device %s: %s", self._device_id, ex)
+        except Exception:
+            _LOGGER.exception("Error turning off device %s", self._device_id)
             # On exception: Reset pending state
             self._is_switching = False
             self._pending_state = None
@@ -439,7 +439,9 @@ class BoostChargeSwitch(OctopusCoordinatorEntity, SwitchEntity):
         """Turn on boost charging."""
         device_data = self._get_device_data()
         if not device_data:
-            raise HomeAssistantError("Device data is unavailable for boost charge.")
+            raise HomeAssistantError(
+                translation_domain=DOMAIN, translation_key="device_unavailable"
+            )
 
         self._is_switching = True
         self._pending_state = True
@@ -457,48 +459,26 @@ class BoostChargeSwitch(OctopusCoordinatorEntity, SwitchEntity):
 
     async def _async_trigger_boost_charge(self) -> None:
         """Trigger boost charging via the API client."""
-        try:
-            result = await self._api.update_boost_charge(self._device_id, "BOOST")
-            if result is None:
-                raise HomeAssistantError("Failed to trigger boost charge")
-
-            _LOGGER.info(
-                "Successfully triggered boost charge for device %s", self._device_id
-            )
-            await self.coordinator.async_request_refresh()
-
-        except HomeAssistantError:
-            self._clear_pending()
-            self.async_write_ha_state()
-            raise
-        except Exception as err:
-            _LOGGER.error(
-                "Failed to trigger boost charge for device %s: %s", self._device_id, err
-            )
-            self._clear_pending()
-            self.async_write_ha_state()
-            raise HomeAssistantError(f"Failed to trigger boost charge: {err}")
+        await self._async_update_boost("BOOST", "boost_charge_failed")
 
     async def _async_cancel_boost_charge(self) -> None:
         """Cancel boost charging via the API client."""
+        await self._async_update_boost("CANCEL", "boost_cancel_failed")
+
+    async def _async_update_boost(self, action: str, error_key: str) -> None:
+        """Send a boost *action*; on failure clear the pending state and raise."""
         try:
-            result = await self._api.update_boost_charge(self._device_id, "CANCEL")
-            if result is None:
-                raise HomeAssistantError("Failed to cancel boost charge")
+            result = await self._api.update_boost_charge(self._device_id, action)
+        except Exception:
+            _LOGGER.exception("Boost %s failed for device %s", action, self._device_id)
+            result = None
 
-            _LOGGER.info(
-                "Successfully canceled boost charge for device %s", self._device_id
-            )
-            await self.coordinator.async_request_refresh()
-
-        except HomeAssistantError:
+        if result is None:
             self._clear_pending()
             self.async_write_ha_state()
-            raise
-        except Exception as err:
-            _LOGGER.error(
-                "Failed to cancel boost charge for device %s: %s", self._device_id, err
+            raise HomeAssistantError(
+                translation_domain=DOMAIN, translation_key=error_key
             )
-            self._clear_pending()
-            self.async_write_ha_state()
-            raise HomeAssistantError(f"Failed to cancel boost charge: {err}")
+
+        _LOGGER.info("Boost %s accepted for device %s", action, self._device_id)
+        await self.coordinator.async_request_refresh()
