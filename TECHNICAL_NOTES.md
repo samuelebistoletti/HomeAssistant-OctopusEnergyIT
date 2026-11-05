@@ -13,7 +13,9 @@
 | File | Role |
 |------|------|
 | `octopus_energy_it.py` | GraphQL API client — authentication, token refresh, all API calls |
-| `__init__.py` | Integration setup, `DataUpdateCoordinator`, public tariff scraper |
+| `__init__.py` | Integration setup and unload, `CONFIG_SCHEMA`, service registration in `async_setup` |
+| `coordinator.py` | `OctopusEnergyITDataUpdateCoordinator`, shared public-tariffs coordinator, `OctopusEnergyITRuntimeData` |
+| `services.py` | `set_device_preferences` service action |
 | `entity.py` | Base entity classes (`OctopusCoordinatorEntity`, `OctopusPublicProductsEntity`, `OctopusDeviceScheduleMixin`) |
 | `config_flow.py` | User credential validation and config flow |
 | `sensor.py` | Prices, balances, meter readings, dispatch info, public tariffs |
@@ -62,12 +64,16 @@ All keys use **snake_case**. Do not use camelCase variants (`plannedDispatches`,
 All platforms must use this pattern:
 
 ```python
-data = hass.data[DOMAIN][entry.entry_id]
-coordinator = data["coordinator"]
-api = data["api"]
+runtime = entry.runtime_data  # OctopusEnergyITRuntimeData
+coordinator = runtime.coordinator
+api = runtime.api
 ```
 
-Never create per-platform coordinators or separate GraphQL clients. The coordinator and API client are single shared instances stored in `hass.data[DOMAIN][entry.entry_id]`.
+Never create per-platform coordinators or separate GraphQL clients. The coordinator and API client are single shared instances stored in `entry.runtime_data`. `hass.data[DOMAIN]` only keeps what all config entries share: the public-tariffs coordinator, its cache and retry handle, and `public_owner` (the entry that owns the single public-tariffs device).
+
+Service actions are registered once in `async_setup` (`services.py`) and resolve the target device across all loaded entries, so they work with several Octopus logins.
+
+Authentication failures raise `ConfigEntryAuthFailed` (setup or coordinator), which starts the reauth flow; network failures during setup raise `ConfigEntryNotReady`.
 
 ### Token Management
 
@@ -105,7 +111,7 @@ Do not duplicate this logic in `number.py` or `select.py`.
 
 ### Public Tariffs and Retry
 
-The scraper in `__init__.py` reads `https://octopusenergy.it/le-nostre-tariffe` every hour, extracting `__NEXT_DATA__` JSON and PLACET offers from the HTML.
+The scraper in `tariff_scraper.py` (driven by the coordinator in `coordinator.py`) reads `https://octopusenergy.it/le-nostre-tariffe` every hour, extracting `__NEXT_DATA__` JSON and PLACET offers from the HTML.
 
 The retry mechanism uses `hass.async_call_later()` (a reliable one-shot timer). **Do not** modify `coordinator.update_interval` at runtime — the change has no effect on the coordinator's already-scheduled polling.
 

@@ -1,17 +1,8 @@
-"""Tests for helper functions in custom_components/octopus_energy_it/__init__.py.
+"""Tests for the tariff scraper and the coordinator module helpers.
 
-We test only module-level, importable pure/helper functions:
-  - _slice_html_block
-  - _extract_value
-  - _extract_decimal
-  - _monthly_to_annual
-  - _find_link
-  - _extract_placet_products
-  - _fetch_public_tariffs
-
-The nested closures process_api_data and async_update_public_products live inside
-async_setup_entry and cannot be imported directly.  Their logic is covered here via
-integration-level unit tests that construct a minimal execution environment.
+Covers the public tariff HTML scraping helpers, the public-tariffs updater
+(retry / cache logic), the dispatch windows computed by process_api_data and
+the no-tariff repair issue.
 """
 
 from __future__ import annotations
@@ -119,7 +110,10 @@ def _make_ha_stubs():
 _UpdateFailed = _make_ha_stubs()
 
 # Now import the integration module (and its public helpers)
-import custom_components.octopus_energy_it.__init__ as init_mod  # noqa: E402
+import custom_components.octopus_energy_it.coordinator as coord_mod  # noqa: E402
+from custom_components.octopus_energy_it.data_processor import (  # noqa: E402
+    process_api_data,
+)
 import custom_components.octopus_energy_it.tariff_scraper as tariff_mod  # noqa: E402
 
 _slice_html_block = tariff_mod._slice_html_block
@@ -131,7 +125,7 @@ _extract_placet_products = tariff_mod._extract_placet_products
 _fetch_public_tariffs = tariff_mod.fetch_public_tariffs
 NEXT_DATA_MARKER = tariff_mod._NEXT_DATA_MARKER
 TARIFFS_PAGE_URL = tariff_mod.TARIFFS_PAGE_URL
-PUBLIC_PRODUCTS_RETRY_DELAY = init_mod.PUBLIC_PRODUCTS_RETRY_DELAY
+PUBLIC_PRODUCTS_RETRY_DELAY = coord_mod.PUBLIC_PRODUCTS_RETRY_DELAY
 
 
 # ---------------------------------------------------------------------------
@@ -607,59 +601,16 @@ class TestFetchPublicTariffs:
 
 
 # ---------------------------------------------------------------------------
-# async_update_public_products retry / cache logic
-#
-# Because async_update_public_products is a closure defined inside
-# async_setup_entry, we cannot import it directly.  Instead we replicate its
-# logic in a standalone async function that is structurally identical, using
-# the same domain_data dict pattern.  This lets us test the behaviour
-# (retry scheduling, cache usage, UpdateFailed) without invoking HA setup.
+# Public-tariffs updater (coordinator.build_public_products_updater)
 # ---------------------------------------------------------------------------
 
 from homeassistant.helpers.update_coordinator import UpdateFailed  # noqa: E402 (stub)
 
 
 async def _make_update_fn(hass, domain_data, fetch_result):
-    """
-    Replicate the async_update_public_products closure from __init__.py,
-    injecting a mock _fetch_public_tariffs result.
-
-    Returns (update_fn,) so callers can await update_fn() and inspect
-    domain_data for side-effects.
-    """
-    from homeassistant.core import callback  # noqa: F401 (stub passthrough)
-
-    def _cancel_retry():
-        unsub = domain_data.pop("public_products_retry_unsub", None)
-        if unsub is not None:
-            unsub()
-
-    def _schedule_retry():
-        _cancel_retry()
-
-        def _do_retry(_now):
-            domain_data.pop("public_products_retry_unsub", None)
-            coordinator = domain_data.get("public_products_coordinator")
-            if coordinator is not None:
-                hass.async_create_task(coordinator.async_request_refresh())
-
-        domain_data["public_products_retry_unsub"] = hass.async_call_later(
-            PUBLIC_PRODUCTS_RETRY_DELAY, _do_retry
-        )
-
-    async def async_update_public_products():
-        products = fetch_result  # pre-computed; None means failure
-        if products is None:
-            _schedule_retry()
-            cached = domain_data.get("public_products_cache")
-            if cached:
-                return cached
-            raise UpdateFailed("Public tariffs unavailable and no cached data")
-        _cancel_retry()
-        domain_data["public_products_cache"] = products
-        return products
-
-    return async_update_public_products
+    """Return the real public-tariffs updater with a canned scraper result."""
+    coord_mod.fetch_public_tariffs = AsyncMock(return_value=fetch_result)
+    return coord_mod.build_public_products_updater(hass, MagicMock(), domain_data)
 
 
 class TestAsyncUpdatePublicProducts:
@@ -812,51 +763,26 @@ class unittest_any_callable:
 
 
 # ---------------------------------------------------------------------------
-# process_api_data dispatch logic
-#
-# process_api_data is also a closure inside async_setup_entry.  We test its
-# dispatch-window logic by replicating just that slice as a standalone helper,
-# which mirrors the exact code in __init__.py lines 828–871.
+# process_api_data dispatch windows
 # ---------------------------------------------------------------------------
 
 from datetime import UTC, datetime, timedelta  # noqa: E402
+from unittest.mock import patch  # noqa: E402
 
 
-def _process_dispatches(planned_dispatches_raw, now):
-    """Replicate the dispatch extraction block from process_api_data."""
-    planned_dispatches = planned_dispatches_raw
-    if planned_dispatches is None:
-        planned_dispatches = []
-
-    current_start = None
-    current_end = None
-    next_start = None
-    next_end = None
-
-    from homeassistant.util.dt import as_utc, parse_datetime  # use stubs
-
-    for dispatch in sorted(planned_dispatches, key=lambda x: x.get("start", "")):
-        start_str = dispatch.get("start")
-        end_str = dispatch.get("end")
-        if not start_str or not end_str:
-            continue
-        start = as_utc(parse_datetime(start_str))
-        end = as_utc(parse_datetime(end_str))
-
-        if start <= now <= end:
-            current_start = start
-            current_end = end
-        elif now < start and not next_start:
-            next_start = start
-            next_end = end
-
-    return {
-        "planned_dispatches": planned_dispatches,
-        "current_start": current_start,
-        "current_end": current_end,
-        "next_start": next_start,
-        "next_end": next_end,
+async def _process_dispatches(planned_dispatches_raw, now):
+    """Run the real process_api_data on dispatches only, at a fixed *now*."""
+    api = MagicMock()
+    api.flatten_connection = lambda connection: connection or []
+    data = {
+        "account": {"ledgers": [], "properties": []},
+        "plannedDispatches": planned_dispatches_raw,
     }
+    with patch(
+        "custom_components.octopus_energy_it.data_processor.utcnow", return_value=now
+    ):
+        result = await process_api_data(data, "A-TEST", api, {})
+    return result["A-TEST"]
 
 
 class TestProcessDispatchData:
@@ -867,23 +793,23 @@ class TestProcessDispatchData:
         t = self._now() + timedelta(hours=hours_from_now)
         return t.isoformat()
 
-    def test_active_dispatch_identified(self):
+    async def test_active_dispatch_identified(self):
         dispatches = [
             {"start": self._dt(-1), "end": self._dt(+1)},  # active
             {"start": self._dt(+2), "end": self._dt(+3)},  # next
         ]
-        result = _process_dispatches(dispatches, self._now())
+        result = await _process_dispatches(dispatches, self._now())
 
         assert result["current_start"] is not None
         assert result["current_end"] is not None
         assert result["next_start"] is not None
 
-    def test_future_dispatch_becomes_next(self):
+    async def test_future_dispatch_becomes_next(self):
         dispatches = [
             {"start": self._dt(+2), "end": self._dt(+3)},
             {"start": self._dt(+5), "end": self._dt(+6)},
         ]
-        result = _process_dispatches(dispatches, self._now())
+        result = await _process_dispatches(dispatches, self._now())
 
         assert result["current_start"] is None
         assert result["next_start"] is not None
@@ -891,49 +817,49 @@ class TestProcessDispatchData:
         expected_start = datetime(2026, 3, 9, 12, 0, 0, tzinfo=UTC) + timedelta(hours=2)
         assert result["next_start"] == expected_start
 
-    def test_past_dispatch_ignored(self):
+    async def test_past_dispatch_ignored(self):
         dispatches = [
             {"start": self._dt(-5), "end": self._dt(-3)},  # past
         ]
-        result = _process_dispatches(dispatches, self._now())
+        result = await _process_dispatches(dispatches, self._now())
 
         assert result["current_start"] is None
         assert result["next_start"] is None
 
-    def test_empty_dispatches(self):
-        result = _process_dispatches([], self._now())
+    async def test_empty_dispatches(self):
+        result = await _process_dispatches([], self._now())
 
         assert result["planned_dispatches"] == []
         assert result["current_start"] is None
         assert result["next_start"] is None
 
-    def test_none_dispatches_treated_as_empty(self):
-        result = _process_dispatches(None, self._now())
+    async def test_none_dispatches_treated_as_empty(self):
+        result = await _process_dispatches(None, self._now())
 
         assert result["planned_dispatches"] == []
         assert result["current_start"] is None
         assert result["next_start"] is None
 
-    def test_dispatch_with_missing_start_or_end_skipped(self):
+    async def test_dispatch_with_missing_start_or_end_skipped(self):
         dispatches = [
             {"start": self._dt(+1)},  # missing end
             {"end": self._dt(+2)},  # missing start
             {"start": self._dt(+3), "end": self._dt(+4)},  # valid
         ]
-        result = _process_dispatches(dispatches, self._now())
+        result = await _process_dispatches(dispatches, self._now())
 
         assert result["next_start"] is not None
         # Only the valid one should be picked up
         expected = datetime(2026, 3, 9, 12, 0, 0, tzinfo=UTC) + timedelta(hours=3)
         assert result["next_start"] == expected
 
-    def test_multiple_future_dispatches_only_first_next_captured(self):
+    async def test_multiple_future_dispatches_only_first_next_captured(self):
         dispatches = [
             {"start": self._dt(+2), "end": self._dt(+3)},
             {"start": self._dt(+4), "end": self._dt(+5)},
             {"start": self._dt(+6), "end": self._dt(+7)},
         ]
-        result = _process_dispatches(dispatches, self._now())
+        result = await _process_dispatches(dispatches, self._now())
 
         assert result["current_start"] is None
         # Only the nearest future slot is captured as next
@@ -943,12 +869,12 @@ class TestProcessDispatchData:
         expected_end = datetime(2026, 3, 9, 12, 0, 0, tzinfo=UTC) + timedelta(hours=3)
         assert result["next_end"] == expected_end
 
-    def test_dispatch_raw_list_preserved(self):
+    async def test_dispatch_raw_list_preserved(self):
         dispatches = [
             {"start": self._dt(+1), "end": self._dt(+2)},
         ]
-        result = _process_dispatches(dispatches, self._now())
-        assert result["planned_dispatches"] is dispatches
+        result = await _process_dispatches(dispatches, self._now())
+        assert result["planned_dispatches"] == dispatches
 
 
 # ---------------------------------------------------------------------------
@@ -964,7 +890,7 @@ class TestUpdateElectricityTariffIssue:
         ir.async_delete_issue.reset_mock()
         hass = MagicMock()
 
-        init_mod._update_electricity_tariff_issue(hass, "A-1234", False)
+        coord_mod.update_electricity_tariff_issue(hass, "A-1234", False)
 
         ir.async_create_issue.assert_called_once()
         ir.async_delete_issue.assert_not_called()
@@ -979,9 +905,9 @@ class TestUpdateElectricityTariffIssue:
         ir.async_delete_issue.reset_mock()
         hass = MagicMock()
 
-        init_mod._update_electricity_tariff_issue(hass, "A-1234", True)
+        coord_mod.update_electricity_tariff_issue(hass, "A-1234", True)
 
         ir.async_delete_issue.assert_called_once_with(
-            hass, init_mod.DOMAIN, "no_electricity_tariff_A-1234"
+            hass, coord_mod.DOMAIN, "no_electricity_tariff_A-1234"
         )
         ir.async_create_issue.assert_not_called()

@@ -357,12 +357,11 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up Octopus Energy Italy price sensors from a config entry."""
-    # Using existing coordinator from hass.data[DOMAIN] to avoid duplicate API calls
-    data = hass.data[DOMAIN][entry.entry_id]
-    coordinator = data["coordinator"]
-    account_number = data["account_number"]
-    public_device_id = data.get("public_device_id")
-    public_products_coordinator = data.get("public_products_coordinator")
+    runtime = entry.runtime_data
+    coordinator = runtime.coordinator
+    account_number = runtime.account_number
+    public_device_id = runtime.public_device_id
+    public_products_coordinator = runtime.public_products_coordinator
     if public_products_coordinator and public_products_coordinator.data is None:
         await public_products_coordinator.async_request_refresh()
     # Wait for coordinator refresh if needed
@@ -389,7 +388,7 @@ async def async_setup_entry(
     _LOGGER.debug("Creating sensors for accounts: %s", account_numbers)
 
     # Create sensors for each account
-    owns_public_products = data.get("owns_public_products", False)
+    owns_public_products = runtime.owns_public_products
     for acc_num in account_numbers:
         account_data = _get_account_data(coordinator, acc_num)
 

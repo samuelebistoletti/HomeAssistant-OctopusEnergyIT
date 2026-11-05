@@ -57,6 +57,21 @@
     },
     "no_accounts": {
       "message": "Nessun account Octopus Energy Italy trovato per queste credenziali."
+    },
+    "update_failed": {
+      "message": "Impossibile recuperare i dati per qualsiasi account Octopus Energy Italy."
+    },
+    "public_tariffs_unavailable": {
+      "message": "Le tariffe pubbliche di Octopus Energy Italy non sono disponibili e non esiste una copia in cache."
+    },
+    "device_not_found": {
+      "message": "Nessun dispositivo smart Octopus con ID {device_id} trovato in un'integrazione Octopus Energy Italy caricata."
+    },
+    "invalid_target_time": {
+      "message": "Orario {time} non valido: usa HH:MM tra le 04:00 e le 17:00."
+    },
+    "set_preferences_failed": {
+      "message": "Octopus Energy Italy non ha accettato le nuove preferenze di ricarica. Controlla i log per i dettagli."
     }
   },
   "issues": {
@@ -223,6 +238,26 @@
     "select": {
       "ev_ready_time_select": {
         "name": "Orario fine ricarica EV"
+      }
+    }
+  },
+  "services": {
+    "set_device_preferences": {
+      "name": "Imposta preferenze dispositivo",
+      "description": "Imposta il target di carica SmartFlex e l'orario di fine ricarica di un dispositivo smart Octopus.",
+      "fields": {
+        "device_id": {
+          "name": "ID dispositivo",
+          "description": "ID Kraken del dispositivo smart (visibile negli attributi del dispositivo)."
+        },
+        "target_percentage": {
+          "name": "Livello di carica obiettivo",
+          "description": "Livello di carica obiettivo, 10–100%."
+        },
+        "target_time": {
+          "name": "Orario di fine ricarica",
+          "description": "Orario entro cui la ricarica deve terminare, tra le 04:00 e le 17:00."
+        }
       }
     }
   }

@@ -57,6 +57,21 @@
     },
     "no_accounts": {
       "message": "No Octopus Energy Italy account was found for this login."
+    },
+    "update_failed": {
+      "message": "Unable to fetch data for any Octopus Energy Italy account."
+    },
+    "public_tariffs_unavailable": {
+      "message": "The public Octopus Energy Italy tariffs are unavailable and no cached copy exists."
+    },
+    "device_not_found": {
+      "message": "No Octopus smart device with ID {device_id} was found in a loaded Octopus Energy Italy entry."
+    },
+    "invalid_target_time": {
+      "message": "Invalid target time {time}: use HH:MM between 04:00 and 17:00."
+    },
+    "set_preferences_failed": {
+      "message": "Octopus Energy Italy did not accept the new charging preferences. Check the log for details."
     }
   },
   "issues": {
@@ -223,6 +238,26 @@
     "select": {
       "ev_ready_time_select": {
         "name": "EV charge end time"
+      }
+    }
+  },
+  "services": {
+    "set_device_preferences": {
+      "name": "Set device preferences",
+      "description": "Sets the SmartFlex charge target and ready-by time of an Octopus smart device.",
+      "fields": {
+        "device_id": {
+          "name": "Device ID",
+          "description": "Kraken ID of the smart device (shown in the device attributes)."
+        },
+        "target_percentage": {
+          "name": "Target state of charge",
+          "description": "Target state of charge, 10–100%."
+        },
+        "target_time": {
+          "name": "Ready-by time",
+          "description": "Time the charge must be completed by, between 04:00 and 17:00."
+        }
       }
     }
   }

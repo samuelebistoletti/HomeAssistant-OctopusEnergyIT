@@ -18,7 +18,9 @@ uv run --with aiohttp scripts/dev-bootstrap  # first start: dev user + ha-mcp to
 
 - `custom_components/octopus_energy_it/`: the integration
   - `octopus_energy_it.py`: GraphQL API client and `TokenManager`
-  - `__init__.py`: setup, coordinator, services
+  - `__init__.py`: setup and unload
+  - `coordinator.py`: account coordinator, shared public-tariffs coordinator, `OctopusEnergyITRuntimeData`
+  - `services.py`: service actions (registered once in `async_setup`)
   - `data_processor.py`: turns raw API data into coordinator data (pure, testable)
   - `tariff_scraper.py`: public tariff HTML scraping
   - `sensor.py`, `binary_sensor.py`, `switch.py`, `number.py`, `select.py`, `entity.py`: platforms
@@ -28,7 +30,7 @@ uv run --with aiohttp scripts/dev-bootstrap  # first start: dev user + ha-mcp to
 
 ## Rules
 
-- One shared coordinator and API client per entry, from `hass.data[DOMAIN][entry.entry_id]`. Never create per-platform coordinators or GraphQL clients, and never call `_get_graphql_client()` from platform code.
+- One shared coordinator and API client per entry, from `entry.runtime_data` (`OctopusEnergyITRuntimeData`). Never create per-platform coordinators or GraphQL clients, and never call `_get_graphql_client()` from platform code. `hass.data[DOMAIN]` only holds state shared by all entries (the public-tariffs coordinator).
 - Tokens live in memory only. Never log credentials; token logging is masked to the first 8 characters.
 - Datetimes: use HA `as_utc(parse_datetime(...))`, not `datetime.fromisoformat` or string comparison.
 - Parallel per-device API calls use `asyncio.gather(..., return_exceptions=True)` and log per-device failures as warnings.

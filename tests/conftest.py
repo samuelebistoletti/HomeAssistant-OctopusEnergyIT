@@ -235,8 +235,28 @@ def _install_stubs() -> None:
 
     _ce = _stub("homeassistant.config_entries")
     if not hasattr(_ce, "ConfigEntry"):
-        _ce.ConfigEntry = type("ConfigEntry", (), {"data": {}})
+
+        class _ConfigEntry:
+            data: dict = {}
+
+            def __class_getitem__(cls, _item):
+                return cls
+
+        _ce.ConfigEntry = _ConfigEntry
+        _ce.ConfigEntryState = types.SimpleNamespace(
+            LOADED="loaded", NOT_LOADED="not_loaded", SETUP_RETRY="setup_retry"
+        )
         _install_config_flow_stub(_ce)
+
+    _cv = _stub("homeassistant.helpers.config_validation")
+    if not hasattr(_cv, "string"):
+        _cv.string = str
+        _cv.config_entry_only_config_schema = lambda domain: None
+    sys.modules["homeassistant.helpers"].config_validation = _cv
+
+    _typing = _stub("homeassistant.helpers.typing")
+    if not hasattr(_typing, "ConfigType"):
+        _typing.ConfigType = dict
 
     _dt = _stub("homeassistant.util.dt")
     if not hasattr(_dt, "utcnow"):
@@ -270,9 +290,49 @@ def _install_stubs() -> None:
             async def async_update(self):
                 pass
 
+        class _DataUpdateCoordinator:
+            """Minimal generic DataUpdateCoordinator."""
+
+            def __class_getitem__(cls, _item):
+                return cls
+
+            def __init__(
+                self,
+                hass=None,
+                logger=None,
+                *,
+                config_entry=None,
+                name=None,
+                update_interval=None,
+                update_method=None,
+                **_kwargs,
+            ):
+                self.hass = hass
+                self.logger = logger
+                self.config_entry = config_entry
+                self.name = name
+                self.update_interval = update_interval
+                self.update_method = update_method
+                self.data = None
+                self.last_update_success = True
+
+            async def async_refresh(self):
+                method = self.update_method or self._async_update_data
+                self.data = await method()
+
+            async_request_refresh = async_refresh
+            async_config_entry_first_refresh = async_refresh
+
+            def async_set_updated_data(self, data):
+                self.data = data
+
         _coord.CoordinatorEntity = _CoordinatorEntity
-        _coord.DataUpdateCoordinator = type("DataUpdateCoordinator", (), {})
-        _coord.UpdateFailed = Exception
+        _coord.DataUpdateCoordinator = _DataUpdateCoordinator
+        _coord.UpdateFailed = type(
+            "UpdateFailed",
+            (sys.modules["homeassistant.exceptions"].HomeAssistantError,),
+            {},
+        )
 
     _dr = _stub("homeassistant.helpers.device_registry")
     if not hasattr(_dr, "DeviceInfo"):

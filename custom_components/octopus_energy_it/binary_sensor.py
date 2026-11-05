@@ -19,9 +19,8 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up Octopus Energy Italy binary sensors from a config entry."""
-    data = hass.data[DOMAIN][entry.entry_id]
-    coordinator = data["coordinator"]
-    account_number = data["account_number"]
+    coordinator = entry.runtime_data.coordinator
+    account_number = entry.runtime_data.account_number
 
     account_numbers = resolve_account_numbers(entry, coordinator, account_number)
     _LOGGER.debug("Creating binary sensors for accounts: %s", account_numbers)

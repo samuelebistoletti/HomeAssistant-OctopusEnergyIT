@@ -25,10 +25,9 @@ async def async_setup_entry(
     """Set up the Octopus switch from config entry."""
     _LOGGER.debug("Setting up switch platform at %s", utcnow().strftime("%H:%M:%S"))
 
-    data = hass.data[DOMAIN][config_entry.entry_id]
-    api = data["api"]
-    account_number = data["account_number"]
-    coordinator = data["coordinator"]
+    api = config_entry.runtime_data.api
+    account_number = config_entry.runtime_data.account_number
+    coordinator = config_entry.runtime_data.coordinator
 
     # Check for valid data in coordinator
     if not coordinator.data:
@@ -87,7 +86,7 @@ async def _setup_boost_charge_switches(
 ) -> None:
     """Set up boost charge switches for all accounts."""
     try:
-        coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+        coordinator = entry.runtime_data.coordinator
         switches = []
 
         for acc_num in account_numbers:

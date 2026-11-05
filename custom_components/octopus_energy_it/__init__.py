@@ -1,35 +1,33 @@
-"""Octopus Energy Italy Integration.
-
-This module provides integration with the Octopus Energy Italy API for Home Assistant.
-"""
+"""Octopus Energy Italy integration for Home Assistant."""
 
 from __future__ import annotations
 
-from datetime import timedelta
 import logging
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant, ServiceCall, callback
-from homeassistant.exceptions import (
-    ConfigEntryAuthFailed,
-    ConfigEntryNotReady,
-    HomeAssistantError,
-    ServiceValidationError,
-)
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from homeassistant.util.dt import utcnow
+import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers.typing import ConfigType
 
-from .const import DOMAIN, UPDATE_INTERVAL
-from .data_processor import process_api_data
+from .const import DOMAIN
+from .coordinator import (
+    PUBLIC_DEVICE_IDENTIFIER,
+    OctopusEnergyITConfigEntry,
+    OctopusEnergyITDataUpdateCoordinator,
+    OctopusEnergyITRuntimeData,
+    async_get_public_products_coordinator,
+    async_release_public_products,
+)
 from .octopus_energy_it import (
     OctopusEnergyIT,
     OctopusEnergyITAuthError,
     OctopusEnergyITConnectionError,
 )
-from .tariff_scraper import fetch_public_tariffs
+from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,44 +39,49 @@ PLATFORMS: list[Platform] = [
     Platform.SELECT,
 ]
 
-PUBLIC_PRODUCTS_UPDATE_INTERVAL = timedelta(hours=1)
-PUBLIC_PRODUCTS_RETRY_DELAY = 5 * 60  # seconds — used with async_call_later
-
-# Service schemas
-SERVICE_SET_DEVICE_PREFERENCES = "set_device_preferences"
-ATTR_ACCOUNT_NUMBER = "account_number"
-ATTR_DEVICE_ID = "device_id"
-ATTR_TARGET_PERCENTAGE = "target_percentage"
-ATTR_TARGET_TIME = "target_time"
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
-def _update_electricity_tariff_issue(
-    hass: HomeAssistant, account_number: str, has_tariff: bool
-) -> None:
-    """Create or clear the repair issue for an account with no active tariff."""
-    issue_id = f"no_electricity_tariff_{account_number}"
-    if has_tariff:
-        ir.async_delete_issue(hass, DOMAIN, issue_id)
-    else:
-        ir.async_create_issue(
-            hass,
-            DOMAIN,
-            issue_id,
-            is_fixable=False,
-            severity=ir.IssueSeverity.WARNING,
-            translation_key="no_electricity_tariff",
-            translation_placeholders={"account_number": account_number},
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Register the service actions once, independently of config entries."""
+    async_setup_services(hass)
+    return True
+
+
+async def _async_account_numbers(
+    hass: HomeAssistant, entry: OctopusEnergyITConfigEntry, api: OctopusEnergyIT
+) -> list[str]:
+    """Return the account numbers of the entry, discovering them if needed."""
+    account_numbers = list(entry.data.get("account_numbers") or [])
+    if not account_numbers and entry.data.get("account_number"):
+        account_numbers = [entry.data["account_number"]]
+    if account_numbers:
+        return account_numbers
+
+    accounts = await api.fetch_accounts()
+    if not accounts:
+        raise ConfigEntryNotReady(
+            translation_domain=DOMAIN, translation_key="no_accounts"
         )
+    account_numbers = [account["number"] for account in accounts]
+    _LOGGER.info("Found %d accounts: %s", len(account_numbers), account_numbers)
+    hass.config_entries.async_update_entry(
+        entry,
+        data={
+            **entry.data,
+            "account_numbers": account_numbers,
+            "account_number": account_numbers[0],
+        },
+    )
+    return account_numbers
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_setup_entry(
+    hass: HomeAssistant, entry: OctopusEnergyITConfigEntry
+) -> bool:
     """Set up Octopus Energy Italy from a config entry."""
-    email = entry.data["email"]
-    password = entry.data["password"]
     session = async_get_clientsession(hass)
-
-    # Initialize API
-    api = OctopusEnergyIT(email, password, session)
+    api = OctopusEnergyIT(entry.data["email"], entry.data["password"], session)
 
     # Log in once; the token (and refresh token) is reused afterwards.
     try:
@@ -92,309 +95,55 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             translation_domain=DOMAIN, translation_key="cannot_connect"
         ) from err
 
-    # Ensure DOMAIN is initialized in hass.data
-    if DOMAIN not in hass.data:
-        hass.data[DOMAIN] = {}
-    domain_data = hass.data[DOMAIN]
-
-    public_products_coordinator = domain_data.get("public_products_coordinator")
-
-    async def async_update_public_products():
-        def _cancel_retry():
-            unsub = domain_data.pop("public_products_retry_unsub", None)
-            if unsub is not None:
-                unsub()
-
-        def _schedule_retry():
-            _cancel_retry()
-
-            @callback
-            def _do_retry(_now):
-                domain_data.pop("public_products_retry_unsub", None)
-                coordinator = domain_data.get("public_products_coordinator")
-                if coordinator is not None:
-                    hass.async_create_task(coordinator.async_request_refresh())
-
-            domain_data["public_products_retry_unsub"] = hass.async_call_later(
-                PUBLIC_PRODUCTS_RETRY_DELAY, _do_retry
-            )
-            _LOGGER.debug(
-                "Scheduled public tariffs retry in %ds", PUBLIC_PRODUCTS_RETRY_DELAY
-            )
-
-        products = await fetch_public_tariffs(session)
-        if products is None:
-            _schedule_retry()
-            cached = domain_data.get("public_products_cache")
-            if cached:
-                _LOGGER.warning(
-                    "Public tariffs unavailable - using cached data, retrying in %ds",
-                    PUBLIC_PRODUCTS_RETRY_DELAY,
-                )
-                return cached
-            raise UpdateFailed("Public tariffs unavailable and no cached data")
-        _cancel_retry()
-        domain_data["public_products_cache"] = products
-        return products
-
-    if public_products_coordinator is None:
-        public_products_coordinator = DataUpdateCoordinator(
-            hass,
-            _LOGGER,
-            name=f"{DOMAIN}_public_products",
-            update_method=async_update_public_products,
-            update_interval=PUBLIC_PRODUCTS_UPDATE_INTERVAL,
-        )
-        await public_products_coordinator.async_config_entry_first_refresh()
-        domain_data["public_products_coordinator"] = public_products_coordinator
-    elif public_products_coordinator.data is None:
-        await public_products_coordinator.async_request_refresh()
-
-    # Multi-account support
-    account_numbers = entry.data.get("account_numbers", [])
-    if not account_numbers:
-        # Backward compatibility: try single account_number
-        single_account = entry.data.get("account_number")
-        if single_account:
-            account_numbers = [single_account]
-        else:
-            _LOGGER.debug("No account numbers found in entry data, fetching from API")
-            accounts = await api.fetch_accounts()
-            if not accounts:
-                raise ConfigEntryNotReady(
-                    translation_domain=DOMAIN, translation_key="no_accounts"
-                )
-
-            account_numbers = [acc["number"] for acc in accounts]
-            _LOGGER.info("Found %d accounts: %s", len(account_numbers), account_numbers)
-
-            hass.config_entries.async_update_entry(
-                entry, data={**entry.data, "account_numbers": account_numbers}
-            )
-
-    # For backward compatibility, set primary account_number to first account
-    primary_account_number = account_numbers[0] if account_numbers else None
-    if not entry.data.get("account_number"):
-        hass.config_entries.async_update_entry(
-            entry, data={**entry.data, "account_number": primary_account_number}
-        )
-
-    async def async_update_data():
-        """Fetch data from API for all accounts."""
-        _LOGGER.debug(
-            "Coordinator update triggered at %s",
-            utcnow().strftime("%H:%M:%S"),
-        )
-
-        try:
-            all_accounts_data = {}
-            if public_products_coordinator.data is None:
-                await public_products_coordinator.async_request_refresh()
-            available_products = public_products_coordinator.data or {}
-            for account_num in account_numbers:
-                try:
-                    account_data = await api.fetch_all_data(account_num)
-                    if account_data:
-                        processed = await process_api_data(
-                            account_data, account_num, api, available_products
-                        )
-                        all_accounts_data.update(processed)
-                        _update_electricity_tariff_issue(
-                            hass,
-                            account_num,
-                            processed[account_num].get("has_electricity_tariff", False),
-                        )
-                    else:
-                        _LOGGER.warning(
-                            "Failed to fetch data for account %s", account_num
-                        )
-                except Exception as e:
-                    _LOGGER.error(
-                        "Error fetching data for account %s: %s", account_num, e
-                    )
-                    continue
-
-            if api.auth_failed:
-                # The stored password was rejected: start the reauth flow.
-                raise ConfigEntryAuthFailed(
-                    translation_domain=DOMAIN, translation_key="invalid_auth"
-                )
-            if not all_accounts_data:
-                raise UpdateFailed("Failed to fetch data for any account")
-
-            _LOGGER.debug(
-                "Successfully fetched data for %d accounts", len(all_accounts_data)
-            )
-            return all_accounts_data
-
-        except (UpdateFailed, ConfigEntryAuthFailed):
-            raise
-        except Exception as e:
-            raise UpdateFailed(f"Unexpected error during data update: {e}") from e
-
-    coordinator = DataUpdateCoordinator(
-        hass,
-        _LOGGER,
-        name=f"{DOMAIN}_{primary_account_number}",
-        update_method=async_update_data,
-        update_interval=timedelta(minutes=UPDATE_INTERVAL),
+    account_numbers = await _async_account_numbers(hass, entry, api)
+    public_products_coordinator = await async_get_public_products_coordinator(
+        hass, session
     )
 
+    coordinator = OctopusEnergyITDataUpdateCoordinator(
+        hass, entry, api, account_numbers, public_products_coordinator
+    )
     await coordinator.async_config_entry_first_refresh()
 
-    if coordinator.data and primary_account_number in coordinator.data:
-        _LOGGER.debug(
-            "Account %s data keys: %s",
-            primary_account_number,
-            list(coordinator.data[primary_account_number].keys()),
-        )
-        if "planned_dispatches" in coordinator.data[primary_account_number]:
-            _LOGGER.debug(
-                "Found %d planned dispatches",
-                len(coordinator.data[primary_account_number]["planned_dispatches"]),
-            )
-            _LOGGER.debug(
-                "First planned dispatch: %s",
-                coordinator.data[primary_account_number]["planned_dispatches"][0]
-                if coordinator.data[primary_account_number]["planned_dispatches"]
-                else "None",
-            )
-
-    public_device_identifier = domain_data.setdefault(
-        "public_device_identifier", "octopus_public_tariffs"
+    # A single public-tariffs device exists per Home Assistant instance.
+    public_owner = hass.data.setdefault(DOMAIN, {}).setdefault(
+        "public_owner", entry.entry_id
     )
-    public_owner = domain_data.setdefault("public_owner", entry.entry_id)
-
-    hass.data[DOMAIN][entry.entry_id] = {
-        "api": api,
-        "account_number": primary_account_number,
-        "account_numbers": account_numbers,
-        "coordinator": coordinator,
-        "public_device_id": public_device_identifier,
-        "owns_public_products": public_owner == entry.entry_id,
-        "public_products_coordinator": public_products_coordinator,
-    }
+    entry.runtime_data = OctopusEnergyITRuntimeData(
+        api=api,
+        coordinator=coordinator,
+        account_number=account_numbers[0],
+        account_numbers=account_numbers,
+        public_products_coordinator=public_products_coordinator,
+        public_device_id=PUBLIC_DEVICE_IDENTIFIER,
+        owns_public_products=public_owner == entry.entry_id,
+    )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-
-    # Register services
-    async def handle_set_device_preferences(call: ServiceCall):
-        """Handle the set_device_preferences service call."""
-        device_id = call.data.get(ATTR_DEVICE_ID)
-        target_percentage = call.data.get(ATTR_TARGET_PERCENTAGE)
-        target_time = call.data.get(ATTR_TARGET_TIME)
-
-        if not device_id:
-            _LOGGER.error("Device ID is required for set_device_preferences")
-            msg = "Device ID is required"
-            raise ServiceValidationError(msg)
-
-        if target_percentage is None:
-            msg = "target_percentage is required"
-            raise ServiceValidationError(msg)
-
-        original_target_percentage = target_percentage
-        target_percentage = int(round(target_percentage))
-        target_percentage = max(10, min(100, target_percentage))
-        if original_target_percentage != target_percentage:
-            _LOGGER.debug(
-                "Adjusted target percentage from %s to %s for service call",
-                original_target_percentage,
-                target_percentage,
-            )
-
-        try:
-            api.format_time_to_hh_mm(target_time)
-        except ValueError as time_error:
-            _LOGGER.error("Time validation error: %s", time_error)
-            raise ServiceValidationError(
-                f"Invalid time format: {time_error!s}",
-                translation_domain=DOMAIN,
-            )
-
-        _LOGGER.debug(
-            "Service set_device_preferences: device=%s, pct=%s, time=%s",
-            device_id,
-            target_percentage,
-            target_time,
-        )
-
-        try:
-            success = await api.set_device_preferences(
-                device_id,
-                target_percentage,
-                target_time,
-            )
-
-            if success:
-                _LOGGER.info("Successfully set device preferences")
-                formatted_time = api.format_time_to_hh_mm(target_time)
-                for acc_data in coordinator.data.values():
-                    for device in acc_data.get("devices", []):
-                        if device.get("id") == device_id:
-                            preferences = device.setdefault("preferences", {})
-                            schedules = preferences.setdefault("schedules", [])
-                            if schedules:
-                                schedules[0]["max"] = target_percentage
-                                schedules[0]["time"] = f"{formatted_time}:00"
-                            break
-                    else:
-                        continue
-                    break
-                await coordinator.async_request_refresh()
-                return {"success": True}
-            _LOGGER.error("Failed to set device preferences")
-            raise ServiceValidationError(
-                "Failed to set device preferences. Check the log for details.",
-                translation_domain=DOMAIN,
-            )
-        except (ServiceValidationError, HomeAssistantError):
-            raise
-        except ValueError as e:
-            _LOGGER.error("Validation error: %s", e)
-            raise ServiceValidationError(
-                f"Invalid parameters: {e}",
-                translation_domain=DOMAIN,
-            )
-        except Exception as e:
-            _LOGGER.exception("Unexpected error setting device preferences: %s", e)
-            raise HomeAssistantError(f"Error setting device preferences: {e}")
-
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_SET_DEVICE_PREFERENCES,
-        handle_set_device_preferences,
-    )
-
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_unload_entry(
+    hass: HomeAssistant, entry: OctopusEnergyITConfigEntry
+) -> bool:
     """Unload a config entry."""
-    if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
-        account_numbers = entry.data.get("account_numbers") or (
-            [entry.data["account_number"]] if entry.data.get("account_number") else []
-        )
-        for account_num in account_numbers:
-            ir.async_delete_issue(hass, DOMAIN, f"no_electricity_tariff_{account_num}")
+    if not (
+        unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    ):
+        return False
 
-        domain_data = hass.data[DOMAIN]
-        domain_data.pop(entry.entry_id, None)
-        remaining_entries = [
-            key
-            for key, value in domain_data.items()
-            if isinstance(value, dict) and "coordinator" in value
-        ]
-        if domain_data.get("public_owner") == entry.entry_id:
-            if remaining_entries:
-                domain_data["public_owner"] = remaining_entries[0]
-            else:
-                domain_data.pop("public_owner", None)
-        if not remaining_entries:
-            unsub = domain_data.pop("public_products_retry_unsub", None)
-            if unsub is not None:
-                unsub()
-            domain_data.pop("public_products_coordinator", None)
-            domain_data.pop("public_products_cache", None)
+    for account_number in entry.runtime_data.account_numbers:
+        ir.async_delete_issue(hass, DOMAIN, f"no_electricity_tariff_{account_number}")
 
+    remaining = [
+        other.entry_id
+        for other in hass.config_entries.async_entries(DOMAIN)
+        if other.entry_id != entry.entry_id and other.state is ConfigEntryState.LOADED
+    ]
+    domain_data = hass.data.get(DOMAIN, {})
+    if not remaining:
+        async_release_public_products(hass)
+    elif domain_data.get("public_owner") == entry.entry_id:
+        # Another entry takes over the public-tariffs device on its next reload.
+        domain_data["public_owner"] = remaining[0]
     return unload_ok

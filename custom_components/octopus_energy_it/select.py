@@ -54,12 +54,11 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Configure select entities."""
-    data = hass.data[DOMAIN][entry.entry_id]
-    coordinator = data["coordinator"]
-    api = data["api"]
+    coordinator = entry.runtime_data.coordinator
+    api = entry.runtime_data.api
 
     account_numbers = resolve_account_numbers(
-        entry, coordinator, data.get("account_number")
+        entry, coordinator, entry.runtime_data.account_number
     )
 
     entities: list[OctopusDeviceTargetTimeSelect] = []
