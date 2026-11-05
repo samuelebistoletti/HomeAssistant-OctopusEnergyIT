@@ -190,6 +190,8 @@ def _install_stubs() -> None:
     _stub("homeassistant.util")
 
     _const = _stub("homeassistant.const")
+    if not hasattr(_const, "UnitOfTime"):
+        _const.UnitOfTime = types.SimpleNamespace(DAYS="d", HOURS="h", MINUTES="min")
     if not hasattr(_const, "Platform"):
         _const.Platform = types.SimpleNamespace(
             BINARY_SENSOR="binary_sensor",
@@ -364,6 +366,8 @@ def _install_stubs() -> None:
             POWER="power",
             GAS="gas",
             DATA_RATE="data_rate",
+            DURATION="duration",
+            ENERGY_STORAGE="energy_storage",
         )
         _sensor.SensorStateClass = types.SimpleNamespace(
             MEASUREMENT="measurement",

@@ -16,6 +16,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import UnitOfTime
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util.dt import as_utc, parse_datetime as _parse_dt, utcnow
@@ -1077,8 +1078,9 @@ class OctopusElectricityContractExpiryDaysSensor(
     """Sensor for days until electricity contract expiry."""
 
     _attr_translation_key = "electricity_contract_days_until_expiry"
-    _attr_native_unit_of_measurement = "days"
-    _attr_state_class = SensorStateClass.TOTAL
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_native_unit_of_measurement = UnitOfTime.DAYS
+    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:calendar-clock"
 
     def __init__(self, account_number, coordinator) -> None:
@@ -1415,8 +1417,9 @@ class OctopusGasContractExpiryDaysSensor(OctopusCoordinatorEntity, SensorEntity)
     """Sensor for days until Octopus Energy Italy gas contract expiry."""
 
     _attr_translation_key = "gas_contract_days_until_expiry"
-    _attr_native_unit_of_measurement = "days"
-    _attr_state_class = SensorStateClass.TOTAL
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_native_unit_of_measurement = UnitOfTime.DAYS
+    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:calendar-clock"
 
     def __init__(self, account_number, coordinator) -> None:
@@ -1696,7 +1699,7 @@ class OctopusVehicleBatterySizeSensor(OctopusCoordinatorEntity, SensorEntity):
     """Sensor reporting detected vehicle battery capacity."""
 
     _attr_translation_key = "vehicle_battery_size"
-    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_device_class = SensorDeviceClass.ENERGY_STORAGE
     _attr_native_unit_of_measurement = "kWh"
     _attr_state_class = None
     _attr_icon = "mdi:car-battery"
