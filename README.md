@@ -165,6 +165,18 @@ I prezzi vengono aggiornati ogni ora. Se il sito delle tariffe non risponde, il 
   - `target_percentage`: valore 10–100 con passi da 1 (obbligatorio)
   - `target_time`: orario di conclusione (`HH:MM`, 04:00–17:00) (obbligatorio)
 
+## Statistiche per la Dashboard Energia
+
+Le letture del contatore arrivano all'API con qualche giorno di ritardo, quindi i sensori cambiano valore nel giorno del polling e non in quello del consumo reale. Per avere i giorni corretti nella Dashboard Energia l'integrazione importa anche delle **statistiche esterne**, con il consumo attribuito al giorno a cui appartiene:
+
+| Statistica | Unità | Note |
+|---|---|---|
+| `octopus_energy_it:<account>_electricity_consumption` | kWh | Consumo elettrico giornaliero dalle letture del contatore |
+| `octopus_energy_it:<account>_electricity_cost` | EUR | Consumo × prezzo attuale; solo per tariffe monorarie (con le letture giornaliere non si può ripartire il consumo per fascia F1/F2/F3) |
+| `octopus_energy_it:<account>_gas_consumption` | m³ | Consumo gas tra due letture, attribuito al giorno della lettura precedente |
+
+Per usarle: **Impostazioni → Dashboard → Energia**, aggiungi la statistica *Octopus … electricity consumption* come consumo dalla rete (e, se vuoi, *… electricity cost* come costo), e *Octopus … gas consumption* per il gas. L'import è incrementale: al primo avvio vengono recuperati gli ultimi giorni disponibili, poi solo i periodi nuovi.
+
 ## Sviluppo locale
 
 ### Ambiente di sviluppo

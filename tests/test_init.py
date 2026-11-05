@@ -111,6 +111,18 @@ class TestAccountCoordinator:
 
         issue.assert_called_once_with(coordinator.hass, ACCOUNT, False)
 
+    async def test_statistics_failure_does_not_fail_the_update(self):
+        api = _api()
+        coordinator = _coordinator(api)
+        coordinator.statistics = MagicMock(
+            async_import_account=AsyncMock(side_effect=RuntimeError("recorder down"))
+        )
+        with patch.object(coord_mod, "process_api_data", new=_processed(None)):
+            data = await coordinator._async_update_data()
+
+        assert ACCOUNT in data
+        coordinator.statistics.async_import_account.assert_awaited_once()
+
     async def test_public_products_refreshed_when_empty(self):
         api = _api()
         coordinator = _coordinator(api)

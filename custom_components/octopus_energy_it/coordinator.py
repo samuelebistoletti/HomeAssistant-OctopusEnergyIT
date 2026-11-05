@@ -17,6 +17,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .const import DOMAIN, UPDATE_INTERVAL
 from .data_processor import process_api_data
 from .octopus_energy_it import OctopusEnergyIT
+from .statistics import StatisticsImporter
 from .tariff_scraper import fetch_public_tariffs
 
 _LOGGER = logging.getLogger(__name__)
@@ -84,6 +85,7 @@ class OctopusEnergyITDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]
         self.api = api
         self.account_numbers = account_numbers
         self.public_products_coordinator = public_products_coordinator
+        self.statistics = StatisticsImporter(hass)
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data for all accounts; failing accounts are skipped."""
@@ -113,6 +115,15 @@ class OctopusEnergyITDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]
                 account_number,
                 processed[account_number].get("has_electricity_tariff", False),
             )
+            try:
+                await self.statistics.async_import_account(
+                    account_number, processed[account_number]
+                )
+            except Exception:
+                # Statistics are a best-effort extra: never fail the update.
+                _LOGGER.exception(
+                    "Failed to import statistics for account %s", account_number
+                )
 
         if self.api.auth_failed:
             # The stored password was rejected: start the reauth flow.

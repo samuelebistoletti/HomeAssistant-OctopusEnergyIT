@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Energy dashboard statistics with the real reading dates: electricity consumption (kWh), electricity cost (EUR, single-rate tariffs only) and gas consumption (m³) are imported as external statistics, booked on the day the energy was used instead of the day Home Assistant polled the API. See the README section "Statistiche per la Dashboard Energia". (Fixes #19, #21; based on the idea in #20, thanks @riccardorossi92)
 - Reauthentication: when Octopus rejects the stored password (for example after a password change), Home Assistant now shows a "Reauthentication required" prompt and asks only for the new password, instead of the integration silently failing to load.
 - The same Octopus login can no longer be added twice.
 - Diagnostics download (Settings → Devices & services → Octopus Energy Italy → ⋮ → Download diagnostics) with credentials, tokens, account numbers, POD/PDR and addresses redacted. It includes the latest raw electricity register readings, so please attach it to bug reports about readings.

@@ -14,11 +14,31 @@ _LOGGER = logging.getLogger(__name__)
 # How many recent POINT_IN_TIME readings to fetch: enough to find two readings
 # of the same register when the API returns several registers per day.
 ELECTRICITY_READINGS_WINDOW = 10
+# Gas readings are sparse (often monthly); a few are enough to bridge gaps.
+GAS_READINGS_WINDOW = 5
 
 
 def _read_at(measurement: dict[str, Any]) -> datetime | None:
     timestamp = measurement.get("readAt")
     return as_utc(parse_datetime(timestamp)) if timestamp else None
+
+
+def electricity_register_series(
+    measurements: list[dict[str, Any]] | None, pod: str
+) -> list[dict[str, Any]]:
+    """Return the readings of the most recent register on *pod*, oldest first."""
+    usable = [
+        m
+        for m in measurements or []
+        if m.get("value") is not None
+        and _read_at(m) is not None
+        and m.get("supplyPointId") in (None, pod)
+    ]
+    if not usable:
+        return []
+    usable.sort(key=lambda m: _read_at(m) or datetime.min.replace(tzinfo=UTC))
+    register = usable[-1].get("registerId")
+    return [m for m in usable if m.get("registerId") == register]
 
 
 def build_electricity_reading(
@@ -31,25 +51,12 @@ def build_electricity_reading(
     (for example per time band) or of another supply point produced large
     negative "consumption" values (issue #26).
     """
-    usable = [
-        m
-        for m in measurements or []
-        if m.get("value") is not None
-        and _read_at(m) is not None
-        and m.get("supplyPointId") in (None, pod)
-    ]
-    if not usable:
+    series = electricity_register_series(measurements, pod)
+    if not series:
         return None
-    usable.sort(key=lambda m: _read_at(m) or datetime.min.replace(tzinfo=UTC))
-
-    latest = usable[-1]
-    same_register = [
-        m
-        for m in usable[:-1]
-        if m.get("registerId") == latest.get("registerId")
-        and _read_at(m) < _read_at(latest)
-    ]
-    previous = same_register[-1] if same_register else None
+    latest = series[-1]
+    older = [m for m in series[:-1] if _read_at(m) < _read_at(latest)]
+    previous = older[-1] if older else None
 
     entry: dict[str, Any] = {
         "value": None,
@@ -205,6 +212,8 @@ async def process_api_data(
             "current_gas_product": None,
             "gas_agreements": [],
             "electricity_last_reading": None,
+            "electricity_readings": [],
+            "gas_readings": [],
             "gas_last_reading": None,
             "available_products": available_products or {},
         }
@@ -339,6 +348,9 @@ async def process_api_data(
         latest_entry = build_electricity_reading(
             latest_measurements, electricity_pod, account_number
         )
+        result_data[account_number]["electricity_readings"] = (
+            electricity_register_series(latest_measurements, electricity_pod)
+        )
         if latest_entry is not None:
             result_data[account_number]["electricity_last_reading"] = latest_entry
 
@@ -400,10 +412,13 @@ async def process_api_data(
         latest_gas_readings = await api.fetch_gas_meter_readings(
             account_number,
             gas_pdr,
-            first=1,
+            first=GAS_READINGS_WINDOW,
         )
         if latest_gas_readings:
             result_data[account_number]["gas_last_reading"] = latest_gas_readings[0]
+            result_data[account_number]["gas_readings"] = list(
+                reversed(latest_gas_readings)
+            )
 
     # Extract property IDs
     property_ids = [prop.get("id") for prop in account_data.get("properties", [])]

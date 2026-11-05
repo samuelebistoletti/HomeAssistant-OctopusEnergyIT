@@ -278,9 +278,38 @@ def _install_stubs() -> None:
                 return dt_obj.replace(tzinfo=UTC)
             return dt_obj.astimezone(UTC)
 
+        from datetime import date as _date, time as _time
+        from zoneinfo import ZoneInfo
+
+        _local_tz = ZoneInfo("Europe/Rome")  # DEFAULT_TIME_ZONE in the tests
+
+        def _as_local(dt_obj):
+            if dt_obj.tzinfo is None:
+                dt_obj = dt_obj.replace(tzinfo=UTC)
+            return dt_obj.astimezone(_local_tz)
+
+        def _start_of_local_day(day=None):
+            if day is None:
+                day = datetime.now(_local_tz).date()
+            elif isinstance(day, datetime):
+                day = _as_local(day).date()
+            return datetime.combine(day, _time(), tzinfo=_local_tz)
+
+        def _parse_date(value):
+            try:
+                return _date.fromisoformat(value)
+            except (TypeError, ValueError):
+                return None
+
         _dt.utcnow = lambda: datetime.now(tz=UTC)
         _dt.parse_datetime = _parse_dt
+        _dt.parse_date = _parse_date
         _dt.as_utc = _as_utc
+        _dt.as_local = _as_local
+        _dt.start_of_local_day = _start_of_local_day
+        _dt.utc_from_timestamp = lambda ts: datetime.fromtimestamp(ts, tz=UTC)
+        _dt.DEFAULT_TIME_ZONE = _local_tz
+    sys.modules["homeassistant.util"].dt = _dt
 
     _coord = _stub("homeassistant.helpers.update_coordinator")
     if not hasattr(_coord, "CoordinatorEntity"):
@@ -370,6 +399,17 @@ def _install_stubs() -> None:
             }
 
         _diag.async_redact_data = _redact
+
+    _rec = _stub("homeassistant.components.recorder")
+    if not hasattr(_rec, "get_instance"):
+        _rec.get_instance = MagicMock()
+        _rec_models = _stub("homeassistant.components.recorder.models")
+        _rec_models.StatisticData = dict
+        _rec_models.StatisticMetaData = dict
+        _rec_models.StatisticMeanType = types.SimpleNamespace(NONE=0, ARITHMETIC=1)
+        _rec_stats = _stub("homeassistant.components.recorder.statistics")
+        _rec_stats.async_add_external_statistics = MagicMock()
+        _rec_stats.get_last_statistics = MagicMock(return_value={})
 
     _sensor = _stub("homeassistant.components.sensor")
     if not hasattr(_sensor, "SensorEntity"):
