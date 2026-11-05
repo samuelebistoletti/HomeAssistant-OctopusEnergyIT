@@ -11,7 +11,12 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall, callback
-from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryNotReady,
+    HomeAssistantError,
+    ServiceValidationError,
+)
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -19,7 +24,11 @@ from homeassistant.util.dt import utcnow
 
 from .const import DOMAIN, UPDATE_INTERVAL
 from .data_processor import process_api_data
-from .octopus_energy_it import OctopusEnergyIT
+from .octopus_energy_it import (
+    OctopusEnergyIT,
+    OctopusEnergyITAuthError,
+    OctopusEnergyITConnectionError,
+)
 from .tariff_scraper import fetch_public_tariffs
 
 _LOGGER = logging.getLogger(__name__)
@@ -71,10 +80,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Initialize API
     api = OctopusEnergyIT(email, password, session)
 
-    # Log in only once and reuse the token through the global token manager
-    if not await api.login():
-        _LOGGER.error("Failed to authenticate with Octopus Energy Italy API")
-        return False
+    # Log in once; the token (and refresh token) is reused afterwards.
+    try:
+        await api.authenticate()
+    except OctopusEnergyITAuthError as err:
+        raise ConfigEntryAuthFailed(
+            translation_domain=DOMAIN, translation_key="invalid_auth"
+        ) from err
+    except OctopusEnergyITConnectionError as err:
+        raise ConfigEntryNotReady(
+            translation_domain=DOMAIN, translation_key="cannot_connect"
+        ) from err
 
     # Ensure DOMAIN is initialized in hass.data
     if DOMAIN not in hass.data:
@@ -145,8 +161,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.debug("No account numbers found in entry data, fetching from API")
             accounts = await api.fetch_accounts()
             if not accounts:
-                _LOGGER.error("No accounts found for the provided credentials")
-                return False
+                raise ConfigEntryNotReady(
+                    translation_domain=DOMAIN, translation_key="no_accounts"
+                )
 
             account_numbers = [acc["number"] for acc in accounts]
             _LOGGER.info("Found %d accounts: %s", len(account_numbers), account_numbers)
@@ -197,6 +214,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     )
                     continue
 
+            if api.auth_failed:
+                # The stored password was rejected: start the reauth flow.
+                raise ConfigEntryAuthFailed(
+                    translation_domain=DOMAIN, translation_key="invalid_auth"
+                )
             if not all_accounts_data:
                 raise UpdateFailed("Failed to fetch data for any account")
 
@@ -205,7 +227,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             )
             return all_accounts_data
 
-        except UpdateFailed:
+        except (UpdateFailed, ConfigEntryAuthFailed):
             raise
         except Exception as e:
             raise UpdateFailed(f"Unexpected error during data update: {e}") from e
@@ -254,8 +276,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-
-    entry.async_on_unload(entry.add_update_listener(_async_update_options))
 
     # Register services
     async def handle_set_device_preferences(call: ServiceCall):
@@ -378,11 +398,3 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             domain_data.pop("public_products_cache", None)
 
     return unload_ok
-
-
-async def _async_update_options(hass: HomeAssistant, config_entry: ConfigEntry) -> None:
-    """Handle options update."""
-    hass.config_entries.async_update_entry(
-        config_entry, data={**config_entry.data, **config_entry.options}
-    )
-    await hass.config_entries.async_reload(config_entry.entry_id)

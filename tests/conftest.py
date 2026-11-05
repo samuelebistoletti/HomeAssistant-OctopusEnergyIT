@@ -41,6 +41,91 @@ def _stub(dotted_name: str) -> types.ModuleType:
     return sys.modules[dotted_name]
 
 
+class AbortFlow(Exception):
+    """Stand-in for homeassistant.data_entry_flow.AbortFlow."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+def _install_config_flow_stub(ce) -> None:
+    """Install a minimal ConfigFlow that records results as plain dicts.
+
+    Flow steps return dicts shaped like Home Assistant's FlowResult; the
+    ``hass`` attribute is expected to provide ``config_entries`` with
+    ``async_entries(domain)`` and ``async_get_entry(entry_id)``.
+    """
+
+    class ConfigFlow:
+        def __init_subclass__(cls, domain=None, **kwargs):
+            super().__init_subclass__(**kwargs)
+            cls.DOMAIN = domain
+
+        def __init__(self) -> None:
+            self.context: dict = {}
+            self.unique_id = None
+            self.hass = None
+            self.updated: dict | None = None
+
+        async def async_set_unique_id(self, unique_id=None, **_kw):
+            self.unique_id = unique_id
+
+        def _abort_if_unique_id_configured(self):
+            for entry in self.hass.config_entries.async_entries(self.DOMAIN):
+                if entry.unique_id == self.unique_id:
+                    raise AbortFlow("already_configured")
+
+        def _abort_if_unique_id_mismatch(self, *, reason="unique_id_mismatch"):
+            entry = self._get_entry_from_context()
+            if entry.unique_id is not None and entry.unique_id != self.unique_id:
+                raise AbortFlow(reason)
+
+        def _get_entry_from_context(self):
+            return self.hass.config_entries.async_get_entry(self.context["entry_id"])
+
+        _get_reauth_entry = _get_entry_from_context
+        _get_reconfigure_entry = _get_entry_from_context
+
+        def async_show_form(
+            self,
+            *,
+            step_id,
+            data_schema=None,
+            errors=None,
+            description_placeholders=None,
+        ):
+            return {
+                "type": "form",
+                "step_id": step_id,
+                "errors": errors or {},
+                "description_placeholders": description_placeholders,
+            }
+
+        def async_create_entry(self, *, title, data):
+            return {"type": "create_entry", "title": title, "data": data}
+
+        def async_abort(self, *, reason):
+            return {"type": "abort", "reason": reason}
+
+        def async_update_reload_and_abort(
+            self,
+            entry,
+            *,
+            data=None,
+            title=None,
+            reason="reconfigure_successful",
+            **_kw,
+        ):
+            self.updated = {"entry": entry, "data": data, "title": title}
+            return {"type": "abort", "reason": reason}
+
+    ce.ConfigFlow = ConfigFlow
+    ce.ConfigFlowResult = dict
+    ce.SOURCE_REAUTH = "reauth"
+    ce.SOURCE_RECONFIGURE = "reconfigure"
+
+
 def _install_stubs() -> None:
     """Install all required stubs (safe to call multiple times)."""
 
@@ -120,17 +205,38 @@ def _install_stubs() -> None:
         _core.ServiceCall = type("ServiceCall", (), {})
         _core.callback = lambda f: f
 
+    _exc = _stub("homeassistant.exceptions")
+    if not hasattr(_exc, "HomeAssistantError"):
+        # Mirror Home Assistant's exception hierarchy.
+        class _HomeAssistantError(Exception):
+            def __init__(
+                self,
+                *args,
+                translation_domain=None,
+                translation_key=None,
+                translation_placeholders=None,
+            ):
+                super().__init__(*args)
+                self.translation_domain = translation_domain
+                self.translation_key = translation_key
+                self.translation_placeholders = translation_placeholders
+
+        _exc.HomeAssistantError = _HomeAssistantError
+        _exc.ServiceValidationError = type(
+            "ServiceValidationError", (_HomeAssistantError,), {}
+        )
+        _exc.ConfigEntryError = type("ConfigEntryError", (_HomeAssistantError,), {})
+        _exc.ConfigEntryNotReady = type(
+            "ConfigEntryNotReady", (_HomeAssistantError,), {}
+        )
+        _exc.ConfigEntryAuthFailed = type(
+            "ConfigEntryAuthFailed", (_exc.ConfigEntryError,), {}
+        )
+
     _ce = _stub("homeassistant.config_entries")
     if not hasattr(_ce, "ConfigEntry"):
         _ce.ConfigEntry = type("ConfigEntry", (), {"data": {}})
-
-    _exc = _stub("homeassistant.exceptions")
-    if not hasattr(_exc, "HomeAssistantError"):
-        _exc.HomeAssistantError = Exception
-        _exc.ConfigEntryNotReady = Exception
-    # Always ensure ServiceValidationError is present (needed by __init__.py top-level import)
-    if not hasattr(_exc, "ServiceValidationError"):
-        _exc.ServiceValidationError = Exception
+        _install_config_flow_stub(_ce)
 
     _dt = _stub("homeassistant.util.dt")
     if not hasattr(_dt, "utcnow"):

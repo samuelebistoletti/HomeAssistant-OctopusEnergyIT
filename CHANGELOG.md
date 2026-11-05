@@ -2,7 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+- Reauthentication: when Octopus rejects the stored password (for example after a password change), Home Assistant now shows a "Reauthentication required" prompt and asks only for the new password, instead of the integration silently failing to load.
+- The same Octopus login can no longer be added twice.
+
 ### Changed
+- Access tokens are renewed with the Kraken refresh token, so the password is sent to the API only for the first login or when the refresh token is rejected.
+- Setup now distinguishes a rejected login (reauthentication prompt) from a network problem (Home Assistant retries the setup automatically) instead of failing permanently in both cases.
+- The integration options dialog has been removed: it only duplicated **Reconfigure**, which remains the place to change the email or password.
 - Migrated off Kraken API fields that are deprecated or past their announced removal date: the vehicle battery size and model now come from `vehicleBatterySize`, `make` and `model` instead of `vehicleVariant`, and completed dispatches no longer request `startDt`, `endDt` and `deltaKwh`. Without this, the main data query could start failing for accounts with an electric vehicle as soon as Kraken removes the old fields.
 - The bundled GraphQL schema is no longer shipped inside the integration (it was never used at runtime and added 2.3 MB to every install); it now lives in `tests/fixtures/` and a test validates every query against it.
 

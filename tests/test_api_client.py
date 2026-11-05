@@ -318,6 +318,115 @@ class TestLogin:
 
 
 # ---------------------------------------------------------------------------
+# Refresh token and typed authentication errors
+# ---------------------------------------------------------------------------
+
+_REFRESH_EXP = int(datetime(2099, 6, 1, tzinfo=UTC).timestamp())
+
+
+def _login_response_with_refresh(token=_VALID_TOKEN, refresh="refresh-1"):
+    response = _success_login_response(token)
+    response["data"]["obtainKrakenToken"].update(
+        {"refreshToken": refresh, "refreshExpiresIn": _REFRESH_EXP}
+    )
+    return response
+
+
+class TestRefreshToken:
+    def test_refresh_token_expired_is_not_returned(self):
+        tm = TokenManager()
+        tm.set_refresh_token("r", datetime(2000, 1, 1, tzinfo=UTC).timestamp())
+        assert tm.refresh_token is None
+
+    def test_clear_keeps_refresh_token(self):
+        tm = TokenManager()
+        tm.set_token("abc", expiry=_FUTURE_EXP)
+        tm.set_refresh_token("r", _REFRESH_EXP)
+        tm.clear()
+        assert tm.refresh_token == "r"
+
+    async def test_password_login_stores_refresh_token(self):
+        api = _make_api()
+        with patch.object(
+            api,
+            "_execute_graphql",
+            new=AsyncMock(return_value=_login_response_with_refresh()),
+        ):
+            assert await api.login() is True
+
+        assert api._token_manager.refresh_token == "refresh-1"
+
+    async def test_login_prefers_refresh_token_over_password(self):
+        api = _make_api()
+        api._token_manager.set_refresh_token("refresh-1", _REFRESH_EXP)
+        execute = AsyncMock(return_value=_login_response_with_refresh(refresh="r2"))
+
+        with patch.object(api, "_execute_graphql", new=execute):
+            assert await api.login() is True
+
+        execute.assert_awaited_once()
+        assert execute.await_args.args[0] == _mod.REFRESH_TOKEN_MUTATION
+        assert execute.await_args.kwargs["variables"] == {"refreshToken": "refresh-1"}
+        assert "s3cr3t" not in str(execute.await_args)
+        assert api._token_manager.refresh_token == "r2"
+
+    async def test_rejected_refresh_token_falls_back_to_password(self):
+        api = _make_api()
+        api._token_manager.set_refresh_token("stale", _REFRESH_EXP)
+        execute = AsyncMock(
+            side_effect=[_error_response("KT-CT-1135"), _login_response_with_refresh()]
+        )
+
+        with patch.object(api, "_execute_graphql", new=execute):
+            assert await api.login() is True
+
+        assert execute.await_args_list[1].kwargs["query"] == _mod.LOGIN_MUTATION
+        assert api._token_manager.refresh_token == "refresh-1"
+
+    def test_mask_token_response_masks_refresh_token(self):
+        masked = OctopusEnergyIT._mask_token_response(
+            _login_response_with_refresh(refresh="supersecretrefresh")
+        )
+        assert "supersecretrefresh" not in str(masked)
+
+
+class TestAuthenticate:
+    async def test_invalid_credentials_raise_auth_error(self):
+        api = _make_api()
+        with (
+            patch.object(
+                api,
+                "_execute_graphql",
+                new=AsyncMock(return_value=_error_response("KT-CT-1138")),
+            ),
+            pytest.raises(_mod.OctopusEnergyITAuthError),
+        ):
+            await api.authenticate()
+        assert api.auth_failed is True
+
+    async def test_network_failure_raises_connection_error(self):
+        api = _make_api()
+        with (
+            patch.object(api, "_execute_graphql", new=AsyncMock(return_value=None)),
+            patch("asyncio.sleep", new=AsyncMock()),
+            pytest.raises(_mod.OctopusEnergyITConnectionError),
+        ):
+            await api.authenticate()
+        assert api.auth_failed is False
+
+    async def test_success_clears_previous_auth_failure(self):
+        api = _make_api()
+        api.auth_failed = True
+        with patch.object(
+            api,
+            "_execute_graphql",
+            new=AsyncMock(return_value=_success_login_response()),
+        ):
+            await api.authenticate()
+        assert api.auth_failed is False
+
+
+# ---------------------------------------------------------------------------
 # _GraphQLClient — the aiohttp-backed replacement for python-graphql-client
 # (regression coverage for issue #23)
 # ---------------------------------------------------------------------------

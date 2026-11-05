@@ -44,16 +44,6 @@ def _operations() -> dict[str, str]:
             value = node.value.value
             if isinstance(value, str) and re.match(r"\s*(query|mutation)\b", value):
                 operations[node.targets[0].id] = value
-    for node in ast.walk(tree):
-        if isinstance(node, ast.AsyncFunctionDef) and node.name == "login":
-            for inner in ast.walk(node):
-                if (
-                    isinstance(inner, ast.Assign)
-                    and isinstance(inner.value, ast.Constant)
-                    and isinstance(inner.value.value, str)
-                    and "obtainKrakenToken" in inner.value.value
-                ):
-                    operations["LOGIN_MUTATION"] = inner.value.value
     return operations
 
 

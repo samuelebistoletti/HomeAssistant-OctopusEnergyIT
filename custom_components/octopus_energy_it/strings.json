@@ -16,6 +16,13 @@
           "email": "Email",
           "password": "Password"
         }
+      },
+      "reauth_confirm": {
+        "title": "Reauthenticate Octopus Energy Italy",
+        "description": "The password for {email} is no longer accepted. Enter the current password.",
+        "data": {
+          "password": "[%key:common::config_flow::data::password%]"
+        }
       }
     },
     "error": {
@@ -27,19 +34,9 @@
     "abort": {
       "already_configured": "[%key:common::config_flow::abort::already_configured_device%]",
       "reconfigure_failed": "Reconfiguration failed",
-      "reconfigure_successful": "Reconfiguration successful"
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "Octopus Energy Italy Options",
-        "description": "Update the credentials used by the integration.",
-        "data": {
-          "email": "Email",
-          "password": "Password"
-        }
-      }
+      "reconfigure_successful": "Reconfiguration successful",
+      "reauth_successful": "[%key:common::config_flow::abort::reauth_successful%]",
+      "wrong_account": "The email belongs to a different Octopus account than the one configured. Add it as a new integration instead."
     }
   },
   "exceptions": {
@@ -51,6 +48,15 @@
     },
     "ready_time_update_failed": {
       "message": "Unable to update the charge end time. Check the log for details."
+    },
+    "invalid_auth": {
+      "message": "The Octopus Energy Italy credentials were rejected. Reauthenticate the integration."
+    },
+    "cannot_connect": {
+      "message": "Unable to connect to the Octopus Energy Italy API."
+    },
+    "no_accounts": {
+      "message": "No Octopus Energy Italy account was found for this login."
     }
   },
   "issues": {

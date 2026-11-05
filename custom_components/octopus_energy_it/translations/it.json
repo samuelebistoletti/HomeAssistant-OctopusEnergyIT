@@ -1,14 +1,17 @@
 {
   "config": {
     "abort": {
-      "already_configured": "Il dispositivo e gia configurato",
+      "already_configured": "Il dispositivo è già configurato",
       "reconfigure_failed": "Riconfigurazione non riuscita",
-      "reconfigure_successful": "Riconfigurazione completata"
+      "reconfigure_successful": "Riconfigurazione completata",
+      "reauth_successful": "Nuova autenticazione completata",
+      "wrong_account": "L'email appartiene a un account Octopus diverso da quello configurato. Aggiungilo come nuova integrazione."
     },
     "error": {
       "invalid_auth": "Email o password non sono valide.",
       "no_accounts": "Nessun account trovato per questo utente",
-      "unknown": "Si e verificato un errore imprevisto"
+      "unknown": "Si è verificato un errore imprevisto",
+      "cannot_connect": "Impossibile connettersi"
     },
     "step": {
       "user": {
@@ -26,21 +29,13 @@
           "email": "Email",
           "password": "Password"
         }
-      }
-    }
-  },
-  "options": {
-    "error": {
-      "invalid_auth": "Email o password non sono valide."
-    },
-    "step": {
-      "init": {
-        "title": "Opzioni Octopus Energy Italy",
+      },
+      "reauth_confirm": {
+        "title": "Nuova autenticazione Octopus Energy Italy",
+        "description": "La password di {email} non è più accettata. Inserisci la password attuale.",
         "data": {
-          "email": "Email",
           "password": "Password"
-        },
-        "description": "Aggiorna le credenziali usate dall'integrazione."
+        }
       }
     }
   },
@@ -53,6 +48,15 @@
     },
     "ready_time_update_failed": {
       "message": "Impossibile aggiornare l'orario di fine ricarica. Controlla i log per i dettagli."
+    },
+    "invalid_auth": {
+      "message": "Le credenziali Octopus Energy Italy sono state rifiutate. Esegui di nuovo l'autenticazione dell'integrazione."
+    },
+    "cannot_connect": {
+      "message": "Impossibile connettersi all'API di Octopus Energy Italy."
+    },
+    "no_accounts": {
+      "message": "Nessun account Octopus Energy Italy trovato per queste credenziali."
     }
   },
   "issues": {

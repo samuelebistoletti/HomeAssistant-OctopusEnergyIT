@@ -407,12 +407,50 @@ mutation updateBoostCharge($input: UpdateBoostChargeInput!) {
 """
 
 
+LOGIN_MUTATION = """
+mutation krakenTokenAuthentication($email: String!, $password: String!) {
+  obtainKrakenToken(input: { email: $email, password: $password }) {
+    token
+    payload
+    refreshToken
+    refreshExpiresIn
+  }
+}
+"""
+
+REFRESH_TOKEN_MUTATION = """
+mutation krakenTokenRefresh($refreshToken: String!) {
+  obtainKrakenToken(input: { refreshToken: $refreshToken }) {
+    token
+    payload
+    refreshToken
+    refreshExpiresIn
+  }
+}
+"""
+
+
+class OctopusEnergyITError(Exception):
+    """Base error of the Octopus Energy Italy API client."""
+
+
+class OctopusEnergyITAuthError(OctopusEnergyITError):
+    """The API rejected the credentials."""
+
+
+class OctopusEnergyITConnectionError(OctopusEnergyITError):
+    """The API could not be reached or answered unexpectedly."""
+
+
 class TokenManager:
     """Store and validate auth token details."""
 
     def __init__(self) -> None:
+        """Start without any token."""
         self._token: str | None = None
         self._expiry: float | None = None
+        self._refresh_token: str | None = None
+        self._refresh_expiry: float | None = None
 
     @property
     def token(self) -> str | None:
@@ -468,9 +506,37 @@ class TokenManager:
             )
 
     def clear(self) -> None:
-        """Forget the current token."""
+        """Forget the current access token (the refresh token is kept)."""
         self._token = None
         self._expiry = None
+
+    # -- refresh token --------------------------------------------------
+
+    def set_refresh_token(
+        self, refresh_token: str | None, expires_at: float | None
+    ) -> None:
+        """Store the refresh token and its expiry (Unix timestamp)."""
+        self._refresh_token = refresh_token or None
+        self._refresh_expiry = float(expires_at) if expires_at is not None else None
+
+    @property
+    def refresh_token(self) -> str | None:
+        """Return the refresh token while it is still usable, else None."""
+        token = getattr(self, "_refresh_token", None)
+        expiry = getattr(self, "_refresh_expiry", None)
+        if not token:
+            return None
+        if (
+            expiry is not None
+            and datetime.now(UTC).timestamp() >= expiry - TOKEN_REFRESH_MARGIN
+        ):
+            return None
+        return token
+
+    def clear_refresh_token(self) -> None:
+        """Forget the refresh token."""
+        self._refresh_token = None
+        self._refresh_expiry = None
 
 
 class _GraphQLClient:
@@ -569,6 +635,8 @@ class OctopusEnergyIT:
         self._email = email
         self._password = password
         self._session = session
+        # True after the API rejected the credentials (KT-CT-1138).
+        self.auth_failed = False
 
         self._token_manager = TokenManager()
         self._login_lock = asyncio.Lock()
@@ -659,9 +727,11 @@ class OctopusEnergyIT:
     def _mask_token_response(response: dict) -> dict:
         """Return a deep copy of *response* with the token value masked for logging."""
         safe = copy.deepcopy(response)
-        token_container = safe.get("data", {}).get("obtainKrakenToken")
-        if isinstance(token_container, dict) and token_container.get("token"):
-            token_container["token"] = token_container["token"][:8] + "..." + "*" * 12
+        token_container = (safe.get("data") or {}).get("obtainKrakenToken")
+        if isinstance(token_container, dict):
+            for key in ("token", "refreshToken"):
+                if token_container.get(key):
+                    token_container[key] = token_container[key][:8] + "..." + "*" * 12
         return safe
 
     async def _attempt_login(
@@ -714,6 +784,7 @@ class OctopusEnergyIT:
                     attempt,
                     retries,
                 )
+                self.auth_failed = True
                 return False, True, next_delay
 
             if error_code == "KT-CT-1199":  # Rate limit
@@ -735,14 +806,7 @@ class OctopusEnergyIT:
             return False, False, next_delay
 
         if "data" in response and "obtainKrakenToken" in response["data"]:
-            token_data = response["data"]["obtainKrakenToken"]
-            token = token_data.get("token")
-            payload = token_data.get("payload")
-            if token:
-                if payload and isinstance(payload, dict) and "exp" in payload:
-                    self._token_manager.set_token(token, payload["exp"])
-                else:
-                    self._token_manager.set_token(token)
+            if self._store_token_data(response["data"]["obtainKrakenToken"]):
                 return True, False, next_delay
             _LOGGER.error(
                 "No token in response despite success (attempt %s of %s)",
@@ -757,32 +821,73 @@ class OctopusEnergyIT:
         await asyncio.sleep(delay)
         return False, False, next_delay
 
+    def _store_token_data(self, token_data: dict | None) -> bool:
+        """Store the access and refresh tokens of an obtainKrakenToken result."""
+        if not isinstance(token_data, dict) or not token_data.get("token"):
+            return False
+        token = token_data["token"]
+        payload = token_data.get("payload")
+        if isinstance(payload, dict) and "exp" in payload:
+            self._token_manager.set_token(token, payload["exp"])
+        else:
+            self._token_manager.set_token(token)
+        if token_data.get("refreshToken"):
+            self._token_manager.set_refresh_token(
+                token_data["refreshToken"], token_data.get("refreshExpiresIn")
+            )
+        return True
+
+    async def _refresh_access_token(self) -> bool:
+        """Renew the access token with the refresh token (no password sent)."""
+        refresh_token = self._token_manager.refresh_token
+        if not refresh_token:
+            return False
+        response = await self._execute_graphql(
+            REFRESH_TOKEN_MUTATION,
+            variables={"refreshToken": refresh_token},
+            require_auth=False,
+            retry_on_token_error=False,
+        )
+        token_data = ((response or {}).get("data") or {}).get("obtainKrakenToken")
+        if isinstance(response, dict) and not response.get("errors"):
+            if self._store_token_data(token_data):
+                _LOGGER.debug("Access token renewed with the refresh token")
+                return True
+        _LOGGER.debug("Refresh token rejected; falling back to a password login")
+        self._token_manager.clear_refresh_token()
+        return False
+
+    async def authenticate(self) -> None:
+        """Log in, raising a typed error on failure.
+
+        Raises ``OctopusEnergyITAuthError`` for rejected credentials and
+        ``OctopusEnergyITConnectionError`` for anything else.
+        """
+        if await self.login():
+            return
+        if self.auth_failed:
+            raise OctopusEnergyITAuthError("Invalid credentials")
+        raise OctopusEnergyITConnectionError("Unable to reach the Octopus API")
+
     async def login(self) -> bool:
-        """Login and obtain a new token."""
+        """Obtain a new access token (refresh token first, then password)."""
         async with self._login_lock:
             if self._token_manager.is_valid:
                 _LOGGER.debug("Token still valid after lock, skipping login")
                 return True
 
-            query = """
-            mutation krakenTokenAuthentication(
-                $email: String!, $password: String!
-            ) {
-              obtainKrakenToken(
-                  input: { email: $email, password: $password }
-              ) {
-                token
-                payload
-              }
-            }
-            """
+            if await self._refresh_access_token():
+                self.auth_failed = False
+                return True
+
+            self.auth_failed = False
             variables = {"email": self._email, "password": self._password}
             delay = float(LOGIN_INITIAL_DELAY)
 
             for attempt in range(1, LOGIN_RETRIES + 1):
                 try:
                     success, abort, delay = await self._attempt_login(
-                        query, variables, attempt, LOGIN_RETRIES, delay
+                        LOGIN_MUTATION, variables, attempt, LOGIN_RETRIES, delay
                     )
                     if success:
                         return True
