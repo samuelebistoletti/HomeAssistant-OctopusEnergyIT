@@ -16,6 +16,8 @@ import pytest
 # conftest._install_stubs() already ran; HA stubs are in sys.modules.
 from custom_components.octopus_energy_it.data_processor import (
     _select_current_product,
+    device_battery_size_kwh,
+    device_model,
     process_api_data,
 )
 
@@ -478,9 +480,28 @@ class TestProcessApiDataDevices:
     async def test_vehicle_battery_size_extracted(self):
         api = _make_api()
         data = _minimal_account_data()
+        data["devices"] = [{"id": "dev-001", "vehicleBatterySize": "64.5"}]
+        result = await process_api_data(data, ACCOUNT, api, {})
+        assert result[ACCOUNT]["vehicle_battery_size_in_kwh"] == pytest.approx(64.5)
+
+    @pytest.mark.asyncio
+    async def test_vehicle_battery_size_legacy_variant_shape(self):
+        api = _make_api()
+        data = _minimal_account_data()
         data["devices"] = [{"id": "dev-001", "vehicleVariant": {"batterySize": 75.0}}]
         result = await process_api_data(data, ACCOUNT, api, {})
         assert result[ACCOUNT]["vehicle_battery_size_in_kwh"] == pytest.approx(75.0)
+
+    @pytest.mark.asyncio
+    async def test_battery_size_skips_devices_without_one(self):
+        api = _make_api()
+        data = _minimal_account_data()
+        data["devices"] = [
+            {"id": "charger", "deviceType": "CHARGE_POINTS"},
+            {"id": "ev", "vehicleBatterySize": 77},
+        ]
+        result = await process_api_data(data, ACCOUNT, api, {})
+        assert result[ACCOUNT]["vehicle_battery_size_in_kwh"] == pytest.approx(77.0)
 
     @pytest.mark.asyncio
     async def test_no_vehicle_gives_none_battery(self):
@@ -577,3 +598,27 @@ class TestProcessApiDataAvailableProducts:
         data = _minimal_account_data()
         result = await process_api_data(data, ACCOUNT, api, None)
         assert result[ACCOUNT]["available_products"] == {}
+
+
+# ---------------------------------------------------------------------------
+# SmartFlex vehicle helpers (vehicleVariant is deprecated by the API)
+# ---------------------------------------------------------------------------
+
+
+class TestVehicleHelpers:
+    def test_battery_size_prefers_current_field(self):
+        device = {"vehicleBatterySize": "60", "vehicleVariant": {"batterySize": 50}}
+        assert device_battery_size_kwh(device) == pytest.approx(60.0)
+
+    def test_battery_size_none_when_missing_or_invalid(self):
+        assert device_battery_size_kwh({}) is None
+        assert device_battery_size_kwh({"vehicleBatterySize": "n/a"}) is None
+
+    def test_model_combines_make_and_model(self):
+        assert device_model({"make": "Tesla", "model": "Model 3"}) == "Tesla Model 3"
+
+    def test_model_falls_back_to_legacy_variant(self):
+        assert device_model({"vehicleVariant": {"model": "ID.3"}}) == "ID.3"
+
+    def test_model_none_when_unknown(self):
+        assert device_model({"make": None, "model": ""}) is None

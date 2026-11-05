@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+"""
+Refresh tests/fixtures/oeit_graphql_schema.json from the live Kraken API.
+
+Introspection is public, so no credentials are needed:
+
+    uv run --with graphql-core scripts/update-graphql-schema
+
+Then run ``python -m pytest tests/test_graphql_schema.py`` to see whether any
+query used by the integration became invalid or uses a deprecated field.
+"""
+
+import json
+from pathlib import Path
+import urllib.request
+
+from graphql import get_introspection_query
+
+ENDPOINT = "https://api.oeit-kraken.energy/v1/graphql/"
+TARGET = (
+    Path(__file__).resolve().parent.parent
+    / "tests"
+    / "fixtures"
+    / "oeit_graphql_schema.json"
+)
+
+
+def main() -> None:
+    body = json.dumps({"query": get_introspection_query(descriptions=True)})
+    request = urllib.request.Request(  # noqa: S310 - fixed https endpoint
+        ENDPOINT,
+        data=body.encode(),
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(request, timeout=120) as response:  # noqa: S310
+        payload = json.load(response)
+    if "data" not in payload:
+        raise SystemExit(f"Introspection failed: {payload.get('errors')}")
+    TARGET.write_text(
+        json.dumps(payload, separators=(",", ":"), sort_keys=True), encoding="utf-8"
+    )
+    print(f"Schema written to {TARGET}")
+
+
+if __name__ == "__main__":
+    main()

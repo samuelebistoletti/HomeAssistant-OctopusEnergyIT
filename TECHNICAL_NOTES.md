@@ -5,7 +5,8 @@
 ### API References
 
 - Official documentation: [Octopus Energy Italy developer portal](https://developer.oeit-kraken.energy/)
-- GraphQL endpoint: `https://api.oeit-kraken.energy/v1/graphql/` — accessed via a small in-tree `aiohttp`-based client (`_GraphQLClient` in `octopus_energy_it.py`); the integration declares no external `requirements` in `manifest.json`
+- GraphQL endpoint: `https://api.oeit-kraken.energy/v1/graphql/` — accessed via a small in-tree `aiohttp`-based client (`_GraphQLClient` in `octopus_energy_it.py`); the integration declares no external `requirements` in `manifest.json`. The client reuses Home Assistant's shared `aiohttp` session, applies a 30 s timeout and retries once on transport errors
+- Schema: `tests/fixtures/oeit_graphql_schema.json` (refresh with `uv run --with graphql-core scripts/update-graphql-schema`). `tests/test_graphql_schema.py` validates every query and mutation against it and fails on deprecated fields, except those listed in `_ALLOWED_DEPRECATED`. Kraken hides `email`/`password` of `ObtainJSONWebTokenInput` from introspection, although the API accepts them
 
 ### Key Files
 

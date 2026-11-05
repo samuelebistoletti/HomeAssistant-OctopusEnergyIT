@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+- Migrated off Kraken API fields that are deprecated or past their announced removal date: the vehicle battery size and model now come from `vehicleBatterySize`, `make` and `model` instead of `vehicleVariant`, and completed dispatches no longer request `startDt`, `endDt` and `deltaKwh`. Without this, the main data query could start failing for accounts with an electric vehicle as soon as Kraken removes the old fields.
+- The bundled GraphQL schema is no longer shipped inside the integration (it was never used at runtime and added 2.3 MB to every install); it now lives in `tests/fixtures/` and a test validates every query against it.
+
 ### Fixed
 - The integration could not be added: the config flow failed with `No module named 'python_graphql_client'` when Home Assistant was unable to install the external `python-graphql-client` package. That abandoned dependency (last released in 2021) has been removed entirely and replaced with a small in-tree GraphQL client built on `aiohttp`, which ships with Home Assistant core and therefore can never fail to install. `manifest.json` now declares no external `requirements`. (Fixes #23, #27; thanks @frabert)
 - Intermittent `Timeout while contacting DNS servers` errors and failed update cycles. The GraphQL client now reuses Home Assistant's shared HTTP session instead of opening a new connection (with a fresh DNS lookup and TLS handshake) for every request, applies a 30-second timeout per request, and retries once after a transient network error before failing the update. (Fixes #22, #25)

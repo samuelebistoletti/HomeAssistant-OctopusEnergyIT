@@ -21,6 +21,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util.dt import as_utc, parse_datetime as _parse_dt, utcnow
 
 from .const import DOMAIN
+from .data_processor import device_battery_size_kwh, device_model
 from .entity import OctopusCoordinatorEntity, OctopusPublicProductsEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -1643,9 +1644,9 @@ class OctopusEVChargeStatusSensor(OctopusCoordinatorEntity, SensorEntity):
             "account_number": self._account_number,
             "device_id": device.get("id"),
             "device_name": device.get("name"),
-            "device_model": device.get("vehicleVariant", {}).get("model"),
+            "device_model": device_model(device),
             "device_provider": device.get("provider"),
-            "battery_capacity_kwh": device.get("vehicleVariant", {}).get("batterySize"),
+            "battery_capacity_kwh": device_battery_size_kwh(device),
             "status_current_state": current_state,
             "status_normalized": _normalize_ev_status(current_state),
             "status_raw": current_state or None,
@@ -1722,13 +1723,12 @@ class OctopusVehicleBatterySizeSensor(OctopusCoordinatorEntity, SensorEntity):
 
         devices = account_data.get("devices") or []
         for device in devices:
-            variant = device.get("vehicleVariant") or {}
-            if variant.get("batterySize") is not None:
+            if device_battery_size_kwh(device) is not None:
                 attributes.update(
                     {
                         "device_id": device.get("id"),
                         "device_name": device.get("name"),
-                        "vehicle_model": variant.get("model"),
+                        "vehicle_model": device_model(device),
                         "device_provider": device.get("provider"),
                     }
                 )

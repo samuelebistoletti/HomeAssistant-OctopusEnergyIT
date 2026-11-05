@@ -11,6 +11,32 @@ from homeassistant.util.dt import as_utc, parse_datetime, utcnow
 _LOGGER = logging.getLogger(__name__)
 
 
+def device_battery_size_kwh(device: dict[str, Any]) -> float | None:
+    """Return a SmartFlex vehicle's battery capacity in kWh, if known.
+
+    Reads ``vehicleBatterySize`` (current API) and falls back to the
+    deprecated ``vehicleVariant.batterySize`` shape.
+    """
+    raw = device.get("vehicleBatterySize")
+    if raw is None:
+        raw = (device.get("vehicleVariant") or {}).get("batterySize")
+    if raw is None:
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def device_model(device: dict[str, Any]) -> str | None:
+    """Return a SmartFlex vehicle's "make model" description, if known."""
+    variant = device.get("vehicleVariant") or {}
+    make = device.get("make")
+    model = device.get("model") or variant.get("model")
+    label = " ".join(part for part in (make, model) if part)
+    return label or None
+
+
 def _select_current_product(products_list: list[dict]) -> dict | None:
     """Pick the most recent product that is currently valid."""
     if not products_list:
@@ -366,12 +392,9 @@ async def process_api_data(
     # Extract vehicle battery size if available
     vehicle_battery_size = None
     for device in devices:
-        if device.get("vehicleVariant") and device["vehicleVariant"].get("batterySize"):
-            try:
-                vehicle_battery_size = float(device["vehicleVariant"]["batterySize"])
-                break
-            except (ValueError, TypeError):
-                pass
+        vehicle_battery_size = device_battery_size_kwh(device)
+        if vehicle_battery_size is not None:
+            break
     result_data[account_number]["vehicle_battery_size_in_kwh"] = vehicle_battery_size
 
     # Handle dispatch data

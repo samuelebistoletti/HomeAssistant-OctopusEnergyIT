@@ -186,15 +186,12 @@ query ComprehensiveDataQuery($accountNumber: String!) {
   }
   completedDispatches(accountNumber: $accountNumber) {
     delta
-    deltaKwh
     end
-    endDt
     meta {
       location
       source
     }
     start
-    startDt
   }
   devices(accountNumber: $accountNumber) {
     status {
@@ -246,10 +243,10 @@ query ComprehensiveDataQuery($accountNumber: String!) {
         currentState
         isSuspended
       }
-      vehicleVariant {
-        model
-        batterySize
-      }
+      make
+      model
+      vehicleBatterySize
+      chargePointPowerOutput
     }
   }
 }
