@@ -69,7 +69,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     session = async_get_clientsession(hass)
 
     # Initialize API
-    api = OctopusEnergyIT(email, password)
+    api = OctopusEnergyIT(email, password, session)
 
     # Log in only once and reuse the token through the global token manager
     if not await api.login():

@@ -27,6 +27,9 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 GRAPH_QL_ENDPOINT = "https://api.oeit-kraken.energy/v1/graphql/"
+GRAPHQL_REQUEST_TIMEOUT = 30  # seconds, per request
+TRANSPORT_ATTEMPTS = 2  # one retry on network/DNS errors
+TRANSPORT_RETRY_DELAY = 2  # seconds
 ELECTRICITY_LEDGER = "ELECTRICITY_LEDGER"
 
 # Global token manager to prevent redundant token requests
@@ -483,10 +486,26 @@ class _GraphQLClient:
     "No module named 'python_graphql_client'" error that broke the config flow.
     """
 
-    def __init__(self, endpoint: str, headers: dict | None = None) -> None:
-        """Store the GraphQL *endpoint* and default request *headers*."""
+    def __init__(
+        self,
+        endpoint: str,
+        headers: dict | None = None,
+        *,
+        session: aiohttp.ClientSession | None = None,
+        timeout: float = GRAPHQL_REQUEST_TIMEOUT,
+    ) -> None:
+        """Store the GraphQL *endpoint*, default *headers* and HTTP *session*.
+
+        Pass Home Assistant's shared session (``async_get_clientsession``):
+        opening a new session per request re-resolves DNS and re-does the TLS
+        handshake every time, which caused the intermittent "Timeout while
+        contacting DNS servers" failures (issue #22). Without a session a
+        short-lived one is created per call.
+        """
         self.endpoint = endpoint
         self.headers = headers or {}
+        self._session = session
+        self._timeout = timeout
 
     async def execute_async(
         self,
@@ -495,7 +514,11 @@ class _GraphQLClient:
         operation_name: str | None = None,
         headers: dict | None = None,
     ) -> dict:
-        """Execute a GraphQL request and return the parsed JSON response."""
+        """Execute a GraphQL request and return the parsed JSON response.
+
+        Raises ``aiohttp.ClientError`` or ``TimeoutError`` on transport
+        failures and on HTTP errors whose body is not a GraphQL JSON payload.
+        """
         body: dict = {"query": query}
         if variables:
             body["variables"] = variables
@@ -503,23 +526,52 @@ class _GraphQLClient:
             body["operationName"] = operation_name
 
         request_headers = {**self.headers, **(headers or {})}
-        async with aiohttp.ClientSession() as session, session.post(
-            self.endpoint, json=body, headers=request_headers
+        if self._session is not None:
+            return await self._post(self._session, body, request_headers)
+        async with aiohttp.ClientSession() as session:
+            return await self._post(session, body, request_headers)
+
+    async def _post(
+        self, session: aiohttp.ClientSession, body: dict, headers: dict
+    ) -> dict:
+        async with session.post(
+            self.endpoint,
+            json=body,
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=self._timeout),
         ) as response:
-            return await response.json()
+            if response.status != 200:
+                # GraphQL servers may answer 4xx with a JSON "errors" payload:
+                # hand it to the caller; anything else is a transport error.
+                try:
+                    payload = await response.json(content_type=None)
+                except ValueError:
+                    payload = None
+                if isinstance(payload, dict) and "errors" in payload:
+                    return payload
+                response.raise_for_status()
+            return await response.json(content_type=None)
 
 
 class OctopusEnergyIT:
-    def __init__(self, email: str, password: str):
+    def __init__(
+        self,
+        email: str,
+        password: str,
+        session: aiohttp.ClientSession | None = None,
+    ) -> None:
         """Initialize the OctopusEnergyIT API client.
 
         Args:
             email: The email address for the Octopus Energy Italy account
             password: The password for the Octopus Energy Italy account
+            session: Shared aiohttp session (Home Assistant's
+                ``async_get_clientsession``); recommended outside tests
 
         """
         self._email = email
         self._password = password
+        self._session = session
 
         self._token_manager = TokenManager()
         self._login_lock = asyncio.Lock()
@@ -539,7 +591,9 @@ class OctopusEnergyIT:
         headers = self._get_auth_headers() if use_auth else {}
         if additional_headers:
             headers.update(additional_headers)
-        return _GraphQLClient(endpoint=GRAPH_QL_ENDPOINT, headers=headers)
+        return _GraphQLClient(
+            endpoint=GRAPH_QL_ENDPOINT, headers=headers, session=self._session
+        )
 
     async def _execute_graphql(
         self,
@@ -555,14 +609,30 @@ class OctopusEnergyIT:
             return None
 
         client = self._get_graphql_client(use_auth=require_auth)
-        try:
-            response = await client.execute_async(
-                query=query,
-                variables=variables or {},
-            )
-        except Exception as exc:
-            _LOGGER.error("GraphQL request failed: %s", exc)
-            return None
+        response = None
+        for attempt in range(1, TRANSPORT_ATTEMPTS + 1):
+            try:
+                response = await client.execute_async(
+                    query=query,
+                    variables=variables or {},
+                )
+                break
+            except (aiohttp.ClientError, TimeoutError) as exc:
+                if attempt < TRANSPORT_ATTEMPTS:
+                    # One quick retry absorbs transient DNS/network blips
+                    # (issue #25) instead of failing the whole update cycle.
+                    _LOGGER.debug(
+                        "GraphQL transport error (%s); retrying in %ss",
+                        exc,
+                        TRANSPORT_RETRY_DELAY,
+                    )
+                    await asyncio.sleep(TRANSPORT_RETRY_DELAY)
+                    continue
+                _LOGGER.error("GraphQL request failed: %s", exc)
+                return None
+            except Exception as exc:
+                _LOGGER.error("GraphQL request failed: %s", exc)
+                return None
 
         if (
             require_auth

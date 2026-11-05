@@ -324,8 +324,9 @@ class TestLogin:
 
 
 class _FakeResponse:
-    def __init__(self, payload):
+    def __init__(self, payload, status=200):
         self._payload = payload
+        self.status = status
 
     async def __aenter__(self):
         return self
@@ -333,26 +334,137 @@ class _FakeResponse:
     async def __aexit__(self, *exc):
         return False
 
-    async def json(self):
+    async def json(self, content_type="application/json"):
+        if isinstance(self._payload, Exception):
+            raise self._payload
         return self._payload
+
+    def raise_for_status(self):
+        if self.status >= 400:
+            raise _mod.aiohttp.ClientResponseError(status=self.status)
 
 
 class _FakeSession:
     """Records the POST call and returns a canned JSON payload."""
 
-    def __init__(self, payload, recorder):
+    def __init__(self, payload, recorder, status=200):
         self._payload = payload
         self._recorder = recorder
+        self._status = status
+        self.closed_by_client = False
 
     async def __aenter__(self):
         return self
 
     async def __aexit__(self, *exc):
+        self.closed_by_client = True
         return False
 
-    def post(self, url, json=None, headers=None):
-        self._recorder.update(url=url, json=json, headers=headers)
-        return _FakeResponse(self._payload)
+    def post(self, url, json=None, headers=None, timeout=None):
+        self._recorder.update(url=url, json=json, headers=headers, timeout=timeout)
+        return _FakeResponse(self._payload, self._status)
+
+
+class TestGraphQLClientSessionHandling:
+    """Shared-session, timeout and HTTP status handling (issues #22 and #25)."""
+
+    async def test_uses_injected_session_without_creating_one(self):
+        rec = {}
+        shared = _FakeSession({"data": {"ok": 1}}, rec)
+        client = _GraphQLClient("https://api.example/graphql/", session=shared)
+        with patch.object(
+            _mod.aiohttp, "ClientSession", side_effect=AssertionError("new session")
+        ):
+            result = await client.execute_async("query { ok }")
+
+        assert result == {"data": {"ok": 1}}
+        # The shared session belongs to Home Assistant and must stay open.
+        assert shared.closed_by_client is False
+
+    async def test_request_has_a_total_timeout(self):
+        rec = {}
+        client = _GraphQLClient(
+            "https://api.example/graphql/",
+            session=_FakeSession({"data": {}}, rec),
+            timeout=12,
+        )
+        await client.execute_async("query { ok }")
+
+        assert rec["timeout"].total == 12
+
+    async def test_http_error_with_graphql_errors_payload_is_returned(self):
+        payload = {"errors": [{"message": "bad", "extensions": {"errorCode": "X"}}]}
+        client = _GraphQLClient(
+            "https://api.example/graphql/",
+            session=_FakeSession(payload, {}, status=400),
+        )
+
+        assert await client.execute_async("query { ok }") == payload
+
+    async def test_http_error_without_json_raises_client_error(self):
+        client = _GraphQLClient(
+            "https://api.example/graphql/",
+            session=_FakeSession(ValueError("not json"), {}, status=502),
+        )
+
+        with pytest.raises(_mod.aiohttp.ClientResponseError):
+            await client.execute_async("query { ok }")
+
+    async def test_api_client_passes_its_session_to_graphql_client(self):
+        shared = object()
+        api = OctopusEnergyIT("a@example.com", "pw", session=shared)
+
+        assert api._get_graphql_client(use_auth=False)._session is shared
+
+
+class TestExecuteGraphqlTransportRetry:
+    async def test_transient_transport_error_is_retried_once(self):
+        api = _make_api()
+        api._token_manager.set_token(_VALID_TOKEN, expiry=_FUTURE_EXP)
+        mock_client = MagicMock()
+        mock_client.execute_async = AsyncMock(
+            side_effect=[
+                _mod.aiohttp.ClientConnectionError("DNS timeout"),
+                {"data": {"ok": 1}},
+            ]
+        )
+
+        with (
+            patch.object(api, "_get_graphql_client", return_value=mock_client),
+            patch.object(_mod.asyncio, "sleep", new=AsyncMock()) as sleep,
+        ):
+            result = await api._execute_graphql("query { ok }")
+
+        assert result == {"data": {"ok": 1}}
+        assert mock_client.execute_async.await_count == 2
+        sleep.assert_awaited_once_with(_mod.TRANSPORT_RETRY_DELAY)
+
+    async def test_persistent_transport_error_returns_none(self):
+        api = _make_api()
+        api._token_manager.set_token(_VALID_TOKEN, expiry=_FUTURE_EXP)
+        mock_client = MagicMock()
+        mock_client.execute_async = AsyncMock(side_effect=TimeoutError())
+
+        with (
+            patch.object(api, "_get_graphql_client", return_value=mock_client),
+            patch.object(_mod.asyncio, "sleep", new=AsyncMock()),
+        ):
+            result = await api._execute_graphql("query { ok }")
+
+        assert result is None
+        assert mock_client.execute_async.await_count == _mod.TRANSPORT_ATTEMPTS
+
+    async def test_non_transport_error_is_not_retried(self):
+        api = _make_api()
+        api._token_manager.set_token(_VALID_TOKEN, expiry=_FUTURE_EXP)
+        mock_client = MagicMock()
+        mock_client.execute_async = AsyncMock(side_effect=RuntimeError("boom"))
+
+        with patch.object(api, "_get_graphql_client", return_value=mock_client):
+            result = await api._execute_graphql("query { ok }")
+
+        assert result is None
+        assert mock_client.execute_async.await_count == 1
 
 
 class TestGraphQLClient:

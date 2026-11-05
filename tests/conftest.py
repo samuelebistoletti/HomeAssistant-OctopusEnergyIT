@@ -67,15 +67,23 @@ def _install_stubs() -> None:
     _aiohttp = _stub("aiohttp")
     if not hasattr(_aiohttp, "ClientSession"):
         _aiohttp.ClientSession = object
-        _aiohttp.ClientError = Exception
 
-        class _ClientResponseError(Exception):
+        # Mirror aiohttp's exception hierarchy so code can tell transport
+        # errors apart from other failures.
+        class _ClientError(Exception):
+            pass
+
+        class _ClientResponseError(_ClientError):
             def __init__(self, request_info=None, history=(), status=None, **kw):
                 self.status = status
                 super().__init__(f"HTTP {status}")
 
+        class _ClientConnectionError(_ClientError):
+            pass
+
+        _aiohttp.ClientError = _ClientError
         _aiohttp.ClientResponseError = _ClientResponseError
-        _aiohttp.ClientConnectionError = Exception
+        _aiohttp.ClientConnectionError = _ClientConnectionError
 
         class _ClientTimeout:
             def __init__(

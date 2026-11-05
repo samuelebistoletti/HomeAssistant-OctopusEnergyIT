@@ -4,6 +4,7 @@ import logging
 
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import voluptuous as vol
 
 from .const import CONF_EMAIL, CONF_PASSWORD, DOMAIN
@@ -16,7 +17,7 @@ async def validate_credentials(
     hass: HomeAssistant, email: str, password: str
 ) -> tuple[bool, str | None, dict | None]:
     """Validate the user credentials by attempting API login."""
-    octopus_api = OctopusEnergyIT(email, password)
+    octopus_api = OctopusEnergyIT(email, password, async_get_clientsession(hass))
     try:
         login_success = await octopus_api.login()
 
