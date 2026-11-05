@@ -29,7 +29,8 @@ _RULES = {
 _SENSOR_CLASSES = [
     cls
     for _name, cls in inspect.getmembers(sensor_mod, inspect.isclass)
-    if cls.__module__ == sensor_mod.__name__ and issubclass(cls, sensor_mod.SensorEntity)
+    if cls.__module__ == sensor_mod.__name__
+    and issubclass(cls, sensor_mod.SensorEntity)
 ]
 
 

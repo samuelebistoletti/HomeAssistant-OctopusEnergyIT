@@ -5,6 +5,7 @@
 ### Added
 - Reauthentication: when Octopus rejects the stored password (for example after a password change), Home Assistant now shows a "Reauthentication required" prompt and asks only for the new password, instead of the integration silently failing to load.
 - The same Octopus login can no longer be added twice.
+- Diagnostics download (Settings → Devices & services → Octopus Energy Italy → ⋮ → Download diagnostics) with credentials, tokens, account numbers, POD/PDR and addresses redacted. It includes the latest raw electricity register readings, so please attach it to bug reports about readings.
 
 ### Changed
 - Access tokens are renewed with the Kraken refresh token, so the password is sent to the API only for the first login or when the refresh token is rejected.

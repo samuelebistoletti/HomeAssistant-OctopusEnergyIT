@@ -356,6 +356,21 @@ def _install_stubs() -> None:
     if not hasattr(_ac, "async_get_clientsession"):
         _ac.async_get_clientsession = MagicMock(return_value=None)
 
+    _diag = _stub("homeassistant.components.diagnostics")
+    if not hasattr(_diag, "async_redact_data"):
+
+        def _redact(data, to_redact):
+            if isinstance(data, list):
+                return [_redact(item, to_redact) for item in data]
+            if not isinstance(data, dict):
+                return data
+            return {
+                key: "**REDACTED**" if key in to_redact else _redact(value, to_redact)
+                for key, value in data.items()
+            }
+
+        _diag.async_redact_data = _redact
+
     _sensor = _stub("homeassistant.components.sensor")
     if not hasattr(_sensor, "SensorEntity"):
         _sensor.SensorEntity = type("SensorEntity", (), {})
