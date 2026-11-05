@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""
+Bootstrap the local development Home Assistant instance.
+
+Idempotent. On first start it completes HA onboarding with a throwaway dev
+user, then creates a long-lived access token and a random endpoint path for
+the ha-mcp container. Everything is written to ``config/.dev/`` (gitignored).
+
+    scripts/dev-bootstrap                          # inside the dev container
+    uv run --with aiohttp scripts/dev-bootstrap    # from the host
+
+Environment: ``HA_URL`` (default ``http://localhost:8123``).
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import secrets
+import sys
+from pathlib import Path
+
+import aiohttp
+
+HA_URL = os.environ.get("HA_URL", "http://localhost:8123").rstrip("/")
+CLIENT_ID = f"{HA_URL}/"
+DEV_DIR = Path(__file__).resolve().parent.parent / "config" / ".dev"
+CREDENTIALS_FILE = DEV_DIR / "credentials.json"
+TOKEN_FILE = DEV_DIR / "ha_token"
+SECRET_PATH_FILE = DEV_DIR / "mcp_secret_path"
+WAIT_SECONDS = 300
+
+
+def _write_private(path: Path, content: str) -> None:
+    path.write_text(content, encoding="utf-8")
+    path.chmod(0o600)
+
+
+async def _wait_for_ha(session: aiohttp.ClientSession) -> None:
+    for _ in range(WAIT_SECONDS // 5):
+        try:
+            async with session.get(f"{HA_URL}/manifest.json") as resp:
+                if resp.status == 200:
+                    return
+        except aiohttp.ClientError:
+            pass
+        print(f"dev-bootstrap: waiting for Home Assistant at {HA_URL}...")
+        await asyncio.sleep(5)
+    sys.exit(f"dev-bootstrap: Home Assistant did not answer at {HA_URL}")
+
+
+async def _token_is_valid(session: aiohttp.ClientSession, token: str) -> bool:
+    headers = {"Authorization": f"Bearer {token}"}
+    async with session.get(f"{HA_URL}/api/", headers=headers) as resp:
+        return resp.status == 200
+
+
+async def _exchange_code(session: aiohttp.ClientSession, code: str) -> str:
+    data = {"grant_type": "authorization_code", "code": code, "client_id": CLIENT_ID}
+    async with session.post(f"{HA_URL}/auth/token", data=data) as resp:
+        resp.raise_for_status()
+        return (await resp.json())["access_token"]
+
+
+async def _onboard(session: aiohttp.ClientSession) -> str:
+    """Create the dev owner user and finish onboarding; return an access token."""
+    credentials = {"username": "dev", "password": secrets.token_urlsafe(18)}
+    payload = {
+        "client_id": CLIENT_ID,
+        "name": "Developer",
+        "username": credentials["username"],
+        "password": credentials["password"],
+        "language": "it",
+    }
+    async with session.post(f"{HA_URL}/api/onboarding/users", json=payload) as resp:
+        resp.raise_for_status()
+        auth_code = (await resp.json())["auth_code"]
+    _write_private(CREDENTIALS_FILE, json.dumps(credentials, indent=2))
+
+    access_token = await _exchange_code(session, auth_code)
+    headers = {"Authorization": f"Bearer {access_token}"}
+    for step, body in (
+        ("core_config", {}),
+        ("analytics", {}),
+        ("integration", {"client_id": CLIENT_ID, "redirect_uri": CLIENT_ID}),
+    ):
+        async with session.post(
+            f"{HA_URL}/api/onboarding/{step}", json=body, headers=headers
+        ) as resp:
+            if resp.status not in (200, 403):  # 403: step already done
+                resp.raise_for_status()
+    return access_token
+
+
+async def _login(session: aiohttp.ClientSession) -> str:
+    """Log in with the stored dev credentials; return an access token."""
+    if not CREDENTIALS_FILE.exists():
+        sys.exit(
+            "dev-bootstrap: Home Assistant is already onboarded but "
+            f"{CREDENTIALS_FILE} is missing. Create a long-lived token in the HA "
+            f"UI and save it to {TOKEN_FILE}."
+        )
+    credentials = json.loads(CREDENTIALS_FILE.read_text(encoding="utf-8"))
+    flow_body = {
+        "client_id": CLIENT_ID,
+        "handler": ["homeassistant", None],
+        "redirect_uri": CLIENT_ID,
+    }
+    async with session.post(f"{HA_URL}/auth/login_flow", json=flow_body) as resp:
+        resp.raise_for_status()
+        flow_id = (await resp.json())["flow_id"]
+    async with session.post(
+        f"{HA_URL}/auth/login_flow/{flow_id}",
+        json={**credentials, "client_id": CLIENT_ID},
+    ) as resp:
+        resp.raise_for_status()
+        result = await resp.json()
+    if result.get("type") != "create_entry":
+        sys.exit(f"dev-bootstrap: login failed: {result.get('errors')}")
+    return await _exchange_code(session, result["result"])
+
+
+async def _create_long_lived_token(
+    session: aiohttp.ClientSession, access_token: str
+) -> str:
+    async with session.ws_connect(f"{HA_URL}/api/websocket") as ws:
+        await ws.receive_json()  # auth_required
+        await ws.send_json({"type": "auth", "access_token": access_token})
+        if (await ws.receive_json()).get("type") != "auth_ok":
+            sys.exit("dev-bootstrap: websocket authentication failed")
+        await ws.send_json(
+            {
+                "id": 1,
+                "type": "auth/long_lived_access_token",
+                "client_name": f"ha-mcp dev {secrets.token_hex(3)}",
+                "lifespan": 3650,
+            }
+        )
+        reply = await ws.receive_json()
+        if not reply.get("success"):
+            sys.exit(f"dev-bootstrap: token creation failed: {reply}")
+        return reply["result"]
+
+
+async def main() -> None:
+    DEV_DIR.mkdir(parents=True, exist_ok=True)
+    if not SECRET_PATH_FILE.exists():
+        _write_private(SECRET_PATH_FILE, f"/mcp_{secrets.token_hex(16)}")
+
+    async with aiohttp.ClientSession() as session:
+        await _wait_for_ha(session)
+
+        if TOKEN_FILE.exists() and await _token_is_valid(
+            session, TOKEN_FILE.read_text(encoding="utf-8").strip()
+        ):
+            print("dev-bootstrap: token already valid, nothing to do")
+        else:
+            async with session.get(f"{HA_URL}/api/onboarding") as resp:
+                steps = await resp.json() if resp.status == 200 else []
+            needs_user = any(
+                s.get("step") == "user" and not s.get("done") for s in steps
+            )
+            access_token = await (_onboard(session) if needs_user else _login(session))
+            token = await _create_long_lived_token(session, access_token)
+            _write_private(TOKEN_FILE, token)
+            print("dev-bootstrap: long-lived token written; ha-mcp will start")
+
+    secret_path = SECRET_PATH_FILE.read_text(encoding="utf-8").strip()
+    print(f"dev-bootstrap: Home Assistant -> {HA_URL}  (login: {CREDENTIALS_FILE})")
+    print(f"dev-bootstrap: ha-mcp endpoint -> http://localhost:8086{secret_path}")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

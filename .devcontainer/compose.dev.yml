@@ -1,0 +1,12 @@
+# Adds the VS Code dev container to the stack in ../docker-compose.yml.
+# Relative paths resolve from the repository root (the first compose file).
+services:
+  dev:
+    image: mcr.microsoft.com/devcontainers/python:3.14
+    command: sleep infinity
+    volumes:
+      - .:/workspaces/HomeAssistant-OctopusEnergyIT:cached
+    environment:
+      - HA_URL=http://homeassistant:8123
+    depends_on:
+      - homeassistant

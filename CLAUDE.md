@@ -10,7 +10,8 @@ This file is shared with every contributor and with any automated agent working 
 pip install -r requirements_test.txt   # test deps (HA is stubbed, no HA install needed)
 python -m pytest tests/                # full suite, must stay green
 bash scripts/lint                      # ruff format + ruff check --fix (the only formatter/linter)
-docker-compose up                      # local HA at http://localhost:8123, config in config/
+docker compose up -d                   # local HA :8123 + ha-mcp :8086 (also auto-started by the dev container)
+uv run --with aiohttp scripts/dev-bootstrap  # first start: dev user + ha-mcp token in config/.dev/
 ```
 
 ## Layout

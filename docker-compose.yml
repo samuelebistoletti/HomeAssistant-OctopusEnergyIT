@@ -1,12 +1,57 @@
+# Local development stack: Home Assistant Core + ha-mcp (MCP server for HA).
+#
+# Standalone:   docker compose up -d          (HA on http://localhost:8123)
+# VS Code:      "Reopen in Container" starts this stack automatically
+#               (see .devcontainer/devcontainer.json).
+#
+# scripts/dev-bootstrap onboards a throwaway dev user on first start and writes
+# a long-lived token to config/.dev/ (gitignored); ha-mcp waits for that token.
+# Both ports are published on loopback only.
+name: octopus-energy-it-dev
+
 services:
   homeassistant:
-    image: ghcr.io/home-assistant/home-assistant:stable
-    container_name: hass_core_dev
+    image: ghcr.io/home-assistant/home-assistant:2026.11.0
     restart: unless-stopped
     ports:
-      - "8123:8123"
+      - "127.0.0.1:8123:8123"
     volumes:
       - ./config:/config
-      - ./custom_components:/config/custom_components
+      - ./custom_components/octopus_energy_it:/config/custom_components/octopus_energy_it:ro
     environment:
       - TZ=Europe/Rome
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:8123/manifest.json"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  ha-mcp:
+    image: ghcr.io/homeassistant-ai/ha-mcp:9.1.0
+    restart: unless-stopped
+    depends_on:
+      homeassistant:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8086:8086"
+    volumes:
+      - ha-mcp-data:/home/mcpuser/.ha-mcp
+      - ./config/.dev:/run/ha-dev:ro
+    environment:
+      - HOMEASSISTANT_URL=http://homeassistant:8123
+      - HA_MCP_DISABLE_SETTINGS_UI=1
+    # The token and the secret endpoint path are created by scripts/dev-bootstrap.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        until [ -s /run/ha-dev/ha_token ] && [ -s /run/ha-dev/mcp_secret_path ]; do
+          echo "ha-mcp: waiting for scripts/dev-bootstrap to create the HA token..."
+          sleep 5
+        done
+        export HOMEASSISTANT_TOKEN="$$(cat /run/ha-dev/ha_token)"
+        export MCP_SECRET_PATH="$$(cat /run/ha-dev/mcp_secret_path)"
+        exec ha-mcp-web
+
+volumes:
+  ha-mcp-data:

@@ -169,16 +169,22 @@ I prezzi vengono aggiornati ogni ora. Se il sito delle tariffe non risponde, il 
 
 ### Ambiente di sviluppo
 
-```bash
-# Installa le dipendenze di sviluppo (ruff, pytest, ecc.)
-bash scripts/setup
+Il modo più semplice è il dev container di VS Code: **Reopen in Container** avvia Home Assistant Core e il server MCP [ha-mcp](https://github.com/homeassistant-ai/ha-mcp) accanto al container di sviluppo, installa le dipendenze ed esegue `scripts/dev-bootstrap`.
 
-# Avvia un'istanza Home Assistant locale su http://localhost:8123
-docker-compose up
+Senza VS Code:
+
+```bash
+# Avvia Home Assistant (http://localhost:8123) e ha-mcp (http://localhost:8086)
+docker compose up -d
+
+# Solo al primo avvio: crea l'utente di sviluppo e il token per ha-mcp
+uv run --with aiohttp scripts/dev-bootstrap
 
 # Segui i log del container
-docker-compose logs -f homeassistant
+docker compose logs -f homeassistant
 ```
+
+L'integrazione è montata in sola lettura: dopo una modifica al codice riavvia Home Assistant (`docker compose restart homeassistant`). Credenziali di sviluppo, token e URL di ha-mcp sono in `config/.dev/` (escluso da git).
 
 ### Test automatici
 
