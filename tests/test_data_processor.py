@@ -16,6 +16,7 @@ import pytest
 # conftest._install_stubs() already ran; HA stubs are in sys.modules.
 from custom_components.octopus_energy_it.data_processor import (
     _select_current_product,
+    build_electricity_reading,
     device_battery_size_kwh,
     device_model,
     process_api_data,
@@ -622,3 +623,109 @@ class TestVehicleHelpers:
 
     def test_model_none_when_unknown(self):
         assert device_model({"make": None, "model": ""}) is None
+
+
+# ---------------------------------------------------------------------------
+# build_electricity_reading (issue #26: negative deltas across registers)
+# ---------------------------------------------------------------------------
+
+POD = "IT001E00000001"
+
+
+def _m(value, read_at, register="R1", supply_point=POD, quality="ACTUAL"):
+    return {
+        "value": value,
+        "readAt": read_at,
+        "unit": "kWh",
+        "source": "DSO",
+        "registerId": register,
+        "readingQuality": quality,
+        "supplyPointId": supply_point,
+    }
+
+
+class TestBuildElectricityReading:
+    def test_delta_between_two_readings_of_same_register(self):
+        entry = build_electricity_reading(
+            [_m(100.0, "2026-11-01T00:00:00Z"), _m(112.5, "2026-11-02T00:00:00Z")],
+            POD,
+            "A-1",
+        )
+        assert entry["value"] == pytest.approx(12.5)
+        assert entry["start"] == "2026-11-01T00:00:00Z"
+        assert entry["end_register_value"] == 112.5
+        assert entry["register_id"] == "R1"
+
+    def test_readings_are_sorted_by_time(self):
+        entry = build_electricity_reading(
+            [_m(112.5, "2026-11-02T00:00:00Z"), _m(100.0, "2026-11-01T00:00:00Z")],
+            POD,
+            "A-1",
+        )
+        assert entry["value"] == pytest.approx(12.5)
+
+    def test_issue_26_other_register_is_not_subtracted(self):
+        # Values from the report: 34284.06 then 28198.24 on a different register.
+        entry = build_electricity_reading(
+            [
+                _m(34270.00, "2026-10-07T00:00:00Z", register="R1"),
+                _m(34284.06, "2026-10-08T00:00:00Z", register="R1"),
+                _m(28198.24, "2026-10-08T00:00:00Z", register="R2"),
+                _m(28210.00, "2026-10-09T00:00:00Z", register="R2"),
+            ],
+            POD,
+            "A-1",
+        )
+        assert entry["register_id"] == "R2"
+        assert entry["value"] == pytest.approx(11.76)
+
+    def test_readings_of_another_supply_point_are_ignored(self):
+        entry = build_electricity_reading(
+            [
+                _m(4403.98, "2026-10-08T00:00:00Z"),
+                _m(1567.54, "2026-10-09T00:00:00Z", supply_point="PDR-GAS"),
+            ],
+            POD,
+            "A-1",
+        )
+        assert entry["end_register_value"] == 4403.98
+        assert entry["value"] is None
+
+    def test_negative_delta_on_same_register_is_discarded(self):
+        entry = build_electricity_reading(
+            [_m(200.0, "2026-11-01T00:00:00Z"), _m(150.0, "2026-11-02T00:00:00Z")],
+            POD,
+            "A-1",
+        )
+        assert entry["value"] is None
+        assert entry["end_register_value"] == 150.0
+
+    def test_single_reading_has_no_delta(self):
+        entry = build_electricity_reading(
+            [_m(100.0, "2026-11-01T00:00:00Z")], POD, "A-1"
+        )
+        assert entry["value"] is None
+        assert entry["start"] is None
+
+    def test_same_timestamp_is_not_a_previous_reading(self):
+        entry = build_electricity_reading(
+            [_m(100.0, "2026-11-01T00:00:00Z"), _m(100.0, "2026-11-01T00:00:00Z")],
+            POD,
+            "A-1",
+        )
+        assert entry["value"] is None
+
+    def test_missing_metadata_is_treated_as_one_register(self):
+        older = _m(10.0, "2026-11-01T00:00:00Z", register=None, supply_point=None)
+        newer = _m(11.0, "2026-11-02T00:00:00Z", register=None, supply_point=None)
+        entry = build_electricity_reading([older, newer], POD, "A-1")
+        assert entry["value"] == pytest.approx(1.0)
+
+    def test_no_usable_measurements_returns_none(self):
+        assert build_electricity_reading([], POD, "A-1") is None
+        assert (
+            build_electricity_reading(
+                [{"value": None, "readAt": "2026-11-01T00:00:00Z"}], POD, "A-1"
+            )
+            is None
+        )

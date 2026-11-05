@@ -314,6 +314,15 @@ query ElectricityMeasurements(
           unit
           readAt
           source
+          metaData {
+            utilityFilters {
+              ... on ElectricityFiltersOutput {
+                registerId
+                readingQuality
+                marketSupplyPointId
+              }
+            }
+          }
         }
       }
     }
@@ -1781,12 +1790,16 @@ class OctopusEnergyIT:
             if isinstance(unit, str) and unit.lower() == "kwh":
                 unit = "kWh"
 
+            filters = (node.get("metaData") or {}).get("utilityFilters") or {}
             measurements.append(
                 {
                     "readAt": node.get("readAt"),
                     "value": self.to_float_or_none(node.get("value")),
                     "unit": unit,
                     "source": node.get("source"),
+                    "registerId": filters.get("registerId"),
+                    "readingQuality": filters.get("readingQuality"),
+                    "supplyPointId": filters.get("marketSupplyPointId"),
                     "raw": node,
                 }
             )

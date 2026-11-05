@@ -11,6 +11,74 @@ from homeassistant.util.dt import as_utc, parse_datetime, utcnow
 _LOGGER = logging.getLogger(__name__)
 
 
+# How many recent POINT_IN_TIME readings to fetch: enough to find two readings
+# of the same register when the API returns several registers per day.
+ELECTRICITY_READINGS_WINDOW = 10
+
+
+def _read_at(measurement: dict[str, Any]) -> datetime | None:
+    timestamp = measurement.get("readAt")
+    return as_utc(parse_datetime(timestamp)) if timestamp else None
+
+
+def build_electricity_reading(
+    measurements: list[dict[str, Any]] | None, pod: str, account_number: str
+) -> dict[str, Any] | None:
+    """Return the latest cumulative reading and its delta from the previous one.
+
+    The delta is only computed between two readings of the same register on
+    the same supply point (POD). Subtracting readings of different registers
+    (for example per time band) or of another supply point produced large
+    negative "consumption" values (issue #26).
+    """
+    usable = [
+        m
+        for m in measurements or []
+        if m.get("value") is not None
+        and _read_at(m) is not None
+        and m.get("supplyPointId") in (None, pod)
+    ]
+    if not usable:
+        return None
+    usable.sort(key=lambda m: _read_at(m) or datetime.min.replace(tzinfo=UTC))
+
+    latest = usable[-1]
+    same_register = [
+        m
+        for m in usable[:-1]
+        if m.get("registerId") == latest.get("registerId")
+        and _read_at(m) < _read_at(latest)
+    ]
+    previous = same_register[-1] if same_register else None
+
+    entry: dict[str, Any] = {
+        "value": None,
+        "start": previous.get("readAt") if previous else None,
+        "end": latest.get("readAt"),
+        "unit": latest.get("unit") or "kWh",
+        "source": latest.get("source"),
+        "register_id": latest.get("registerId"),
+        "reading_quality": latest.get("readingQuality"),
+        "start_register_value": previous.get("value") if previous else None,
+        "end_register_value": latest.get("value"),
+    }
+    if previous is not None:
+        delta = latest["value"] - previous["value"]
+        if delta < 0:
+            _LOGGER.warning(
+                "Negative electricity delta (%.2f kWh) for account %s on register "
+                "%s: start=%.2f end=%.2f; discarded",
+                delta,
+                account_number,
+                latest.get("registerId"),
+                previous["value"],
+                latest["value"],
+            )
+        else:
+            entry["value"] = delta
+    return entry
+
+
 def device_battery_size_kwh(device: dict[str, Any]) -> float | None:
     """Return a SmartFlex vehicle's battery capacity in kWh, if known.
 
@@ -263,58 +331,15 @@ async def process_api_data(
     result_data[account_number]["electricity_property_id"] = electricity_property_id
 
     if electricity_property_id and electricity_pod:
-
-        def _parse_read_at(entry: dict) -> datetime | None:
-            timestamp = entry.get("readAt")
-            if not timestamp:
-                return None
-            try:
-                return datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-            except ValueError:
-                return None
-
         latest_measurements = await api.fetch_electricity_measurements(
             electricity_property_id,
             electricity_pod,
-            last=2,
+            last=ELECTRICITY_READINGS_WINDOW,
         )
-        if latest_measurements:
-            sorted_latest = sorted(
-                latest_measurements,
-                key=lambda item: (
-                    _parse_read_at(item) or datetime.min.replace(tzinfo=UTC)
-                ),
-            )
-            latest = sorted_latest[-1]
-            previous = sorted_latest[-2] if len(sorted_latest) > 1 else None
-
-            latest_entry: dict[str, Any] = {
-                "value": None,
-                "start": previous.get("readAt") if previous else None,
-                "end": latest.get("readAt"),
-                "unit": latest.get("unit") or "kWh",
-                "source": latest.get("source"),
-                "start_register_value": previous.get("value") if previous else None,
-                "end_register_value": latest.get("value"),
-            }
-            if (
-                previous
-                and previous.get("value") is not None
-                and latest.get("value") is not None
-            ):
-                delta = latest["value"] - previous["value"]
-                if delta < 0:
-                    _LOGGER.warning(
-                        "Negative elec delta (%.2f kWh) for account %s: "
-                        "start=%.2f end=%.2f — discarded.",
-                        delta,
-                        account_number,
-                        previous["value"],
-                        latest["value"],
-                    )
-                else:
-                    latest_entry["value"] = delta
-
+        latest_entry = build_electricity_reading(
+            latest_measurements, electricity_pod, account_number
+        )
+        if latest_entry is not None:
             result_data[account_number]["electricity_last_reading"] = latest_entry
 
     # Extract gas supply point
