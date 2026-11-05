@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
+from decimal import Decimal, InvalidOperation
 import json
 import logging
 import re
-from decimal import Decimal, InvalidOperation
 
 import aiohttp
 
@@ -172,7 +171,7 @@ async def fetch_public_tariffs(
         ) as response:
             response.raise_for_status()
             html = await response.text()
-    except (aiohttp.ClientError, asyncio.TimeoutError, UnicodeDecodeError) as err:
+    except (TimeoutError, aiohttp.ClientError, UnicodeDecodeError) as err:
         _LOGGER.error("Unable to fetch public tariffs page: %s", err)
         return None
 

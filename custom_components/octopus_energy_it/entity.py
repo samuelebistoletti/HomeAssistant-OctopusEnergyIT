@@ -61,8 +61,7 @@ def resolve_account_numbers(
     coordinator,
     primary_account_number: str | None = None,
 ) -> list[str]:
-    """
-    Return the list of account numbers for this config entry.
+    """Return the list of account numbers for this config entry.
 
     Falls back progressively:
     1. ``entry.data["account_numbers"]``

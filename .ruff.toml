@@ -1,25 +1,214 @@
-# The contents of this file is based on https://github.com/home-assistant/core/blob/dev/pyproject.toml
+# Based on the Home Assistant core ruff configuration
+# (https://github.com/home-assistant/core/blob/dev/pyproject.toml).
 
-target-version = "py313"
+target-version = "py313"  # minimum Python of supported HA releases; dev/CI run 3.14
+required-version = ">=0.17.3"
 
 [lint]
 select = [
-    "ALL",
+    "A001",
+    "ASYNC",
+    "B",
+    "BLE",
+    "C",
+    "COM818",
+    "D",
+    "DTZ003",
+    "DTZ004",
+    "DTZ011",
+    "E",
+    "F",
+    "F541",
+    "FLY",
+    "FURB",
+    "G",
+    "I",
+    "INP",
+    "ISC",
+    "ICN001",
+    "ICN002",
+    "LOG",
+    "N804",
+    "N805",
+    "N806",
+    "N815",
+    "PERF",
+    "PGH",
+    "PIE",
+    "PL",
+    "PT",
+    "PTH",
+    "PYI",
+    "RET",
+    "RSE",
+    "RUF",
+    "S107",
+    "S102",
+    "S103",
+    "S108",
+    "S301",
+    "S306",
+    "S307",
+    "S313",
+    "S314",
+    "S315",
+    "S316",
+    "S317",
+    "S318",
+    "S319",
+    "S601",
+    "S602",
+    "S604",
+    "S608",
+    "S609",
+    "SIM",
+    "SLF",
+    "SLOT",
+    "T100",
+    "T20",
+    "TC",
+    "TID",
+    "TRY",
+    "UP",
+    "UP031",
+    "UP032",
+    "W",
+]
+ignore = [
+    "ASYNC109",
+    "ASYNC110",
+    "ASYNC240",
+    "B008",
+    "B019",
+    "D202",
+    "D203",
+    "D213",
+    "D406",
+    "D407",
+    "D417",
+    "E501",
+    "PLC1901",
+    "PLR0911",
+    "PLR0912",
+    "PLR0913",
+    "PLR0915",
+    "PLR0917",
+    "PLR2004",
+    "PLW0108",
+    "PLW1641",
+    "PLW2901",
+    "PT011",
+    "PT018",
+    "RUF001",
+    "RUF012",
+    "RUF015",
+    "RUF043",
+    "SIM102",
+    "SIM103",
+    "SIM108",
+    "SIM115",
+    "TC001",
+    "TC002",
+    "TC003",
+    "TC006",
+    "TRY003",
+    "TRY400",
+    "UP047",
+    "UP049",
+    "W191",
+    "E111",
+    "E114",
+    "E117",
+    "D206",
+    "D300",
+    "Q",
+    "COM812",
+    "COM819",
+    "PLE0605",
+    "FURB116",
+    "ISC004",
+    "LOG004",
 ]
 
-ignore = [
-    "ANN401", # Dynamically typed expressions (typing.Any) are disallowed
-    "D203", # no-blank-line-before-class (incompatible with formatter)
-    "D212", # multi-line-summary-first-line (incompatible with formatter)
-    "COM812", # incompatible with formatter
-    "ISC001", # incompatible with formatter
-]
+[lint.flake8-import-conventions.extend-aliases]
+"homeassistant.components.air_quality.PLATFORM_SCHEMA" = "AIR_QUALITY_PLATFORM_SCHEMA"
+"homeassistant.components.alarm_control_panel.PLATFORM_SCHEMA" = "ALARM_CONTROL_PANEL_PLATFORM_SCHEMA"
+"homeassistant.components.binary_sensor.PLATFORM_SCHEMA" = "BINARY_SENSOR_PLATFORM_SCHEMA"
+"homeassistant.components.button.PLATFORM_SCHEMA" = "BUTTON_PLATFORM_SCHEMA"
+"homeassistant.components.calendar.PLATFORM_SCHEMA" = "CALENDAR_PLATFORM_SCHEMA"
+"homeassistant.components.camera.PLATFORM_SCHEMA" = "CAMERA_PLATFORM_SCHEMA"
+"homeassistant.components.climate.PLATFORM_SCHEMA" = "CLIMATE_PLATFORM_SCHEMA"
+"homeassistant.components.conversation.PLATFORM_SCHEMA" = "CONVERSATION_PLATFORM_SCHEMA"
+"homeassistant.components.cover.PLATFORM_SCHEMA" = "COVER_PLATFORM_SCHEMA"
+"homeassistant.components.date.PLATFORM_SCHEMA" = "DATE_PLATFORM_SCHEMA"
+"homeassistant.components.datetime.PLATFORM_SCHEMA" = "DATETIME_PLATFORM_SCHEMA"
+"homeassistant.components.device_tracker.PLATFORM_SCHEMA" = "DEVICE_TRACKER_PLATFORM_SCHEMA"
+"homeassistant.components.event.PLATFORM_SCHEMA" = "EVENT_PLATFORM_SCHEMA"
+"homeassistant.components.fan.PLATFORM_SCHEMA" = "FAN_PLATFORM_SCHEMA"
+"homeassistant.components.geo_location.PLATFORM_SCHEMA" = "GEO_LOCATION_PLATFORM_SCHEMA"
+"homeassistant.components.humidifier.PLATFORM_SCHEMA" = "HUMIDIFIER_PLATFORM_SCHEMA"
+"homeassistant.components.image.PLATFORM_SCHEMA" = "IMAGE_PLATFORM_SCHEMA"
+"homeassistant.components.image_processing.PLATFORM_SCHEMA" = "IMAGE_PROCESSING_PLATFORM_SCHEMA"
+"homeassistant.components.lawn_mower.PLATFORM_SCHEMA" = "LAWN_MOWER_PLATFORM_SCHEMA"
+"homeassistant.components.light.PLATFORM_SCHEMA" = "LIGHT_PLATFORM_SCHEMA"
+"homeassistant.components.lock.PLATFORM_SCHEMA" = "LOCK_PLATFORM_SCHEMA"
+"homeassistant.components.media_player.PLATFORM_SCHEMA" = "MEDIA_PLAYER_PLATFORM_SCHEMA"
+"homeassistant.components.notify.PLATFORM_SCHEMA" = "NOTIFY_PLATFORM_SCHEMA"
+"homeassistant.components.number.PLATFORM_SCHEMA" = "NUMBER_PLATFORM_SCHEMA"
+"homeassistant.components.remote.PLATFORM_SCHEMA" = "REMOTE_PLATFORM_SCHEMA"
+"homeassistant.components.scene.PLATFORM_SCHEMA" = "SCENE_PLATFORM_SCHEMA"
+"homeassistant.components.select.PLATFORM_SCHEMA" = "SELECT_PLATFORM_SCHEMA"
+"homeassistant.components.sensor.PLATFORM_SCHEMA" = "SENSOR_PLATFORM_SCHEMA"
+"homeassistant.components.siren.PLATFORM_SCHEMA" = "SIREN_PLATFORM_SCHEMA"
+"homeassistant.components.stt.PLATFORM_SCHEMA" = "STT_PLATFORM_SCHEMA"
+"homeassistant.components.switch.PLATFORM_SCHEMA" = "SWITCH_PLATFORM_SCHEMA"
+"homeassistant.components.text.PLATFORM_SCHEMA" = "TEXT_PLATFORM_SCHEMA"
+"homeassistant.components.time.PLATFORM_SCHEMA" = "TIME_PLATFORM_SCHEMA"
+"homeassistant.components.todo.PLATFORM_SCHEMA" = "TODO_PLATFORM_SCHEMA"
+"homeassistant.components.tts.PLATFORM_SCHEMA" = "TTS_PLATFORM_SCHEMA"
+"homeassistant.components.vacuum.PLATFORM_SCHEMA" = "VACUUM_PLATFORM_SCHEMA"
+"homeassistant.components.valve.PLATFORM_SCHEMA" = "VALVE_PLATFORM_SCHEMA"
+"homeassistant.components.update.PLATFORM_SCHEMA" = "UPDATE_PLATFORM_SCHEMA"
+"homeassistant.components.wake_word.PLATFORM_SCHEMA" = "WAKE_WORD_PLATFORM_SCHEMA"
+"homeassistant.components.water_heater.PLATFORM_SCHEMA" = "WATER_HEATER_PLATFORM_SCHEMA"
+"homeassistant.components.weather.PLATFORM_SCHEMA" = "WEATHER_PLATFORM_SCHEMA"
+"homeassistant.core.DOMAIN" = "HOMEASSISTANT_DOMAIN"
+"homeassistant.helpers.area_registry" = "ar"
+"homeassistant.helpers.category_registry" = "cr"
+"homeassistant.helpers.config_validation" = "cv"
+"homeassistant.helpers.device_registry" = "dr"
+"homeassistant.helpers.entity_registry" = "er"
+"homeassistant.helpers.floor_registry" = "fr"
+"homeassistant.helpers.issue_registry" = "ir"
+"homeassistant.helpers.label_registry" = "lr"
+"homeassistant.util.color" = "color_util"
+"homeassistant.util.dt" = "dt_util"
+"homeassistant.util.json" = "json_util"
+"homeassistant.util.location" = "location_util"
+"homeassistant.util.logging" = "logging_util"
+"homeassistant.util.network" = "network_util"
+"homeassistant.util.ulid" = "ulid_util"
+"homeassistant.util.uuid" = "uuid_util"
+"homeassistant.util.yaml" = "yaml_util"
 
 [lint.flake8-pytest-style]
 fixture-parentheses = false
+mark-parentheses = false
 
-[lint.pyupgrade]
-keep-runtime-typing = true
+[lint.isort]
+force-sort-within-sections = true
+known-first-party = ["custom_components"]
+combine-as-imports = true
+split-on-trailing-comma = false
+
+[lint.per-file-ignores]
+"custom_components/**" = ["PTH"]
+"tests/**" = ["S101", "SLF001", "PLR2004", "D", "PTH"]
+"scripts/*" = ["T201", "INP001"]
+"scripts/dev-bootstrap" = ["T201", "INP001", "EXE001"]
 
 [lint.mccabe]
 max-complexity = 25
+
+[lint.pydocstyle]
+property-decorators = ["propcache.api.cached_property"]

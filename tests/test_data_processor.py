@@ -8,20 +8,18 @@ Covers:
 
 from __future__ import annotations
 
-import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 # conftest._install_stubs() already ran; HA stubs are in sys.modules.
-
-from custom_components.octopus_energy_it.data_processor import (  # noqa: E402
+from custom_components.octopus_energy_it.data_processor import (
     _select_current_product,
     process_api_data,
 )
 
-_UTC = timezone.utc
+_UTC = UTC
 
 
 def _iso(dt: datetime) -> str:
@@ -205,7 +203,6 @@ class TestProcessApiDataStructure:
 
 
 class TestProcessApiDataLedgers:
-
     @pytest.mark.asyncio
     async def test_electricity_balance_extracted(self):
         api = _make_api()
@@ -271,7 +268,6 @@ class TestProcessApiDataLedgers:
 
 
 class TestProcessApiDataElectricitySupplyPoint:
-
     _SUPPLY_POINT = {
         "id": "esp-001",
         "pod": "IT001E12345678901",
@@ -326,7 +322,6 @@ class TestProcessApiDataElectricitySupplyPoint:
 
 
 class TestProcessApiDataFallbackTariff:
-
     @pytest.mark.asyncio
     async def test_no_products_leaves_products_empty(self):
         api = _make_api()
@@ -361,7 +356,6 @@ class TestProcessApiDataFallbackTariff:
 
 
 class TestProcessApiDataDispatches:
-
     _PATCH = "custom_components.octopus_energy_it.data_processor.utcnow"
 
     @pytest.mark.asyncio
@@ -411,7 +405,6 @@ class TestProcessApiDataDispatches:
 
 
 class TestProcessApiDataContractExpiry:
-
     _PATCH = "custom_components.octopus_energy_it.data_processor.utcnow"
 
     @pytest.mark.asyncio
@@ -472,7 +465,6 @@ class TestProcessApiDataContractExpiry:
 
 
 class TestProcessApiDataDevices:
-
     @pytest.mark.asyncio
     async def test_devices_populated(self):
         api = _make_api()
@@ -486,9 +478,7 @@ class TestProcessApiDataDevices:
     async def test_vehicle_battery_size_extracted(self):
         api = _make_api()
         data = _minimal_account_data()
-        data["devices"] = [
-            {"id": "dev-001", "vehicleVariant": {"batterySize": 75.0}}
-        ]
+        data["devices"] = [{"id": "dev-001", "vehicleVariant": {"batterySize": 75.0}}]
         result = await process_api_data(data, ACCOUNT, api, {})
         assert result[ACCOUNT]["vehicle_battery_size_in_kwh"] == pytest.approx(75.0)
 
@@ -517,7 +507,6 @@ class TestProcessApiDataDevices:
 
 
 class TestProcessApiDataElectricityReading:
-
     _SUPPLY_POINT = {
         "id": "esp-001",
         "pod": "IT001E12345678901",
@@ -574,7 +563,6 @@ class TestProcessApiDataElectricityReading:
 
 
 class TestProcessApiDataAvailableProducts:
-
     @pytest.mark.asyncio
     async def test_available_products_stored(self):
         api = _make_api()

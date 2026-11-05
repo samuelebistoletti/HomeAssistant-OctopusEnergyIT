@@ -1,8 +1,8 @@
 """Tests for switch.py — OctopusSwitch and BoostChargeSwitch."""
 
+from datetime import UTC, datetime
 import sys
 import types
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -32,9 +32,11 @@ def _ensure_ha_stubs():
 
     coord_mod = _stub("homeassistant.helpers.update_coordinator")
     if not hasattr(coord_mod, "CoordinatorEntity"):
+
         class CoordinatorEntity:
             def __init__(self, coordinator):
                 self.coordinator = coordinator
+
         coord_mod.CoordinatorEntity = CoordinatorEntity
 
     device_mod = _stub("homeassistant.helpers.device_registry")
@@ -62,23 +64,27 @@ def _ensure_ha_stubs():
     dt_mod = _stub("homeassistant.util.dt")
     _stub("homeassistant.util")
     if not hasattr(dt_mod, "utcnow"):
-        dt_mod.utcnow = lambda: datetime.now(tz=timezone.utc)
+        dt_mod.utcnow = lambda: datetime.now(tz=UTC)
 
     # sensor stubs needed by entity.py indirectly (if already done, skip)
     sensor_mod = _stub("homeassistant.components.sensor")
     if not hasattr(sensor_mod, "SensorEntity"):
         sensor_mod.SensorEntity = type("SensorEntity", (), {})
     if not hasattr(sensor_mod, "SensorDeviceClass"):
-        sensor_mod.SensorDeviceClass = types.SimpleNamespace(TIMESTAMP="timestamp", ENERGY="energy", MONETARY="monetary")
+        sensor_mod.SensorDeviceClass = types.SimpleNamespace(
+            TIMESTAMP="timestamp", ENERGY="energy", MONETARY="monetary"
+        )
     if not hasattr(sensor_mod, "SensorStateClass"):
-        sensor_mod.SensorStateClass = types.SimpleNamespace(MEASUREMENT="measurement", TOTAL_INCREASING="total_increasing")
+        sensor_mod.SensorStateClass = types.SimpleNamespace(
+            MEASUREMENT="measurement", TOTAL_INCREASING="total_increasing"
+        )
 
 
 _ensure_ha_stubs()
 
-from custom_components.octopus_energy_it.switch import OctopusSwitch, BoostChargeSwitch  # noqa: E402
-from custom_components.octopus_energy_it.entity import OctopusCoordinatorEntity  # noqa: E402
 from custom_components.octopus_energy_it.const import DOMAIN  # noqa: E402
+from custom_components.octopus_energy_it.entity import OctopusCoordinatorEntity  # noqa: E402
+from custom_components.octopus_energy_it.switch import BoostChargeSwitch, OctopusSwitch  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -88,7 +94,7 @@ ACCOUNT = "A-TEST001"
 DEVICE_ID_1 = "device-aaa-111"
 DEVICE_ID_2 = "device-bbb-222"
 
-_UTC = timezone.utc
+_UTC = UTC
 
 
 def _make_coordinator(account_data: dict) -> MagicMock:
@@ -106,7 +112,9 @@ def _make_octopus_switch(device: dict, coordinator=None, account=ACCOUNT):
     config_entry = MagicMock()
     config_entry.data = {}
 
-    with patch.object(OctopusCoordinatorEntity, "__init__", lambda self, acc, coord: None):
+    with patch.object(
+        OctopusCoordinatorEntity, "__init__", lambda self, acc, coord: None
+    ):
         switch = OctopusSwitch.__new__(OctopusSwitch)
         # Replicate OctopusSwitch.__init__ manually, skipping super().__init__
         switch._account_number = account
@@ -127,8 +135,9 @@ def _make_octopus_switch(device: dict, coordinator=None, account=ACCOUNT):
     return switch
 
 
-def _make_boost_switch(device_id: str, device_name: str = "My Car",
-                       coordinator=None, account=ACCOUNT):
+def _make_boost_switch(
+    device_id: str, device_name: str = "My Car", coordinator=None, account=ACCOUNT
+):
     """Construct a BoostChargeSwitch without HA plumbing."""
     if coordinator is None:
         coordinator = MagicMock()
@@ -136,7 +145,9 @@ def _make_boost_switch(device_id: str, device_name: str = "My Car",
         coordinator.last_update_success = True
     client = MagicMock()
 
-    with patch.object(OctopusCoordinatorEntity, "__init__", lambda self, acc, coord: None):
+    with patch.object(
+        OctopusCoordinatorEntity, "__init__", lambda self, acc, coord: None
+    ):
         switch = BoostChargeSwitch.__new__(BoostChargeSwitch)
         switch._account_number = account
         switch.coordinator = coordinator
@@ -155,6 +166,7 @@ def _make_boost_switch(device_id: str, device_name: str = "My Car",
 # ---------------------------------------------------------------------------
 # OctopusSwitch.unique_id
 # ---------------------------------------------------------------------------
+
 
 class TestOctopusSwitchUniqueId:
     """Tests for OctopusSwitch._attr_unique_id."""
@@ -188,6 +200,7 @@ class TestOctopusSwitchUniqueId:
 # BoostChargeSwitch.unique_id
 # ---------------------------------------------------------------------------
 
+
 class TestBoostChargeSwitchUniqueId:
     """Tests for BoostChargeSwitch._attr_unique_id."""
 
@@ -220,6 +233,7 @@ class TestBoostChargeSwitchUniqueId:
 # ---------------------------------------------------------------------------
 # BoostChargeSwitch.available
 # ---------------------------------------------------------------------------
+
 
 class TestBoostChargeSwitchAvailable:
     """Tests for BoostChargeSwitch.available property."""
@@ -445,7 +459,9 @@ class TestOctopusSwitchTurnOnOff:
         switch._api.change_device_suspension = AsyncMock(return_value=True)
         with patch(self._UTCNOW, return_value=self._FIXED_NOW):
             await switch.async_turn_on()
-        switch._api.change_device_suspension.assert_awaited_once_with(DEVICE_ID_1, "UNSUSPEND")
+        switch._api.change_device_suspension.assert_awaited_once_with(
+            DEVICE_ID_1, "UNSUSPEND"
+        )
 
     @pytest.mark.asyncio
     async def test_turn_on_sets_pending_state(self):
@@ -480,7 +496,9 @@ class TestOctopusSwitchTurnOnOff:
         switch._api.change_device_suspension = AsyncMock(return_value=True)
         with patch(self._UTCNOW, return_value=self._FIXED_NOW):
             await switch.async_turn_off()
-        switch._api.change_device_suspension.assert_awaited_once_with(DEVICE_ID_1, "SUSPEND")
+        switch._api.change_device_suspension.assert_awaited_once_with(
+            DEVICE_ID_1, "SUSPEND"
+        )
 
     @pytest.mark.asyncio
     async def test_turn_off_api_failure_clears_pending(self):
@@ -498,7 +516,6 @@ class TestOctopusSwitchTurnOnOff:
 
 
 class TestOctopusSwitchCoordinatorUpdate:
-
     def _make_with_device(self, is_suspended: bool) -> "OctopusSwitch":
         device = {"id": DEVICE_ID_1, "status": {"isSuspended": is_suspended}}
         switch = _make_octopus_switch(device)
@@ -536,7 +553,6 @@ class TestOctopusSwitchCoordinatorUpdate:
 
 
 class TestBoostChargeSwitchIsOn:
-
     _UTCNOW = "custom_components.octopus_energy_it.switch.utcnow"
 
     def _switch_with_state(self, current_state: str) -> "BoostChargeSwitch":
@@ -548,7 +564,9 @@ class TestBoostChargeSwitchIsOn:
                 "isSuspended": False,
             },
         }
-        return _make_boost_switch(DEVICE_ID_1, coordinator=_make_coordinator({"devices": [device]}))
+        return _make_boost_switch(
+            DEVICE_ID_1, coordinator=_make_coordinator({"devices": [device]})
+        )
 
     def test_boost_charging_is_on_true(self):
         switch = self._switch_with_state("BOOST_CHARGING")
@@ -592,14 +610,17 @@ class TestBoostChargeSwitchIsOn:
 
 
 class TestBoostChargeSwitchTurnOnOff:
-
     _UTCNOW = "custom_components.octopus_energy_it.switch.utcnow"
     _FIXED_NOW = datetime(2026, 3, 18, 12, 0, 0, tzinfo=_UTC)
 
     def _make(self, current_state="SMART_CONTROL_CAPABLE"):
         device = {
             "id": DEVICE_ID_1,
-            "status": {"current": "LIVE", "currentState": current_state, "isSuspended": False},
+            "status": {
+                "current": "LIVE",
+                "currentState": current_state,
+                "isSuspended": False,
+            },
         }
         coordinator = _make_coordinator({"devices": [device]})
         switch = _make_boost_switch(DEVICE_ID_1, coordinator=coordinator)
@@ -626,6 +647,7 @@ class TestBoostChargeSwitchTurnOnOff:
     @pytest.mark.asyncio
     async def test_turn_on_api_returns_none_clears_pending(self):
         import sys
+
         ha_exc = sys.modules["homeassistant.exceptions"]
         switch = self._make()
         switch._api.update_boost_charge = AsyncMock(return_value=None)
@@ -637,9 +659,12 @@ class TestBoostChargeSwitchTurnOnOff:
     @pytest.mark.asyncio
     async def test_turn_on_api_exception_clears_pending(self):
         import sys
+
         ha_exc = sys.modules["homeassistant.exceptions"]
         switch = self._make()
-        switch._api.update_boost_charge = AsyncMock(side_effect=RuntimeError("api down"))
+        switch._api.update_boost_charge = AsyncMock(
+            side_effect=RuntimeError("api down")
+        )
         with patch(self._UTCNOW, return_value=self._FIXED_NOW):
             with pytest.raises(ha_exc.HomeAssistantError):
                 await switch.async_turn_on()

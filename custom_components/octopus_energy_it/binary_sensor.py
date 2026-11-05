@@ -108,7 +108,9 @@ class OctopusIntelligentDispatchingBinarySensor(
                 if start <= now <= end:
                     return True
             except (ValueError, TypeError) as e:
-                _LOGGER.warning("Error parsing dispatch data: %s - %s", dispatch, str(e))
+                _LOGGER.warning(
+                    "Error parsing dispatch data: %s - %s", dispatch, str(e)
+                )
         return False
 
     def _update_attributes(self) -> None:

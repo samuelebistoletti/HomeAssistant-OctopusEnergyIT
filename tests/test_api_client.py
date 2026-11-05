@@ -5,9 +5,9 @@ All HomeAssistant dependencies are mocked so these tests can run without
 a Home Assistant installation.
 """
 
+from datetime import UTC, datetime
 import sys
 import types
-from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -305,7 +305,7 @@ class TestLogin:
         async def _mock_execute(*args, **kwargs):
             nonlocal call_count
             call_count += 1
-            return None  # non-dict triggers continue path
+            # non-dict triggers continue path
 
         with (
             patch.object(api, "_execute_graphql", new=_mock_execute),
@@ -417,9 +417,7 @@ class TestExecuteGraphql:
         api._token_manager.set_token(_VALID_TOKEN, expiry=_FUTURE_EXP)
 
         mock_client = MagicMock()
-        mock_client.execute_async = AsyncMock(
-            return_value={"data": {"hello": "world"}}
-        )
+        mock_client.execute_async = AsyncMock(return_value={"data": {"hello": "world"}})
 
         with patch.object(api, "_get_graphql_client", return_value=mock_client):
             result = await api._execute_graphql("query { hello }")
@@ -433,9 +431,7 @@ class TestExecuteGraphql:
         # Do NOT set a token — token manager reports invalid
 
         mock_client = MagicMock()
-        mock_client.execute_async = AsyncMock(
-            return_value={"data": {"hello": "world"}}
-        )
+        mock_client.execute_async = AsyncMock(return_value={"data": {"hello": "world"}})
 
         with (
             patch.object(api, "ensure_token", new=AsyncMock(return_value=True)),
@@ -482,7 +478,9 @@ class TestExecuteGraphql:
             patch.object(api, "_get_graphql_client", return_value=mock_client),
             patch.object(api, "login", new=AsyncMock(return_value=True)),
         ):
-            result = await api._execute_graphql("query { hello }", retry_on_token_error=True)
+            result = await api._execute_graphql(
+                "query { hello }", retry_on_token_error=True
+            )
 
         # The second call should return the good response
         assert result == {"data": {"result": "ok"}}
@@ -501,7 +499,9 @@ class TestExecuteGraphql:
             patch.object(api, "_get_graphql_client", return_value=mock_client),
             patch.object(api, "login", new=AsyncMock(return_value=False)),
         ):
-            result = await api._execute_graphql("query { hello }", retry_on_token_error=True)
+            result = await api._execute_graphql(
+                "query { hello }", retry_on_token_error=True
+            )
 
         assert result is None
 
@@ -546,20 +546,20 @@ class TestExecuteGraphql:
 class TestUpdateBoostCharge:
     async def test_boost_action_returns_device_id(self):
         api = _make_api()
-        response = {
-            "data": {"updateBoostCharge": {"id": DEVICE_ID}}
-        }
-        with patch.object(api, "_execute_graphql", new=AsyncMock(return_value=response)):
+        response = {"data": {"updateBoostCharge": {"id": DEVICE_ID}}}
+        with patch.object(
+            api, "_execute_graphql", new=AsyncMock(return_value=response)
+        ):
             result = await api.update_boost_charge(DEVICE_ID, "BOOST")
 
         assert result == DEVICE_ID
 
     async def test_cancel_action_returns_device_id(self):
         api = _make_api()
-        response = {
-            "data": {"updateBoostCharge": {"id": DEVICE_ID}}
-        }
-        with patch.object(api, "_execute_graphql", new=AsyncMock(return_value=response)):
+        response = {"data": {"updateBoostCharge": {"id": DEVICE_ID}}}
+        with patch.object(
+            api, "_execute_graphql", new=AsyncMock(return_value=response)
+        ):
             result = await api.update_boost_charge(DEVICE_ID, "CANCEL")
 
         assert result == DEVICE_ID
@@ -567,7 +567,9 @@ class TestUpdateBoostCharge:
     async def test_graphql_error_returns_none(self):
         api = _make_api()
         response = _error_response("KT-BOOST-001", "Device not found")
-        with patch.object(api, "_execute_graphql", new=AsyncMock(return_value=response)):
+        with patch.object(
+            api, "_execute_graphql", new=AsyncMock(return_value=response)
+        ):
             result = await api.update_boost_charge(DEVICE_ID, "BOOST")
 
         assert result is None
@@ -583,7 +585,9 @@ class TestUpdateBoostCharge:
         """If updateBoostCharge key is absent, return None."""
         api = _make_api()
         response = {"data": {}}
-        with patch.object(api, "_execute_graphql", new=AsyncMock(return_value=response)):
+        with patch.object(
+            api, "_execute_graphql", new=AsyncMock(return_value=response)
+        ):
             result = await api.update_boost_charge(DEVICE_ID, "BOOST")
 
         assert result is None
@@ -598,7 +602,11 @@ class TestUpdateBoostCharge:
             await api.update_boost_charge(DEVICE_ID, "BOOST")
 
         _, kwargs = execute_mock.call_args
-        variables = execute_mock.call_args[0][1] if execute_mock.call_args[0][1:] else kwargs.get("variables")
+        variables = (
+            execute_mock.call_args[0][1]
+            if execute_mock.call_args[0][1:]
+            else kwargs.get("variables")
+        )
         assert variables == {"input": {"deviceId": DEVICE_ID, "action": "BOOST"}}
 
 
@@ -728,9 +736,7 @@ class TestFetchAllData:
             "data": {
                 "account": {
                     "id": "acc-001",
-                    "ledgers": [
-                        {"balance": 1000, "ledgerType": "ELECTRICITY_LEDGER"}
-                    ],
+                    "ledgers": [{"balance": 1000, "ledgerType": "ELECTRICITY_LEDGER"}],
                     "properties": [],
                 },
                 "devices": devices if devices is not None else [],
@@ -751,7 +757,13 @@ class TestFetchAllData:
             result = await api.fetch_all_data(ACCOUNT_NUMBER)
 
         assert isinstance(result, dict)
-        for key in ("account", "products", "devices", "plannedDispatches", "completedDispatches"):
+        for key in (
+            "account",
+            "products",
+            "devices",
+            "plannedDispatches",
+            "completedDispatches",
+        ):
             assert key in result, f"Missing key: {key}"
 
     async def test_devices_populated_from_response(self):
@@ -782,7 +794,12 @@ class TestFetchAllData:
 
         flex_mock = AsyncMock(
             return_value=[
-                {"start": "2024-01-16T05:00:00Z", "end": "2024-01-16T07:00:00Z", "energyAddedKwh": 10.0, "type": "SMART"}
+                {
+                    "start": "2024-01-16T05:00:00Z",
+                    "end": "2024-01-16T07:00:00Z",
+                    "energyAddedKwh": 10.0,
+                    "type": "SMART",
+                }
             ]
         )
 

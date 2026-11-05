@@ -2,9 +2,9 @@
 
 import logging
 
-import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
+import voluptuous as vol
 
 from .const import CONF_EMAIL, CONF_PASSWORD, DOMAIN
 from .octopus_energy_it import OctopusEnergyIT

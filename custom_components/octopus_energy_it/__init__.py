@@ -1,23 +1,21 @@
-"""
-Octopus Energy Italy Integration.
+"""Octopus Energy Italy Integration.
 
 This module provides integration with the Octopus Energy Italy API for Home Assistant.
 """
 
 from __future__ import annotations
 
-import logging
 from datetime import timedelta
+import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall, callback
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util.dt import utcnow
-
-from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from .const import DOMAIN, UPDATE_INTERVAL
 from .data_processor import process_api_data
@@ -187,9 +185,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         _update_electricity_tariff_issue(
                             hass,
                             account_num,
-                            processed[account_num].get(
-                                "has_electricity_tariff", False
-                            ),
+                            processed[account_num].get("has_electricity_tariff", False),
                         )
                     else:
                         _LOGGER.warning(

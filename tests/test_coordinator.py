@@ -16,21 +16,19 @@ integration-level unit tests that construct a minimal execution environment.
 
 from __future__ import annotations
 
-import importlib
 import json
 import sys
 import types
-from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock
 
 import aiohttp
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Bootstrap: stub out the homeassistant package tree so that the integration
 # module can be imported in a plain pytest environment (no HA installed).
 # ---------------------------------------------------------------------------
+
 
 def _make_ha_stubs():
     """Inject minimal homeassistant stub modules into sys.modules.
@@ -38,7 +36,7 @@ def _make_ha_stubs():
     Also stubs third-party deps (jwt) that are imported by the integration
     sub-module but are not required for the functions under test.
     """
-    from datetime import timezone, datetime as _datetime
+    from datetime import datetime as _datetime, timezone
 
     # ---- homeassistant package ----
     ha = types.ModuleType("homeassistant")
@@ -140,14 +138,11 @@ PUBLIC_PRODUCTS_RETRY_DELAY = init_mod.PUBLIC_PRODUCTS_RETRY_DELAY
 # HTML fixtures
 # ---------------------------------------------------------------------------
 
+
 def _make_next_data_html(products: list) -> str:
     payload = {"props": {"pageProps": {"products": products}}}
     json_str = json.dumps(payload)
-    return (
-        f'<html><body>'
-        f'{NEXT_DATA_MARKER}{json_str}</script>'
-        f'</body></html>'
-    )
+    return f"<html><body>{NEXT_DATA_MARKER}{json_str}</script></body></html>"
 
 
 # Realistic HTML block for PLACET Fissa Domestico
@@ -188,6 +183,7 @@ PLACET_VARIABILE_HTML = (
 # _slice_html_block
 # ---------------------------------------------------------------------------
 
+
 class TestSliceHtmlBlock:
     def test_returns_none_when_marker_missing(self):
         assert _slice_html_block("<html></html>", "PLACET Fissa Domestico") is None
@@ -218,6 +214,7 @@ class TestSliceHtmlBlock:
 # _extract_decimal
 # ---------------------------------------------------------------------------
 
+
 class TestExtractDecimal:
     def test_plain_integer_string(self):
         assert _extract_decimal("42") == "42"
@@ -242,6 +239,7 @@ class TestExtractDecimal:
 # ---------------------------------------------------------------------------
 # _monthly_to_annual
 # ---------------------------------------------------------------------------
+
 
 class TestMonthlyToAnnual:
     def test_basic_conversion(self):
@@ -270,10 +268,14 @@ class TestMonthlyToAnnual:
 # _find_link
 # ---------------------------------------------------------------------------
 
+
 class TestFindLink:
     def test_finds_link_with_token(self):
         html = '<a href="/docs/PLACET_FISSA_LUCE-contratto.pdf">T&C</a>'
-        assert _find_link(html, "PLACET_FISSA_LUCE") == "/docs/PLACET_FISSA_LUCE-contratto.pdf"
+        assert (
+            _find_link(html, "PLACET_FISSA_LUCE")
+            == "/docs/PLACET_FISSA_LUCE-contratto.pdf"
+        )
 
     def test_returns_none_when_not_found(self):
         assert _find_link("<a href='/other.pdf'>x</a>", "PLACET_FISSA_LUCE") is None
@@ -322,7 +324,7 @@ class TestExtractPlacetProducts:
     Implementation note: the gas-section split regex in the source is
     `r">\\s*Gas\\s*<"`, which compiles to the regex pattern `>\\s*Gas\\s*<`.
     In this pattern `\\s` means "one literal backslash then zero-or-more s
-    chars", NOT the `\s` whitespace class.  As a result, normal HTML like
+    chars", NOT the `\\s` whitespace class.  As a result, normal HTML like
     `> Gas <` does NOT trigger the gas split, and gas products are never
     extracted via this path.  The tests below document this observed behaviour.
     """
@@ -360,7 +362,8 @@ class TestExtractPlacetProducts:
             "<div><p>Commercializzazione</p><p>3,50 \u20ac/mese</p></div>\n"
             "<div><p>Materia prima:</p><p>0,12345 \u20ac/kWh</p></div>\n"
             '<a href="/documenti/PLACET_FISSA_LUCE-contratto.pdf">Luce</a>\n'
-            + sep + "\n"
+            + sep
+            + "\n"
             "<div><p>Commercializzazione</p><p>4,20 \u20ac/mese</p></div>\n"
             "<div><p>Materia prima:</p><p>0,67890 \u20ac/Smc</p></div>\n"
             '<a href="/documenti/PLACET_FISSA_GAS-contratto.pdf">Gas</a>\n'
@@ -412,14 +415,15 @@ class TestExtractPlacetProducts:
         result = _extract_placet_products(html)
         assert result["electricity"] == []
 
-    def test_gas_product_not_added_when_price_missing_in_backslash_separated_block(self):
+    def test_gas_product_not_added_when_price_missing_in_backslash_separated_block(
+        self,
+    ):
         """Even with the correct literal-backslash separator, gas is not added when price is absent."""
         sep = ">" + chr(92) + "Gas" + chr(92) + "<"
         html = (
             "PLACET Fissa Domestico\n"
             "<div><p>Commercializzazione</p><p>3,50 \u20ac/mese</p></div>\n"
-            "<div><p>Materia prima:</p><p>0,12345 \u20ac/kWh</p></div>\n"
-            + sep + "\n"
+            "<div><p>Materia prima:</p><p>0,12345 \u20ac/kWh</p></div>\n" + sep + "\n"
             # deliberately omit gas price
             "<div>gas section but no price</div>\n"
         )
@@ -452,6 +456,7 @@ class TestExtractPlacetProducts:
 # ---------------------------------------------------------------------------
 # _fetch_public_tariffs
 # ---------------------------------------------------------------------------
+
 
 def _make_mock_response(status: int, text: str | None = None, raise_error=None):
     """Return an async context-manager mock suitable for session.get(...)."""
@@ -574,10 +579,7 @@ class TestFetchPublicTariffs:
         payload = {"props": {"pageProps": {"products": api_products}}}
         json_str = json.dumps(payload)
         # Embed both __NEXT_DATA__ and a PLACET block in the same HTML
-        html = (
-            f'{NEXT_DATA_MARKER}{json_str}</script>\n'
-            + PLACET_FISSA_FULL
-        )
+        html = f"{NEXT_DATA_MARKER}{json_str}</script>\n" + PLACET_FISSA_FULL
         session = MagicMock()
         session.get = MagicMock(return_value=_make_mock_response(200, html))
 
@@ -592,7 +594,9 @@ class TestFetchPublicTariffs:
         session = MagicMock()
         response = MagicMock()
         response.raise_for_status = MagicMock()
-        response.text = AsyncMock(side_effect=UnicodeDecodeError("utf-8", b"", 0, 1, ""))
+        response.text = AsyncMock(
+            side_effect=UnicodeDecodeError("utf-8", b"", 0, 1, "")
+        )
         cm = MagicMock()
         cm.__aenter__ = AsyncMock(return_value=response)
         cm.__aexit__ = AsyncMock(return_value=False)
@@ -796,6 +800,7 @@ class TestAsyncUpdatePublicProducts:
 # Helper: any callable matcher for assert_called_with
 # ---------------------------------------------------------------------------
 
+
 class unittest_any_callable:
     """Matches any callable argument in mock assertions."""
 
@@ -911,8 +916,8 @@ class TestProcessDispatchData:
 
     def test_dispatch_with_missing_start_or_end_skipped(self):
         dispatches = [
-            {"start": self._dt(+1)},         # missing end
-            {"end": self._dt(+2)},            # missing start
+            {"start": self._dt(+1)},  # missing end
+            {"end": self._dt(+2)},  # missing start
             {"start": self._dt(+3), "end": self._dt(+4)},  # valid
         ]
         result = _process_dispatches(dispatches, self._now())
@@ -952,7 +957,6 @@ class TestProcessDispatchData:
 
 
 class TestUpdateElectricityTariffIssue:
-
     def test_no_tariff_creates_issue(self):
         from homeassistant.helpers import issue_registry as ir
 

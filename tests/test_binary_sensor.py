@@ -1,11 +1,9 @@
 """Tests for binary_sensor.py — IntelligentDispatchingBinarySensor."""
 
+from datetime import UTC, datetime, timedelta
 import sys
 import types
-from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 # ---------------------------------------------------------------------------
 # HA stubs (idempotent — safe to run alongside other test modules)
@@ -32,11 +30,14 @@ def _ensure_ha_stubs():
 
     coord_mod = _stub("homeassistant.helpers.update_coordinator")
     if not hasattr(coord_mod, "CoordinatorEntity"):
+
         class CoordinatorEntity:
             def __init__(self, coordinator):
                 self.coordinator = coordinator
+
             async def async_update(self):
                 pass
+
         coord_mod.CoordinatorEntity = CoordinatorEntity
 
     device_mod = _stub("homeassistant.helpers.device_registry")
@@ -63,8 +64,9 @@ def _ensure_ha_stubs():
 
     dt_mod = _stub("homeassistant.util.dt")
     if not hasattr(dt_mod, "utcnow"):
-        dt_mod.utcnow = lambda: datetime.now(tz=timezone.utc)
+        dt_mod.utcnow = lambda: datetime.now(tz=UTC)
     if not hasattr(dt_mod, "parse_datetime"):
+
         def _parse_dt(s):
             if not s:
                 return None
@@ -72,14 +74,17 @@ def _ensure_ha_stubs():
                 return datetime.fromisoformat(s)
             except (ValueError, TypeError):
                 return None
+
         dt_mod.parse_datetime = _parse_dt
     if not hasattr(dt_mod, "as_utc"):
+
         def _as_utc(dt_obj):
             if dt_obj is None:
                 return None
             if dt_obj.tzinfo is None:
-                return dt_obj.replace(tzinfo=timezone.utc)
-            return dt_obj.astimezone(timezone.utc)
+                return dt_obj.replace(tzinfo=UTC)
+            return dt_obj.astimezone(UTC)
+
         dt_mod.as_utc = _as_utc
 
     # sensor stubs needed by entity.py / sensor.py imports
@@ -87,9 +92,13 @@ def _ensure_ha_stubs():
     if not hasattr(sensor_mod, "SensorEntity"):
         sensor_mod.SensorEntity = type("SensorEntity", (), {})
     if not hasattr(sensor_mod, "SensorDeviceClass"):
-        sensor_mod.SensorDeviceClass = types.SimpleNamespace(TIMESTAMP="timestamp", ENERGY="energy", MONETARY="monetary")
+        sensor_mod.SensorDeviceClass = types.SimpleNamespace(
+            TIMESTAMP="timestamp", ENERGY="energy", MONETARY="monetary"
+        )
     if not hasattr(sensor_mod, "SensorStateClass"):
-        sensor_mod.SensorStateClass = types.SimpleNamespace(MEASUREMENT="measurement", TOTAL_INCREASING="total_increasing")
+        sensor_mod.SensorStateClass = types.SimpleNamespace(
+            MEASUREMENT="measurement", TOTAL_INCREASING="total_increasing"
+        )
 
     switch_mod = _stub("homeassistant.components.switch")
     if not hasattr(switch_mod, "SwitchEntity"):
@@ -108,7 +117,7 @@ from custom_components.octopus_energy_it.entity import OctopusCoordinatorEntity 
 # ---------------------------------------------------------------------------
 
 ACCOUNT = "A-TEST001"
-_UTC = timezone.utc
+_UTC = UTC
 
 # A fixed "now" we can control via patch
 _NOW = datetime(2024, 1, 15, 17, 30, 0, tzinfo=_UTC)
@@ -132,7 +141,9 @@ def _make_coordinator(planned_dispatches: list) -> MagicMock:
 
 def _make_sensor(coordinator) -> OctopusIntelligentDispatchingBinarySensor:
     """Build the binary sensor, bypassing super().__init__."""
-    with patch.object(OctopusCoordinatorEntity, "__init__", lambda self, acc, coord: None):
+    with patch.object(
+        OctopusCoordinatorEntity, "__init__", lambda self, acc, coord: None
+    ):
         sensor = OctopusIntelligentDispatchingBinarySensor.__new__(
             OctopusIntelligentDispatchingBinarySensor
         )
@@ -144,13 +155,16 @@ def _make_sensor(coordinator) -> OctopusIntelligentDispatchingBinarySensor:
     return sensor
 
 
-def _sensor_with_dispatches(dispatches: list) -> OctopusIntelligentDispatchingBinarySensor:
+def _sensor_with_dispatches(
+    dispatches: list,
+) -> OctopusIntelligentDispatchingBinarySensor:
     return _make_sensor(_make_coordinator(dispatches))
 
 
 # ---------------------------------------------------------------------------
 # OctopusIntelligentDispatchingBinarySensor.is_on
 # ---------------------------------------------------------------------------
+
 
 class TestIntelligentDispatchingBinarySensorIsOn:
     """Tests for OctopusIntelligentDispatchingBinarySensor.is_on."""
@@ -239,9 +253,7 @@ class TestIntelligentDispatchingBinarySensorIsOn:
     def test_no_planned_dispatches_key_is_on_false(self):
         """Account data has no planned_dispatches key at all."""
         coordinator = MagicMock()
-        coordinator.data = {
-            ACCOUNT: {"devices": [{"id": "dev-001"}]}
-        }
+        coordinator.data = {ACCOUNT: {"devices": [{"id": "dev-001"}]}}
         coordinator.last_update_success = True
         sensor = _make_sensor(coordinator)
         dt_mod = sys.modules["homeassistant.util.dt"]
@@ -263,18 +275,33 @@ class TestIntelligentDispatchingBinarySensorIsOn:
         """Among several dispatches, the one containing now activates the sensor."""
         dispatches = [
             # past
-            {"start": _iso(_NOW - timedelta(hours=3)), "end": _iso(_NOW - timedelta(hours=2))},
+            {
+                "start": _iso(_NOW - timedelta(hours=3)),
+                "end": _iso(_NOW - timedelta(hours=2)),
+            },
             # active
-            {"start": _iso(_NOW - timedelta(minutes=15)), "end": _iso(_NOW + timedelta(minutes=15))},
+            {
+                "start": _iso(_NOW - timedelta(minutes=15)),
+                "end": _iso(_NOW + timedelta(minutes=15)),
+            },
             # future
-            {"start": _iso(_NOW + timedelta(hours=1)), "end": _iso(_NOW + timedelta(hours=2))},
+            {
+                "start": _iso(_NOW + timedelta(hours=1)),
+                "end": _iso(_NOW + timedelta(hours=2)),
+            },
         ]
         assert self._is_on(dispatches) is True
 
     def test_multiple_dispatches_none_active_returns_false(self):
         dispatches = [
-            {"start": _iso(_NOW - timedelta(hours=3)), "end": _iso(_NOW - timedelta(hours=2))},
-            {"start": _iso(_NOW + timedelta(hours=1)), "end": _iso(_NOW + timedelta(hours=2))},
+            {
+                "start": _iso(_NOW - timedelta(hours=3)),
+                "end": _iso(_NOW - timedelta(hours=2)),
+            },
+            {
+                "start": _iso(_NOW + timedelta(hours=1)),
+                "end": _iso(_NOW + timedelta(hours=2)),
+            },
         ]
         assert self._is_on(dispatches) is False
 

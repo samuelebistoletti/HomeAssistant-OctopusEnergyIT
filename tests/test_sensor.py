@@ -1,16 +1,13 @@
 """Tests for sensor.py — dispatch window logic and meter reading sensors."""
 
-from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
-
-import pytest
+from datetime import UTC, datetime
 
 # ---------------------------------------------------------------------------
 # Minimal stubs so sensor.py can be imported without homeassistant installed
 # ---------------------------------------------------------------------------
-
 import sys
 import types
+from unittest.mock import MagicMock, patch
 
 
 def _make_ha_stubs():
@@ -47,8 +44,11 @@ def _make_ha_stubs():
         sensor_mod.SensorEntity = type("SensorEntity", (), {})
     if not hasattr(sensor_mod, "SensorDeviceClass"):
         sensor_mod.SensorDeviceClass = types.SimpleNamespace(
-            TIMESTAMP="timestamp", ENERGY="energy", MONETARY="monetary",
-            POWER="power", GAS="gas"
+            TIMESTAMP="timestamp",
+            ENERGY="energy",
+            MONETARY="monetary",
+            POWER="power",
+            GAS="gas",
         )
     if not hasattr(sensor_mod, "SensorStateClass"):
         sensor_mod.SensorStateClass = types.SimpleNamespace(
@@ -58,11 +58,14 @@ def _make_ha_stubs():
     # CoordinatorEntity stub
     coord_mod = sys.modules["homeassistant.helpers.update_coordinator"]
     if not hasattr(coord_mod, "CoordinatorEntity"):
+
         class CoordinatorEntity:
             def __init__(self, coordinator):
                 self.coordinator = coordinator
+
             async def async_update(self):
                 pass
+
         coord_mod.CoordinatorEntity = CoordinatorEntity
 
     # DeviceInfo stub
@@ -95,9 +98,10 @@ def _make_ha_stubs():
     # homeassistant.util.dt stubs — utcnow, parse_datetime, as_utc
     dt_mod = sys.modules["homeassistant.util.dt"]
     if not hasattr(dt_mod, "utcnow"):
-        dt_mod.utcnow = lambda: datetime.now(tz=timezone.utc)
+        dt_mod.utcnow = lambda: datetime.now(tz=UTC)
     if not hasattr(dt_mod, "parse_datetime"):
         from datetime import datetime as _dt
+
         def _parse_dt(s):
             if not s:
                 return None
@@ -105,28 +109,31 @@ def _make_ha_stubs():
                 return _dt.fromisoformat(s)
             except (ValueError, TypeError):
                 return None
+
         dt_mod.parse_datetime = _parse_dt
     if not hasattr(dt_mod, "as_utc"):
+
         def _as_utc(dt_obj):
             if dt_obj is None:
                 return None
             if dt_obj.tzinfo is None:
-                return dt_obj.replace(tzinfo=timezone.utc)
-            return dt_obj.astimezone(timezone.utc)
+                return dt_obj.replace(tzinfo=UTC)
+            return dt_obj.astimezone(UTC)
+
         dt_mod.as_utc = _as_utc
 
 
 _make_ha_stubs()
 
 # Now we can import from the integration
+from custom_components.octopus_energy_it.entity import OctopusCoordinatorEntity  # noqa: E402
 from custom_components.octopus_energy_it.sensor import (  # noqa: E402
-    _effective_dispatch_window,
-    OctopusEvNextDispatchStartSensor,
-    OctopusEvNextDispatchEndSensor,
     OctopusElectricityLastDailyReadingSensor,
     OctopusElectricityLastReadingSensor,
+    OctopusEvNextDispatchEndSensor,
+    OctopusEvNextDispatchStartSensor,
+    _effective_dispatch_window,
 )
-from custom_components.octopus_energy_it.entity import OctopusCoordinatorEntity  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -134,7 +141,7 @@ from custom_components.octopus_energy_it.entity import OctopusCoordinatorEntity 
 
 ACCOUNT = "A-TEST001"
 
-_UTC = timezone.utc
+_UTC = UTC
 
 _T_1601 = datetime(2024, 1, 15, 16, 1, 0, tzinfo=_UTC)
 _T_1700 = datetime(2024, 1, 15, 17, 0, 0, tzinfo=_UTC)
@@ -153,7 +160,9 @@ def _make_coordinator(account_data: dict) -> MagicMock:
 
 def _make_sensor(cls, coordinator):
     """Instantiate a sensor entity, patching CoordinatorEntity.__init__."""
-    with patch.object(OctopusCoordinatorEntity, "__init__", lambda self, acc, coord: None):
+    with patch.object(
+        OctopusCoordinatorEntity, "__init__", lambda self, acc, coord: None
+    ):
         sensor = cls.__new__(cls)
         sensor._account_number = ACCOUNT
         sensor.coordinator = coordinator
@@ -166,6 +175,7 @@ def _make_sensor(cls, coordinator):
 # ---------------------------------------------------------------------------
 # _effective_dispatch_window
 # ---------------------------------------------------------------------------
+
 
 class TestEffectiveDispatchWindow:
     """Tests for the _effective_dispatch_window helper."""
@@ -232,6 +242,7 @@ class TestEffectiveDispatchWindow:
 # OctopusEvNextDispatchStartSensor.native_value
 # ---------------------------------------------------------------------------
 
+
 class TestOctopusEvNextDispatchStartSensor:
     """Tests for OctopusEvNextDispatchStartSensor.native_value."""
 
@@ -240,19 +251,23 @@ class TestOctopusEvNextDispatchStartSensor:
         return _make_sensor(OctopusEvNextDispatchStartSensor, coord)
 
     def test_active_dispatch_plus_future_returns_active_start(self):
-        sensor = self._sensor({
-            "current_start": _T_1601,
-            "current_end": _T_1701,
-            "next_start": _T_1700,
-            "next_end": _T_1800,
-        })
+        sensor = self._sensor(
+            {
+                "current_start": _T_1601,
+                "current_end": _T_1701,
+                "next_start": _T_1700,
+                "next_end": _T_1800,
+            }
+        )
         assert sensor.native_value == _T_1601
 
     def test_only_future_dispatch_returns_future_start(self):
-        sensor = self._sensor({
-            "next_start": _T_1700,
-            "next_end": _T_1800,
-        })
+        sensor = self._sensor(
+            {
+                "next_start": _T_1700,
+                "next_end": _T_1800,
+            }
+        )
         assert sensor.native_value == _T_1700
 
     def test_no_dispatches_returns_none(self):
@@ -270,6 +285,7 @@ class TestOctopusEvNextDispatchStartSensor:
 # OctopusEvNextDispatchEndSensor.native_value
 # ---------------------------------------------------------------------------
 
+
 class TestOctopusEvNextDispatchEndSensor:
     """Tests for OctopusEvNextDispatchEndSensor.native_value."""
 
@@ -278,19 +294,23 @@ class TestOctopusEvNextDispatchEndSensor:
         return _make_sensor(OctopusEvNextDispatchEndSensor, coord)
 
     def test_active_dispatch_plus_future_returns_active_end(self):
-        sensor = self._sensor({
-            "current_start": _T_1601,
-            "current_end": _T_1701,
-            "next_start": _T_1700,
-            "next_end": _T_1800,
-        })
+        sensor = self._sensor(
+            {
+                "current_start": _T_1601,
+                "current_end": _T_1701,
+                "next_start": _T_1700,
+                "next_end": _T_1800,
+            }
+        )
         assert sensor.native_value == _T_1701
 
     def test_only_future_dispatch_returns_future_end(self):
-        sensor = self._sensor({
-            "next_start": _T_1700,
-            "next_end": _T_1800,
-        })
+        sensor = self._sensor(
+            {
+                "next_start": _T_1700,
+                "next_end": _T_1800,
+            }
+        )
         assert sensor.native_value == _T_1800
 
     def test_no_dispatches_returns_none(self):
@@ -308,11 +328,14 @@ class TestOctopusEvNextDispatchEndSensor:
 # OctopusElectricityLastDailyReadingSensor.native_value
 # ---------------------------------------------------------------------------
 
+
 class TestOctopusElectricityLastDailyReadingSensor:
     """Tests for OctopusElectricityLastDailyReadingSensor.native_value."""
 
     def _sensor(self, reading):
-        account_data = {"electricity_last_reading": reading} if reading is not None else {}
+        account_data = (
+            {"electricity_last_reading": reading} if reading is not None else {}
+        )
         coord = _make_coordinator(account_data)
         return _make_sensor(OctopusElectricityLastDailyReadingSensor, coord)
 
@@ -353,11 +376,14 @@ class TestOctopusElectricityLastDailyReadingSensor:
 # OctopusElectricityLastReadingSensor.native_value
 # ---------------------------------------------------------------------------
 
+
 class TestOctopusElectricityLastReadingSensor:
     """Tests for OctopusElectricityLastReadingSensor.native_value (end_register_value)."""
 
     def _sensor(self, reading):
-        account_data = {"electricity_last_reading": reading} if reading is not None else {}
+        account_data = (
+            {"electricity_last_reading": reading} if reading is not None else {}
+        )
         coord = _make_coordinator(account_data)
         return _make_sensor(OctopusElectricityLastReadingSensor, coord)
 

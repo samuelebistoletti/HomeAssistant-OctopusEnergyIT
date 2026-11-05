@@ -1,7 +1,7 @@
 """Switch platform for Octopus Energy Italy."""
 
-import logging
 from datetime import datetime, timedelta
+import logging
 from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
@@ -64,9 +64,7 @@ async def async_setup_entry(
             if "id" not in device:
                 _LOGGER.warning("Device missing ID field: %s", device)
                 continue
-            switches.append(
-                OctopusSwitch(api, device, coordinator, acc_num)
-            )
+            switches.append(OctopusSwitch(api, device, coordinator, acc_num))
 
     # Only add entities if we have any
     if switches:

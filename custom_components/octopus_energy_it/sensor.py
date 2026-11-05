@@ -1,14 +1,13 @@
-"""
-This module provides integration with Octopus Energy Italy for Home Assistant.
+"""This module provides integration with Octopus Energy Italy for Home Assistant.
 
 It defines the coordinator and sensor entities to fetch and display
 electricity price information.
 """
 
-import logging
-import re
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
+import logging
+import re
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -19,14 +18,10 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.util.dt import as_utc, utcnow
-from homeassistant.util.dt import parse_datetime as _parse_dt
+from homeassistant.util.dt import as_utc, parse_datetime as _parse_dt, utcnow
 
 from .const import DOMAIN
-from .entity import (
-    OctopusCoordinatorEntity,
-    OctopusPublicProductsEntity,
-)
+from .entity import OctopusCoordinatorEntity, OctopusPublicProductsEntity
 
 _LOGGER = logging.getLogger(__name__)
 

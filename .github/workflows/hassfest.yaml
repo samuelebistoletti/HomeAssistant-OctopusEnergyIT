@@ -13,6 +13,6 @@ jobs:
       contents: read
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: home-assistant/actions/hassfest@dce0e860c68256ef2902ece06afa5401eb4674e1  # master
+      - uses: home-assistant/actions/hassfest@86d4564712fa02543c808e3a693dd04f9d3f8361  # master

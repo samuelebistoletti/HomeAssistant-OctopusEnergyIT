@@ -11,13 +11,18 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.13: oldest Python of the supported Home Assistant releases (hacs.json)
+        python-version: ["3.13", "3.14"]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
 
       - name: Install test dependencies
         run: pip install -r requirements_test.txt

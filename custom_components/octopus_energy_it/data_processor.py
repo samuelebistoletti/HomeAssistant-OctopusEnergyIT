@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import UTC, datetime
+import logging
 from typing import Any
 
-from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util.dt import as_utc, parse_datetime, utcnow
 
 _LOGGER = logging.getLogger(__name__)
@@ -306,20 +305,20 @@ async def process_api_data(
     if first_gas_supply_point:
         gas_pdr = first_gas_supply_point.get("pdr")
         result_data[account_number]["gas_supply_point"] = first_gas_supply_point
-        result_data[account_number]["gas_supply_status"] = (
-            first_gas_supply_point.get("status")
+        result_data[account_number]["gas_supply_status"] = first_gas_supply_point.get(
+            "status"
         )
         result_data[account_number]["gas_enrolment_status"] = (
             first_gas_supply_point.get("enrolmentStatus")
         )
-        result_data[account_number]["gas_enrolment_start"] = (
-            first_gas_supply_point.get("enrolmentStartDate")
+        result_data[account_number]["gas_enrolment_start"] = first_gas_supply_point.get(
+            "enrolmentStartDate"
         )
-        result_data[account_number]["gas_supply_start"] = (
-            first_gas_supply_point.get("supplyStartDate")
+        result_data[account_number]["gas_supply_start"] = first_gas_supply_point.get(
+            "supplyStartDate"
         )
-        result_data[account_number]["gas_is_smart_meter"] = (
-            first_gas_supply_point.get("isSmartMeter")
+        result_data[account_number]["gas_is_smart_meter"] = first_gas_supply_point.get(
+            "isSmartMeter"
         )
         result_data[account_number]["gas_cancellation_reason"] = (
             first_gas_supply_point.get("cancellationReason")
@@ -408,9 +407,7 @@ async def process_api_data(
                 next_end = end
 
         except (ValueError, TypeError) as e:
-            _LOGGER.warning(
-                "Error parsing dispatch dates: %s — %s", dispatch, str(e)
-            )
+            _LOGGER.warning("Error parsing dispatch dates: %s — %s", dispatch, str(e))
 
     result_data[account_number]["current_start"] = current_start
     result_data[account_number]["current_end"] = current_end
@@ -448,8 +445,8 @@ async def process_api_data(
             current_electricity_product.get("validTo")
         )
         pricing = current_electricity_product.get("pricing") or {}
-        result_data[account_number]["electricity_annual_standing_charge"] = (
-            pricing.get("annualStandingCharge")
+        result_data[account_number]["electricity_annual_standing_charge"] = pricing.get(
+            "annualStandingCharge"
         )
         result_data[account_number]["electricity_annual_standing_charge_units"] = (
             pricing.get("annualStandingChargeUnits")

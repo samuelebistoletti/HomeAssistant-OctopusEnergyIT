@@ -7,10 +7,10 @@ real HA installation.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 import os
 import sys
 import types
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -25,6 +25,7 @@ if _REPO_ROOT not in sys.path:
 # ---------------------------------------------------------------------------
 # Module stubs — injected before any integration code is imported
 # ---------------------------------------------------------------------------
+
 
 def _stub(dotted_name: str) -> types.ModuleType:
     """Return (and register) a minimal stub module (idempotent)."""
@@ -60,7 +61,7 @@ def _install_stubs() -> None:
         _oeit.__path__ = [_oeit_path]
         _oeit.__package__ = "custom_components.octopus_energy_it"
         sys.modules["custom_components.octopus_energy_it"] = _oeit
-        setattr(sys.modules["custom_components"], "octopus_energy_it", _oeit)
+        sys.modules["custom_components"].octopus_energy_it = _oeit
 
     # ---- third-party ----
     _aiohttp = _stub("aiohttp")
@@ -77,7 +78,9 @@ def _install_stubs() -> None:
         _aiohttp.ClientConnectionError = Exception
 
         class _ClientTimeout:
-            def __init__(self, *, total=None, connect=None, sock_read=None, sock_connect=None):
+            def __init__(
+                self, *, total=None, connect=None, sock_read=None, sock_connect=None
+            ):
                 self.total = total
 
         _aiohttp.ClientTimeout = _ClientTimeout
@@ -123,6 +126,7 @@ def _install_stubs() -> None:
 
     _dt = _stub("homeassistant.util.dt")
     if not hasattr(_dt, "utcnow"):
+
         def _parse_dt(s):
             if not s:
                 return None
@@ -135,20 +139,23 @@ def _install_stubs() -> None:
             if dt_obj is None:
                 return None
             if dt_obj.tzinfo is None:
-                return dt_obj.replace(tzinfo=timezone.utc)
-            return dt_obj.astimezone(timezone.utc)
+                return dt_obj.replace(tzinfo=UTC)
+            return dt_obj.astimezone(UTC)
 
-        _dt.utcnow = lambda: datetime.now(tz=timezone.utc)
+        _dt.utcnow = lambda: datetime.now(tz=UTC)
         _dt.parse_datetime = _parse_dt
         _dt.as_utc = _as_utc
 
     _coord = _stub("homeassistant.helpers.update_coordinator")
     if not hasattr(_coord, "CoordinatorEntity"):
+
         class _CoordinatorEntity:
             def __init__(self, coordinator):
                 self.coordinator = coordinator
+
             async def async_update(self):
                 pass
+
         _coord.CoordinatorEntity = _CoordinatorEntity
         _coord.DataUpdateCoordinator = type("DataUpdateCoordinator", (), {})
         _coord.UpdateFailed = Exception
@@ -177,8 +184,12 @@ def _install_stubs() -> None:
     if not hasattr(_sensor, "SensorEntity"):
         _sensor.SensorEntity = type("SensorEntity", (), {})
         _sensor.SensorDeviceClass = types.SimpleNamespace(
-            TIMESTAMP="timestamp", ENERGY="energy", MONETARY="monetary",
-            POWER="power", GAS="gas", DATA_RATE="data_rate",
+            TIMESTAMP="timestamp",
+            ENERGY="energy",
+            MONETARY="monetary",
+            POWER="power",
+            GAS="gas",
+            DATA_RATE="data_rate",
         )
         _sensor.SensorStateClass = types.SimpleNamespace(
             MEASUREMENT="measurement",

@@ -135,9 +135,9 @@ Accounts that fail individually are logged but do not block the fetch for other 
 Set temporarily during debugging:
 
 ```python
-LOG_API_RESPONSES = True   # logs full GraphQL responses
+LOG_API_RESPONSES = True  # logs full GraphQL responses
 LOG_TOKEN_RESPONSES = True  # logs login and token refresh operations
-DEBUG_ENABLED = True        # general debug flag
+DEBUG_ENABLED = True  # general debug flag
 ```
 
 Debug logging via `configuration.yaml`:

@@ -1,5 +1,4 @@
-"""
-Provide the OctopusEnergyIT class for interacting with the Octopus Energy API.
+"""Provide the OctopusEnergyIT class for interacting with the Octopus Energy API.
 
 Includes methods for authentication, fetching account details,
 managing devices, and retrieving electricity usage and tariff data.
@@ -7,20 +6,20 @@ managing devices, and retrieving electricity usage and tariff data.
 
 import asyncio
 import copy
+from datetime import UTC, datetime
 import json
 import logging
-from datetime import UTC, datetime
 
 import aiohttp
-import jwt
 from homeassistant.exceptions import ConfigEntryNotReady
+import jwt
 
 from .const import (
+    LOG_API_RESPONSES,
+    LOG_TOKEN_RESPONSES,
     LOGIN_INITIAL_DELAY,
     LOGIN_MAX_DELAY,
     LOGIN_RETRIES,
-    LOG_API_RESPONSES,
-    LOG_TOKEN_RESPONSES,
     TOKEN_AUTO_REFRESH_INTERVAL,
     TOKEN_REFRESH_MARGIN,
 )
@@ -504,17 +503,15 @@ class _GraphQLClient:
             body["operationName"] = operation_name
 
         request_headers = {**self.headers, **(headers or {})}
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                self.endpoint, json=body, headers=request_headers
-            ) as response:
-                return await response.json()
+        async with aiohttp.ClientSession() as session, session.post(
+            self.endpoint, json=body, headers=request_headers
+        ) as response:
+            return await response.json()
 
 
 class OctopusEnergyIT:
     def __init__(self, email: str, password: str):
-        """
-        Initialize the OctopusEnergyIT API client.
+        """Initialize the OctopusEnergyIT API client.
 
         Args:
             email: The email address for the Octopus Energy Italy account
@@ -608,8 +605,7 @@ class OctopusEnergyIT:
         retries: int,
         delay: float,
     ) -> tuple[bool, bool, float]:
-        """
-        Execute one login attempt.
+        """Execute one login attempt.
 
         Returns ``(success, abort, new_delay)`` where:
         - success: token was stored; caller should return True.
@@ -777,8 +773,7 @@ class OctopusEnergyIT:
 
     # Comprehensive data fetch in a single query
     async def fetch_all_data(self, account_number: str):
-        """
-        Fetch all data for an account including devices, dispatches and account details.
+        """Fetch all data for an account including devices, dispatches and account details.
 
         This comprehensive query consolidates multiple separate queries into one
         to minimize API calls and improve performance.
@@ -1422,8 +1417,7 @@ class OctopusEnergyIT:
         return dispatches
 
     async def update_boost_charge(self, device_id: str, action: str) -> str | None:
-        """
-        Trigger or cancel a boost charge for a device.
+        """Trigger or cancel a boost charge for a device.
 
         *action* should be ``"BOOST"`` or ``"CANCEL"``.
         Returns the device id on success, ``None`` on failure.
