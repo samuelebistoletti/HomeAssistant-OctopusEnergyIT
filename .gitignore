@@ -18,17 +18,22 @@ coverage.xml
 .venv
 .env
 
-# Claude Code
-.claude
-
 # Home Assistant configuration
 config/*
 !config/configuration.yaml
 
-
-# Claudify — personal & runtime files
+# Claude Code / Claudify (local only; this repo is public)
+# Shared AI instructions live in CLAUDE.md, which IS tracked.
+.claude/
+.claude.backup*/
+.claude/update-review/
 CLAUDE.local.md
-.claude/logs/
-.claude/agent-memory/
-.claude/backups/
-.claude/hooks/__counter
+memory/
+playbooks/
+design-runs/
+handoffs/
+Daily Notes/
+Task Board.md
+Scratchpad.md
+SETUP.md
+WHATS-NEW.md

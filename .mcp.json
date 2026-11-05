@@ -2,13 +2,16 @@
   "mcpServers": {
     "context7": {
       "command": "npx",
-      "args": ["-y", "@upstash/context7-mcp@latest"],
-      "description": "Live library documentation (Next.js, React, any npm package)"
+      "args": ["-y", "@upstash/context7-mcp@4.5.0"],
+      "description": "Live library documentation"
     },
     "memory": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-memory"],
-      "description": "Persistent knowledge graph for cross-session facts"
+      "args": ["-y", "@modelcontextprotocol/server-memory@2.1.0"],
+      "env": {
+        "MEMORY_FILE_PATH": "~/.claude-memory/octopus-energy-it.jsonl"
+      },
+      "description": "Persistent knowledge graph, stored outside the npx cache"
     }
   }
 }
