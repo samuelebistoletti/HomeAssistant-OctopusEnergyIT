@@ -18,7 +18,20 @@ def _entry(fetch=None):
         fetch_electricity_measurements=fetch
         or AsyncMock(
             return_value=[
-                {"value": 10.0, "raw": {"value": "10.0", "readAt": "2026-11-01"}}
+                {
+                    "value": 10.0,
+                    "supplyPointId": "IT001E12345678",
+                    "raw": {
+                        "value": "10.0",
+                        "readAt": "2026-11-01",
+                        "metaData": {
+                            "utilityFilters": {
+                                "registerId": None,
+                                "marketSupplyPointId": "IT001E12345678",
+                            }
+                        },
+                    },
+                }
             ]
         )
     )
@@ -69,9 +82,9 @@ async def test_diagnostics_include_raw_measurements():
     entry = _entry()
     result = await async_get_config_entry_diagnostics(None, entry)
 
-    assert result["accounts"]["account_1"]["raw_electricity_measurements"] == [
-        {"value": "10.0", "readAt": "2026-11-01"}
-    ]
+    (raw,) = result["accounts"]["account_1"]["raw_electricity_measurements"]
+    assert raw["value"] == "10.0"
+    assert raw["metaData"]["utilityFilters"]["marketSupplyPointId"] == "**REDACTED**"
     entry.runtime_data.api.fetch_electricity_measurements.assert_awaited_once_with(
         "42", "IT001E12345678", last=10
     )

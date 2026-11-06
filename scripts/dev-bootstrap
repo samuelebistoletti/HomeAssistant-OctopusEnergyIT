@@ -143,6 +143,36 @@ async def _create_long_lived_token(
         return reply["result"]
 
 
+# Core settings of the dev instance: Italian locale, like the integration's users.
+CORE_CONFIG = {
+    "country": "IT",
+    "language": "it",
+    "currency": "EUR",
+    "time_zone": "Europe/Rome",
+    "unit_system": "metric",
+}
+
+
+async def _ensure_core_config(session: aiohttp.ClientSession, token: str) -> None:
+    """Set country, language, currency and time zone if they differ."""
+    headers = {"Authorization": f"Bearer {token}"}
+    async with session.get(f"{HA_URL}/api/config", headers=headers) as resp:
+        resp.raise_for_status()
+        current = await resp.json()
+    wanted = {k: v for k, v in CORE_CONFIG.items() if k != "unit_system"}
+    if all(current.get(k) == v for k, v in wanted.items()):
+        return
+    async with session.ws_connect(f"{HA_URL}/api/websocket") as ws:
+        await ws.receive_json()  # auth_required
+        await ws.send_json({"type": "auth", "access_token": token})
+        await ws.receive_json()
+        await ws.send_json({"id": 1, "type": "config/core/update", **CORE_CONFIG})
+        reply = await ws.receive_json()
+    if not reply.get("success"):
+        sys.exit(f"dev-bootstrap: core config update failed: {reply}")
+    print("dev-bootstrap: core config set to IT / it / Europe/Rome / EUR")
+
+
 async def main() -> None:
     DEV_DIR.mkdir(parents=True, exist_ok=True)
     if not SECRET_PATH_FILE.exists():
@@ -165,6 +195,10 @@ async def main() -> None:
             token = await _create_long_lived_token(session, access_token)
             _write_private(TOKEN_FILE, token)
             print("dev-bootstrap: long-lived token written; ha-mcp will start")
+
+        await _ensure_core_config(
+            session, TOKEN_FILE.read_text(encoding="utf-8").strip()
+        )
 
     secret_path = SECRET_PATH_FILE.read_text(encoding="utf-8").strip()
     print(f"dev-bootstrap: Home Assistant -> {HA_URL}  (login: {CREDENTIALS_FILE})")

@@ -22,6 +22,9 @@ TO_REDACT = {
     "pod",
     "pdr",
     "electricity_pod",
+    "marketSupplyPointId",
+    "supplyPointId",
+    "deviceId",
     "gas_pdr",
     "address",
     "billingAddress",
@@ -54,12 +57,15 @@ async def async_get_config_entry_diagnostics(
         pod = account.get("electricity_pod")
         if property_id and pod:
             try:
-                raw_measurements = [
-                    measurement.get("raw", measurement)
-                    for measurement in await runtime.api.fetch_electricity_measurements(
-                        property_id, pod, last=RAW_MEASUREMENTS
-                    )
-                ]
+                raw_measurements = async_redact_data(
+                    [
+                        measurement.get("raw", measurement)
+                        for measurement in await runtime.api.fetch_electricity_measurements(
+                            property_id, pod, last=RAW_MEASUREMENTS
+                        )
+                    ],
+                    TO_REDACT,
+                )
             except Exception as err:  # noqa: BLE001 - diagnostics must not fail
                 raw_measurements = f"unavailable: {err}"
 
