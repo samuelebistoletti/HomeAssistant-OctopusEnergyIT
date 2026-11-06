@@ -16,6 +16,7 @@ from .entity import (
     CAPABILITY_BOOST,
     CAPABILITY_SUSPEND,
     OctopusCoordinatorEntity,
+    boost_flags,
     device_supports,
     resolve_account_numbers,
 )
@@ -372,24 +373,7 @@ class BoostChargeSwitch(OctopusCoordinatorEntity, SwitchEntity):
 
     def _evaluate_boost_flags(self, device_data: dict[str, Any]) -> tuple[bool, bool]:
         """Calculate boost charge active/available flags from device data."""
-        status = device_data.get("status", {})
-        current_state = status.get("currentState", "") or ""
-        boost_active = "BOOST" in current_state.upper()
-
-        current = status.get("current", "") or ""
-        is_suspended = status.get("isSuspended", False)
-        is_live = current == "LIVE"
-        has_smart_control = "SMART_CONTROL_CAPABLE" in current_state
-        has_boost_state = "BOOST" in current_state.upper()
-        has_boost_charging = "BOOST_CHARGING" in current_state.upper()
-
-        boost_available = (
-            is_live
-            and (has_smart_control or has_boost_state or has_boost_charging)
-            and not is_suspended
-        )
-
-        return boost_active, boost_available
+        return boost_flags(device_data)
 
     @property
     def is_on(self) -> bool:

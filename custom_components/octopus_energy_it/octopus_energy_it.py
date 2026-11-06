@@ -6,7 +6,7 @@ managing devices, and retrieving electricity usage and tariff data.
 
 import asyncio
 import copy
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 import json
 import logging
 
@@ -183,15 +183,6 @@ query ComprehensiveDataQuery($accountNumber: String!) {
         }
       }
     }
-  }
-  completedDispatches(accountNumber: $accountNumber) {
-    delta
-    end
-    meta {
-      location
-      source
-    }
-    start
   }
   devices(accountNumber: $accountNumber) {
     status {
@@ -484,6 +475,9 @@ query LastChargingSession($accountNumber: String!, $deviceId: String!) {{
 }}
 """
 
+# Meter readings change about once a day: refresh them at most this often.
+READINGS_REFRESH = 30 * 60  # seconds
+
 # Charging sessions change rarely: refresh them at most this often.
 CHARGING_SESSION_REFRESH = 15 * 60  # seconds
 
@@ -505,9 +499,27 @@ query RateLimitInfo {
       ttl
       isBlocked
     }
+    fieldSpecificRateLimits(first: 50) {
+      edges {
+        node {
+          field
+          rate
+          ttl
+          isBlocked
+        }
+      }
+    }
   }
 }
 """
+
+
+def round_up_to_half_hour(moment: datetime) -> datetime:
+    """Round *moment* up to the next :00 or :30 (Kraken rejects other boost end times)."""
+    aligned = moment.replace(second=0, microsecond=0)
+    if aligned.minute % 30 or aligned != moment:
+        aligned += timedelta(minutes=30 - aligned.minute % 30)
+    return aligned
 
 
 class OctopusEnergyITError(Exception):
@@ -732,6 +744,10 @@ class OctopusEnergyIT:
         self._token_manager = TokenManager()
         self._login_lock = asyncio.Lock()
         self._missing_device_logged_accounts: set[str] = set()
+        # cache key -> (fetched_at timestamp, readings); readings change daily
+        self._readings_cache: dict[tuple, tuple[float, list[dict]]] = {}
+        # device_id -> last planned dispatches fetched successfully
+        self._last_dispatches: dict[str, list[dict]] = {}
         # device_id -> (fetched_at timestamp, last charging session or None)
         self._charging_sessions: dict[str, tuple[float, dict | None]] = {}
 
@@ -1684,23 +1700,20 @@ class OctopusEnergyIT:
             variables={"deviceId": device_id},
         )
 
-        if not isinstance(response, dict):
-            _LOGGER.error(
-                "Invalid response fetching flex planned dispatches for %s: %s",
+        if not isinstance(response, dict) or response.get("errors"):
+            # Kraken limits flexPlannedDispatches to 5 requests a minute: on a
+            # rate limit (or any error) keep the last known plan instead of
+            # reporting that no charge is planned.
+            _LOGGER.warning(
+                "Could not refresh planned dispatches for %s, keeping the last "
+                "known ones: %s",
                 device_id,
-                response,
+                response.get("errors") if isinstance(response, dict) else response,
             )
-            return None
-
-        if errors := response.get("errors"):
-            _LOGGER.error(
-                "GraphQL errors fetching flex planned dispatches for %s: %s",
-                device_id,
-                errors,
-            )
-            return None
+            return self._last_dispatches.get(device_id)
 
         dispatches = response.get("data", {}).get("flexPlannedDispatches") or []
+        self._last_dispatches[device_id] = dispatches
         _LOGGER.debug(
             "Fetched %d flex planned dispatches for device %s",
             len(dispatches),
@@ -1726,7 +1739,7 @@ class OctopusEnergyIT:
         if target_percentage is not None:
             boost_input["targetSocPercentage"] = int(target_percentage)
         if end_time is not None:
-            boost_input["endTime"] = end_time.isoformat()
+            boost_input["endTime"] = round_up_to_half_hour(end_time).isoformat()
         response = await self._execute_graphql(
             BOOST_CHARGE_MUTATION,
             variables={"input": boost_input},
@@ -1743,11 +1756,20 @@ class OctopusEnergyIT:
 
         if errors := response.get("errors"):
             error_messages = [(e.get("message") or "Unknown error") for e in errors]
+            reasons = [
+                reason
+                for e in errors
+                for reason in (e.get("extensions") or {}).get(
+                    "boostChargeRefusalReasons"
+                )
+                or []
+            ]
             _LOGGER.error(
-                "GraphQL errors for boost charge %s on %s: %s",
+                "Boost charge %s refused for %s: %s%s",
                 action,
                 device_id,
                 "; ".join(error_messages),
+                f" (reasons: {', '.join(map(str, reasons))})" if reasons else "",
             )
             return None
 
@@ -1757,6 +1779,17 @@ class OctopusEnergyIT:
             return None
 
         return result.get("id")
+
+    def _cached_readings(self, key: tuple) -> list[dict] | None:
+        cached = self._readings_cache.get(key)
+        if cached and datetime.now(UTC).timestamp() - cached[0] < READINGS_REFRESH:
+            return cached[1]
+        return None
+
+    def _store_readings(self, key: tuple, readings: list[dict]) -> list[dict]:
+        if readings:  # never cache an empty or failed answer
+            self._readings_cache[key] = (datetime.now(UTC).timestamp(), readings)
+        return readings
 
     async def fetch_gas_meter_readings(
         self,
@@ -1768,7 +1801,32 @@ class OctopusEnergyIT:
         first: int | None = None,
         last: int | None = None,
     ) -> list[dict]:
-        """Fetch gas meter readings for the specified PDR."""
+        """Fetch gas meter readings for the specified PDR (cached for 30 minutes)."""
+        key = ("gas", account_number, pdr, date_from, date_to, first, last)
+        if (cached := self._cached_readings(key)) is not None:
+            return cached
+        return self._store_readings(
+            key,
+            await self._fetch_gas_meter_readings(
+                account_number,
+                pdr,
+                date_from=date_from,
+                date_to=date_to,
+                first=first,
+                last=last,
+            ),
+        )
+
+    async def _fetch_gas_meter_readings(
+        self,
+        account_number: str,
+        pdr: str,
+        *,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        first: int | None = None,
+        last: int | None = None,
+    ) -> list[dict]:
         variables = {
             "accountNumber": account_number,
             "pdr": pdr,
@@ -1859,7 +1917,32 @@ class OctopusEnergyIT:
         first: int | None = None,
         last: int | None = None,
     ) -> list[dict]:
-        """Fetch electricity measurements for the given property/POD."""
+        """Fetch electricity measurements for the property/POD (cached for 30 minutes)."""
+        key = ("electricity", property_id, pod, start_on, end_on, first, last)
+        if (cached := self._cached_readings(key)) is not None:
+            return cached
+        return self._store_readings(
+            key,
+            await self._fetch_electricity_measurements(
+                property_id,
+                pod,
+                start_on=start_on,
+                end_on=end_on,
+                first=first,
+                last=last,
+            ),
+        )
+
+    async def _fetch_electricity_measurements(
+        self,
+        property_id: str,
+        pod: str,
+        *,
+        start_on: str | None = None,
+        end_on: str | None = None,
+        first: int | None = None,
+        last: int | None = None,
+    ) -> list[dict]:
         variables = {
             "propertyId": property_id,
             "pod": pod,
@@ -2025,7 +2108,13 @@ class OctopusEnergyIT:
         if not isinstance(response, dict) or response.get("errors"):
             return None
         info = (response.get("data") or {}).get("rateLimitInfo") or {}
-        return info.get("pointsAllowanceRateLimit")
+        result = dict(info.get("pointsAllowanceRateLimit") or {})
+        result["field_limits"] = [
+            edge["node"]
+            for edge in (info.get("fieldSpecificRateLimits") or {}).get("edges") or []
+            if edge and edge.get("node")
+        ]
+        return result
 
     @staticmethod
     def format_time_to_hh_mm(time_str: str | float) -> str:

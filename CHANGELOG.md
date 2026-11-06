@@ -13,6 +13,7 @@
 - Diagnostics download (Settings → Devices & services → Octopus Energy Italy → ⋮ → Download diagnostics) with credentials, tokens, account numbers, POD/PDR and addresses redacted. It includes the latest raw electricity register readings, so please attach it to bug reports about readings.
 
 ### Changed
+- Lower API usage: meter readings (which change once a day) are fetched at most every 30 minutes, and the unused completed-dispatches data is no longer requested. The diagnostics now include the per-field Kraken rate limits next to the hourly points allowance.
 - The `device_provider` attribute is removed from the EV charging status and vehicle battery sensors: Kraken deprecated the `provider` field (removal from 2027-04-15) and the integration now relies on device capabilities instead. Update any template or automation that read it.
 - The public tariffs device name is translated ("Tariffe pubbliche Octopus Energy" in Italian) instead of a fixed English name.
 - Smart-device entities follow the device capabilities reported by Kraken: the smart-control switch, the boost switch and the charge target/ready-by entities are only created when the device supports suspension, boost or preference updates (devices without capability data keep the previous behaviour).
@@ -25,6 +26,9 @@
 - The bundled GraphQL schema is no longer shipped inside the integration (it was never used at runtime and added 2.3 MB to every install); it now lives in `tests/fixtures/` and a test validates every query against it.
 
 ### Fixed
+- The boost charge was reported as not available (`boost_available: false`) while a smart charge was in progress, although Octopus accepts a boost in that state. Availability now follows the Kraken rules: device live, not suspended and in a smart-control or boosting state. Boost refusals log the reasons returned by Kraken.
+- `boost_charge` with `end_time`: Octopus only accepts end times on the hour or half hour; the time is now rounded up to the next :00/:30 instead of being refused.
+- When Kraken rate-limits the planned dispatches (at most 5 requests a minute), the last known plan is kept instead of briefly reporting that no charge is planned.
 - With more than one Octopus login configured, the `octopus_energy_it.set_device_preferences` action only reached the devices of the last login loaded. The action is now registered once and finds the device in any loaded entry; errors (unknown device, time outside 04:00–17:00, rejected update) are reported with translated messages.
 - The integration could not be added: the config flow failed with `No module named 'python_graphql_client'` when Home Assistant was unable to install the external `python-graphql-client` package. That abandoned dependency (last released in 2021) has been removed entirely and replaced with a small in-tree GraphQL client built on `aiohttp`, which ships with Home Assistant core and therefore can never fail to install. `manifest.json` now declares no external `requirements`. (Fixes #23, #27; thanks @frabert)
 - Intermittent `Timeout while contacting DNS servers` errors and failed update cycles. The GraphQL client now reuses Home Assistant's shared HTTP session instead of opening a new connection (with a fresh DNS lookup and TLS handshake) for every request, applies a 30-second timeout per request, and retries once after a transient network error before failing the update. (Fixes #22, #25)

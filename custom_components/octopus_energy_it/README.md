@@ -165,7 +165,7 @@ I prezzi vengono aggiornati ogni ora. Se il sito delle tariffe non risponde, il 
 - `octopus_energy_it.boost_charge` – avvia una ricarica immediata (boost)
   - `device_id`: ID del dispositivo (obbligatorio)
   - `target_percentage`: ferma il boost a questo livello di carica, 10–100 (facoltativo)
-  - `end_time`: ferma il boost a questo orario (facoltativo)
+  - `end_time`: ferma il boost a questo orario, arrotondato per eccesso alla mezz'ora (Octopus accetta solo :00 e :30) (facoltativo)
 
 - `octopus_energy_it.submit_gas_reading` – invia l'autolettura del contatore gas
   - `reading`: valore del contatore in m³ interi, solo le cifre nere (obbligatorio)

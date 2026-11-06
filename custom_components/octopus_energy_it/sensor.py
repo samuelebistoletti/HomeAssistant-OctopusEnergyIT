@@ -18,7 +18,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util.dt import as_utc, parse_datetime as _parse_dt, utcnow
 
 from .data_processor import device_battery_size_kwh, device_model
-from .entity import OctopusCoordinatorEntity, OctopusPublicProductsEntity
+from .entity import OctopusCoordinatorEntity, OctopusPublicProductsEntity, boost_flags
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -1629,17 +1629,7 @@ class OctopusEVChargeStatusSensor(OctopusCoordinatorEntity, SensorEntity):
         current_state = status.get("currentState", "")
         current = status.get("current", "")
         is_suspended = status.get("isSuspended", False)
-        is_live = current == "LIVE"
-        has_smart_control = "SMART_CONTROL_CAPABLE" in current_state
-        has_boost_state = "BOOST" in current_state.upper()
-        has_boost_charging = "BOOST_CHARGING" in current_state.upper()
-
-        boost_charge_active = "BOOST" in current_state.upper()
-        boost_charge_available = (
-            is_live
-            and (has_smart_control or has_boost_state or has_boost_charging)
-            and not is_suspended
-        )
+        boost_charge_active, boost_charge_available = boost_flags(device)
 
         self._attributes = {
             "account_number": self._account_number,

@@ -144,7 +144,7 @@ async def test_boost_input_includes_target_and_end_time():
 
     api = _api()
     execute = AsyncMock(return_value={"data": {"updateBoostCharge": {"id": "dev-1"}}})
-    end = datetime(2026, 11, 7, 6, 30, tzinfo=UTC)
+    end = datetime(2026, 11, 7, 6, 12, 40, tzinfo=UTC)  # rounded up to 06:30
     with patch.object(api, "_execute_graphql", new=execute):
         assert (
             await api.update_boost_charge(
@@ -171,3 +171,21 @@ async def test_plain_boost_input_is_unchanged():
     assert execute.await_args.kwargs["variables"] == {
         "input": {"deviceId": "dev-1", "action": "CANCEL"}
     }
+
+
+def test_round_up_to_half_hour():
+    from datetime import UTC, datetime
+
+    from custom_components.octopus_energy_it.octopus_energy_it import (
+        round_up_to_half_hour,
+    )
+
+    def at(h, m, s=0):
+        return datetime(2026, 11, 7, h, m, s, tzinfo=UTC)
+
+    assert round_up_to_half_hour(at(6, 0)) == at(6, 0)
+    assert round_up_to_half_hour(at(6, 30)) == at(6, 30)
+    assert round_up_to_half_hour(at(6, 0, 1)) == at(6, 30)
+    assert round_up_to_half_hour(at(6, 12)) == at(6, 30)
+    assert round_up_to_half_hour(at(6, 31)) == at(7, 0)
+    assert round_up_to_half_hour(at(23, 45)) == datetime(2026, 11, 8, 0, 0, tzinfo=UTC)
