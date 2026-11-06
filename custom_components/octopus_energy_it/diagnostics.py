@@ -76,7 +76,13 @@ async def async_get_config_entry_diagnostics(
             "is_primary": account_number == runtime.account_number,
         }
 
+    try:
+        rate_limit = await runtime.api.fetch_rate_limit_info()
+    except Exception as err:  # noqa: BLE001 - diagnostics must not fail
+        rate_limit = f"unavailable: {err}"
+
     return {
+        "api_rate_limit": rate_limit,
         "entry": {
             "title": "**REDACTED**",
             "data": async_redact_data(dict(entry.data), TO_REDACT),

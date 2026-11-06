@@ -15,6 +15,9 @@ SECRETS = ("user@example.com", "hunter2", "A-1234ABCD", "IT001E12345678", "PDR99
 
 def _entry(fetch=None):
     api = SimpleNamespace(
+        fetch_rate_limit_info=AsyncMock(
+            return_value={"limit": 50000, "usedPoints": 1200, "isBlocked": False}
+        ),
         fetch_electricity_measurements=fetch
         or AsyncMock(
             return_value=[
@@ -33,7 +36,7 @@ def _entry(fetch=None):
                     },
                 }
             ]
-        )
+        ),
     )
     coordinator = SimpleNamespace(
         last_update_success=True,
@@ -97,3 +100,8 @@ async def test_diagnostics_survive_measurement_errors():
     assert result["accounts"]["account_1"]["raw_electricity_measurements"].startswith(
         "unavailable"
     )
+
+
+async def test_diagnostics_include_points_allowance():
+    result = await async_get_config_entry_diagnostics(None, _entry())
+    assert result["api_rate_limit"]["usedPoints"] == 1200

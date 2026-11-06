@@ -439,6 +439,21 @@ mutation krakenTokenRefresh($refreshToken: String!) {
 """
 
 
+RATE_LIMIT_INFO_QUERY = """
+query RateLimitInfo {
+  rateLimitInfo {
+    pointsAllowanceRateLimit {
+      limit
+      remainingPoints
+      usedPoints
+      ttl
+      isBlocked
+    }
+  }
+}
+"""
+
+
 class OctopusEnergyITError(Exception):
     """Base error of the Octopus Energy Italy API client."""
 
@@ -1820,6 +1835,14 @@ class OctopusEnergyIT:
             )
 
         return measurements
+
+    async def fetch_rate_limit_info(self) -> dict | None:
+        """Return the hourly points allowance of the logged-in user, if available."""
+        response = await self._execute_graphql(RATE_LIMIT_INFO_QUERY)
+        if not isinstance(response, dict) or response.get("errors"):
+            return None
+        info = (response.get("data") or {}).get("rateLimitInfo") or {}
+        return info.get("pointsAllowanceRateLimit")
 
     @staticmethod
     def format_time_to_hh_mm(time_str: str | float) -> str:
