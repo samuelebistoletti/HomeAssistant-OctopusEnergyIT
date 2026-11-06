@@ -1,6 +1,8 @@
 # Changelog
 
-## [Unreleased]
+## [1.3.0b1] - 2026-11-06
+
+> Beta: install it from HACS with "Show beta versions" enabled. Feedback welcome in the issues before the final 1.3.0.
 
 ### Added
 - Energy dashboard statistics with the real reading dates: electricity consumption (kWh), electricity cost (EUR, single-rate tariffs only) and gas consumption (m³) are imported as external statistics, booked on the day the energy was used instead of the day Home Assistant polled the API. See the README section "Statistiche per la Dashboard Energia". (Fixes #19, #21; based on the idea in #20, thanks @riccardorossi92)
