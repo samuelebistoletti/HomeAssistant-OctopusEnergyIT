@@ -295,6 +295,11 @@ def _build_sensors_for_account(  # noqa: C901 - flat list of optional sensors
             len(devices),
         )
         sensors.append(OctopusEVChargeStatusSensor(account_number, coordinator))
+        sensors.extend(
+            OctopusLastChargingSessionSensor(account_number, coordinator, device["id"])
+            for device in devices
+            if device.get("id") and "lastChargingSession" in device
+        )
         sensors.append(OctopusEvNextDispatchStartSensor(account_number, coordinator))
         sensors.append(OctopusEvNextDispatchEndSensor(account_number, coordinator))
         sensors.append(OctopusEvPlannedDispatchesSensor(account_number, coordinator))
@@ -1997,3 +2002,45 @@ class OctopusPublicTariffSensor(OctopusPublicProductsEntity, SensorEntity):
     @property
     def available(self) -> bool:
         return self._formatted_product() is not None
+
+
+class OctopusLastChargingSessionSensor(OctopusCoordinatorEntity, SensorEntity):
+    """Energy added by the latest charging session of an EV or charger."""
+
+    _attr_translation_key = "last_charging_session"
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_native_unit_of_measurement = "kWh"
+    _attr_icon = "mdi:ev-station"
+
+    def __init__(self, account_number, coordinator, device_id: str) -> None:
+        super().__init__(account_number, coordinator)
+        self._device_id = device_id
+        self._attr_unique_id = (
+            f"octopus_{account_number}_{device_id}_last_charging_session"
+        )
+
+    def _session(self) -> dict[str, Any] | None:
+        account_data = _get_account_data(self.coordinator, self._account_number) or {}
+        for device in account_data.get("devices") or []:
+            if device.get("id") == self._device_id:
+                return device.get("lastChargingSession")
+        return None
+
+    @property
+    def native_value(self) -> float | None:
+        session = self._session()
+        return session.get("energy_kwh") if session else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        session = self._session() or {}
+        return {
+            "device_id": self._device_id,
+            "start": session.get("start"),
+            "end": session.get("end"),
+            "cost": session.get("cost"),
+            "currency": session.get("currency"),
+            "session_type": session.get("type"),
+            "state_of_charge_change": session.get("soc_change"),
+            "state_of_charge_final": session.get("soc_final"),
+        }

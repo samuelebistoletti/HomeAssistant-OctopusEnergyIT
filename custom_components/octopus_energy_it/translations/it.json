@@ -228,6 +228,9 @@
       },
       "ev_planned_dispatches": {
         "name": "Ricariche pianificate"
+      },
+      "last_charging_session": {
+        "name": "Ultima sessione di ricarica"
       }
     },
     "binary_sensor": {

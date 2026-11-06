@@ -445,6 +445,49 @@ mutation krakenTokenRefresh($refreshToken: String!) {
 """
 
 
+CHARGING_SESSION_FIELDS = """
+chargingSessions(last: 1) {
+  edges {
+    node {
+      start
+      end
+      stateOfChargeChange
+      stateOfChargeFinal
+      energyAdded {
+        value
+        unit
+      }
+      cost {
+        amountAsMinorUnits
+        currencyDetails {
+          iso4217CurrencyCode
+        }
+      }
+      ... on SmartFlexChargingSession {
+        type
+      }
+    }
+  }
+}
+"""
+
+LAST_CHARGING_SESSION_QUERY = f"""
+query LastChargingSession($accountNumber: String!, $deviceId: String!) {{
+  devices(accountNumber: $accountNumber, deviceId: $deviceId) {{
+    id
+    ... on SmartFlexChargePoint {{
+      {CHARGING_SESSION_FIELDS}
+    }}
+    ... on SmartFlexVehicle {{
+      {CHARGING_SESSION_FIELDS}
+    }}
+  }}
+}}
+"""
+
+# Charging sessions change rarely: refresh them at most this often.
+CHARGING_SESSION_REFRESH = 15 * 60  # seconds
+
 RATE_LIMIT_INFO_QUERY = """
 query RateLimitInfo {
   rateLimitInfo {
@@ -673,6 +716,8 @@ class OctopusEnergyIT:
         self._token_manager = TokenManager()
         self._login_lock = asyncio.Lock()
         self._missing_device_logged_accounts: set[str] = set()
+        # device_id -> (fetched_at timestamp, last charging session or None)
+        self._charging_sessions: dict[str, tuple[float, dict | None]] = {}
 
     @property
     def _token(self):
@@ -1106,6 +1151,8 @@ class OctopusEnergyIT:
                         "No devices found, skipping flex planned dispatches fetch"
                     )
 
+                await self._attach_charging_sessions(account_number, result["devices"])
+
                 # Log errors but don't fail if we got account data
                 if "errors" in response and result["account"]:
                     # Filter errors about missing devices/dispatches
@@ -1165,6 +1212,33 @@ class OctopusEnergyIT:
 
         _LOGGER.error("API response contains neither data nor errors")
         return None
+
+    async def _attach_charging_sessions(
+        self, account_number: str, devices: list[dict]
+    ) -> None:
+        """Add ``lastChargingSession`` to every EV / charge point device."""
+        targets = [
+            device
+            for device in devices
+            if device.get("id")
+            and device.get("deviceType") in ("ELECTRIC_VEHICLES", "CHARGE_POINTS")
+        ]
+        results = await asyncio.gather(
+            *[
+                self.fetch_last_charging_session(account_number, device["id"])
+                for device in targets
+            ],
+            return_exceptions=True,
+        )
+        for device, session in zip(targets, results, strict=True):
+            if isinstance(session, Exception):
+                _LOGGER.warning(
+                    "Failed to fetch charging sessions for device %s: %s",
+                    device["id"],
+                    session,
+                )
+                continue
+            device["lastChargingSession"] = session
 
     @staticmethod
     def flatten_connection(connection):
@@ -1842,6 +1916,52 @@ class OctopusEnergyIT:
             )
 
         return measurements
+
+    async def fetch_last_charging_session(
+        self, account_number: str, device_id: str
+    ) -> dict | None:
+        """Return the latest charging session of a device (cached for 15 minutes).
+
+        The session is flattened to ``start``, ``end``, ``energy_kwh``,
+        ``cost``, ``currency``, ``type``, ``soc_change`` and ``soc_final``.
+        """
+        now = datetime.now(UTC).timestamp()
+        cached = self._charging_sessions.get(device_id)
+        if cached and now - cached[0] < CHARGING_SESSION_REFRESH:
+            return cached[1]
+
+        response = await self._execute_graphql(
+            LAST_CHARGING_SESSION_QUERY,
+            variables={"accountNumber": account_number, "deviceId": device_id},
+        )
+        if not isinstance(response, dict) or response.get("errors"):
+            _LOGGER.debug("No charging sessions for device %s: %s", device_id, response)
+            return cached[1] if cached else None
+
+        session = None
+        for device in (response.get("data") or {}).get("devices") or []:
+            edges = ((device or {}).get("chargingSessions") or {}).get("edges") or []
+            nodes = [edge["node"] for edge in edges if edge and edge.get("node")]
+            if nodes:
+                session = self._flatten_charging_session(nodes[-1])
+        self._charging_sessions[device_id] = (now, session)
+        return session
+
+    @classmethod
+    def _flatten_charging_session(cls, node: dict) -> dict:
+        energy = node.get("energyAdded") or {}
+        cost = node.get("cost") or {}
+        minor_units = cost.get("amountAsMinorUnits")
+        return {
+            "start": node.get("start"),
+            "end": node.get("end"),
+            "energy_kwh": cls.to_float_or_none(energy.get("value")),
+            "cost": int(minor_units) / 100 if minor_units is not None else None,
+            "currency": (cost.get("currencyDetails") or {}).get("iso4217CurrencyCode"),
+            "type": node.get("type"),
+            "soc_change": cls.to_float_or_none(node.get("stateOfChargeChange")),
+            "soc_final": cls.to_float_or_none(node.get("stateOfChargeFinal")),
+        }
 
     async def fetch_rate_limit_info(self) -> dict | None:
         """Return the hourly points allowance of the logged-in user, if available."""

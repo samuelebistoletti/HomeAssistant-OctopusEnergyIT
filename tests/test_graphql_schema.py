@@ -6,7 +6,6 @@ starts using a deprecated field, so API changes surface in CI before they
 break users.
 """
 
-import ast
 import json
 from pathlib import Path
 import re
@@ -24,7 +23,6 @@ from graphql import (
 import pytest
 
 _ROOT = Path(__file__).resolve().parent.parent
-_CLIENT = _ROOT / "custom_components" / "octopus_energy_it" / "octopus_energy_it.py"
 _SCHEMA = _ROOT / "tests" / "fixtures" / "oeit_graphql_schema.json"
 
 # Deprecated fields still in use on purpose, with the planned removal date.
@@ -36,15 +34,16 @@ _ALLOWED_DEPRECATED = {
 
 
 def _operations() -> dict[str, str]:
-    """Return {name: document} for every GraphQL string in the client module."""
-    tree = ast.parse(_CLIENT.read_text(encoding="utf-8"))
-    operations: dict[str, str] = {}
-    for node in tree.body:  # module-level constants
-        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant):
-            value = node.value.value
-            if isinstance(value, str) and re.match(r"\s*(query|mutation)\b", value):
-                operations[node.targets[0].id] = value
-    return operations
+    """Return {name: document} for every GraphQL constant of the client module."""
+    from custom_components.octopus_energy_it import octopus_energy_it as client
+
+    return {
+        name: value
+        for name, value in vars(client).items()
+        if name.isupper()
+        and isinstance(value, str)
+        and re.match(r"\s*(query|mutation)\b", value)
+    }
 
 
 @pytest.fixture(scope="module")

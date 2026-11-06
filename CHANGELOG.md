@@ -6,6 +6,7 @@
 - Energy dashboard statistics with the real reading dates: electricity consumption (kWh), electricity cost (EUR, single-rate tariffs only) and gas consumption (m³) are imported as external statistics, booked on the day the energy was used instead of the day Home Assistant polled the API. See the README section "Statistiche per la Dashboard Energia". (Fixes #19, #21; based on the idea in #20, thanks @riccardorossi92)
 - Reauthentication: when Octopus rejects the stored password (for example after a password change), Home Assistant now shows a "Reauthentication required" prompt and asks only for the new password, instead of the integration silently failing to load.
 - The same Octopus login can no longer be added twice.
+- New sensor **Last charging session** for each EV or charger: energy added (kWh), with start, end, session type (smart/boost), state of charge change and, when Kraken provides it, cost as attributes. Refreshed every 15 minutes to keep API usage low.
 - Repair issue when the link between Octopus and a smart device (car or charger) has expired and must be renewed in the Octopus app; it clears itself once reconnected.
 - Diagnostics download (Settings → Devices & services → Octopus Energy Italy → ⋮ → Download diagnostics) with credentials, tokens, account numbers, POD/PDR and addresses redacted. It includes the latest raw electricity register readings, so please attach it to bug reports about readings.
 
