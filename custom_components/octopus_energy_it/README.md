@@ -141,6 +141,8 @@ Per ogni tariffa riportata sul sito Octopus viene creato un sensore dedicato `se
 
 I prezzi vengono aggiornati ogni ora. Se il sito delle tariffe non risponde, il retry avviene automaticamente ogni 5 minuti utilizzando l'ultimo valore valido come cache; i sensori non passano mai in stato Unknown durante un'interruzione temporanea del sito.
 
+- `sensor.<account>_ultima_sessione_di_ricarica` – energia caricata nell'ultima sessione (kWh) di ogni auto o caricatore; attributi `start`, `end`, `session_type` (smart/boost), variazione dello stato di carica e, se fornito da Kraken, `cost`. Aggiornato ogni 15 minuti.
+
 ### Number
 
 - `number.octopus_<account>_<device_id>_charge_target` – imposta il target di ricarica SmartFlex (10–100%, passi da 1). L'aggiornamento viene propagato al coordinatore condiviso, che mantiene coerenti sensori e controlli.
@@ -159,7 +161,17 @@ I prezzi vengono aggiornati ogni ora. Se il sito delle tariffe non risponde, il 
 - `octopus_energy_it.set_device_preferences`
   - `device_id`: ID del dispositivo (obbligatorio)
   - `target_percentage`: valore 10–100 con passi da 1 (obbligatorio)
-  - `target_time`: orario di conclusione (`HH:MM`, 04:00–17:00) (obbligatorio)
+  - `target_time`: orario di conclusione (`HH:MM`) entro la finestra consentita dal dispositivo (di solito 04:00–11:00 o 04:00–17:00) (obbligatorio)
+- `octopus_energy_it.boost_charge` – avvia una ricarica immediata (boost)
+  - `device_id`: ID del dispositivo (obbligatorio)
+  - `target_percentage`: ferma il boost a questo livello di carica, 10–100 (facoltativo)
+  - `end_time`: ferma il boost a questo orario (facoltativo)
+
+Le entità dei dispositivi smart (switch, number, select) vengono create solo se il dispositivo supporta la funzione corrispondente secondo Kraken (`capabilities`). Se il collegamento tra Octopus e l'auto o il caricatore scade, compare una segnalazione in **Impostazioni → Sistema → Riparazioni**: va ricollegato dall'app Octopus.
+
+### Diagnostica
+
+Da **Impostazioni → Dispositivi e servizi → Octopus Energy Italy → ⋮ → Scarica diagnostica** si ottiene un file con dati personali, credenziali, POD/PDR e numeri di account oscurati, le ultime letture grezze del contatore e il consumo dei punti API orari. Allegalo alle segnalazioni di problemi.
 
 ## Statistiche per la Dashboard Energia
 
