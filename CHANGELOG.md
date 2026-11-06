@@ -6,9 +6,12 @@
 - Energy dashboard statistics with the real reading dates: electricity consumption (kWh), electricity cost (EUR, single-rate tariffs only) and gas consumption (m³) are imported as external statistics, booked on the day the energy was used instead of the day Home Assistant polled the API. See the README section "Statistiche per la Dashboard Energia". (Fixes #19, #21; based on the idea in #20, thanks @riccardorossi92)
 - Reauthentication: when Octopus rejects the stored password (for example after a password change), Home Assistant now shows a "Reauthentication required" prompt and asks only for the new password, instead of the integration silently failing to load.
 - The same Octopus login can no longer be added twice.
+- Repair issue when the link between Octopus and a smart device (car or charger) has expired and must be renewed in the Octopus app; it clears itself once reconnected.
 - Diagnostics download (Settings → Devices & services → Octopus Energy Italy → ⋮ → Download diagnostics) with credentials, tokens, account numbers, POD/PDR and addresses redacted. It includes the latest raw electricity register readings, so please attach it to bug reports about readings.
 
 ### Changed
+- Smart-device entities follow the device capabilities reported by Kraken: the smart-control switch, the boost switch and the charge target/ready-by entities are only created when the device supports suspension, boost or preference updates (devices without capability data keep the previous behaviour).
+- The ready-by time is validated against the window of the device (for example 04:00–11:00 on some chargers) instead of a fixed 04:00–17:00, in the entities and in the `set_device_preferences` action.
 - Access tokens are renewed with the Kraken refresh token, so the password is sent to the API only for the first login or when the refresh token is rejected.
 - Setup now distinguishes a rejected login (reauthentication prompt) from a network problem (Home Assistant retries the setup automatically) instead of failing permanently in both cases.
 - The integration options dialog has been removed: it only duplicated **Reconfigure**, which remains the place to change the email or password.

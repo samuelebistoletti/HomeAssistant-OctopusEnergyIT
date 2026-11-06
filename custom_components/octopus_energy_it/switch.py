@@ -12,7 +12,13 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util.dt import utcnow
 
 from .const import DOMAIN
-from .entity import OctopusCoordinatorEntity, resolve_account_numbers
+from .entity import (
+    CAPABILITY_BOOST,
+    CAPABILITY_SUSPEND,
+    OctopusCoordinatorEntity,
+    device_supports,
+    resolve_account_numbers,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -63,6 +69,8 @@ async def async_setup_entry(
             if "id" not in device:
                 _LOGGER.warning("Device missing ID field: %s", device)
                 continue
+            if device_supports(device, CAPABILITY_SUSPEND) is False:
+                continue
             switches.append(OctopusSwitch(api, device, coordinator, acc_num))
 
     # Only add entities if we have any
@@ -98,7 +106,13 @@ async def _setup_boost_charge_switches(
                 device_type = device.get("deviceType")
                 device_name = device.get("name", f"Device {device_id}")
 
-                if device_type in ["ELECTRIC_VEHICLES", "CHARGE_POINTS"] and device_id:
+                supports_boost = device_supports(device, CAPABILITY_BOOST)
+                if supports_boost is None:  # capabilities unknown: by type
+                    supports_boost = device_type in [
+                        "ELECTRIC_VEHICLES",
+                        "CHARGE_POINTS",
+                    ]
+                if supports_boost and device_id:
                     switches.append(
                         BoostChargeSwitch(
                             coordinator, client, device_id, device_name, acc_num

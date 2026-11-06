@@ -68,7 +68,7 @@
       "message": "No Octopus smart device with ID {device_id} was found in a loaded Octopus Energy Italy entry."
     },
     "invalid_target_time": {
-      "message": "Invalid target time {time}: use HH:MM between 04:00 and 17:00."
+      "message": "Invalid target time {time}: use HH:MM between {start} and {end}."
     },
     "set_preferences_failed": {
       "message": "Octopus Energy Italy did not accept the new charging preferences. Check the log for details."
@@ -87,6 +87,10 @@
     "no_electricity_tariff": {
       "title": "No active electricity tariff",
       "description": "No active electricity product was found for account {account_number}. This is expected while onboarding or during a transition from another supplier, before Octopus registers an active tariff — electricity price and tariff sensors will be unavailable until then. This issue clears automatically once a tariff is registered, no action is required."
+    },
+    "device_reauthentication_required": {
+      "title": "Octopus smart device needs to be reconnected",
+      "description": "The connection between Octopus and **{device}** has expired, so smart charging cannot control it. Reconnect the device in the Octopus Energy app; this issue clears automatically afterwards."
     }
   },
   "entity": {
@@ -265,7 +269,7 @@
         },
         "target_time": {
           "name": "Ready-by time",
-          "description": "Time the charge must be completed by, between 04:00 and 17:00."
+          "description": "Time the charge must be completed by, within the window allowed by the device (usually 04:00–11:00 or 04:00–17:00)."
         }
       }
     }

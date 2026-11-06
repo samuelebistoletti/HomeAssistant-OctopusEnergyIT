@@ -62,6 +62,35 @@ def update_electricity_tariff_issue(
         )
 
 
+def update_device_reauth_issues(
+    hass: HomeAssistant, devices: list[dict[str, Any]] | None
+) -> None:
+    """Raise a repair for each smart device whose link must be re-authorised.
+
+    Kraken sets ``reAuthenticationState.isEligible`` when the connection to
+    the vehicle or charger maker has expired; it can only be renewed in the
+    Octopus app, so the repair is informational.
+    """
+    for device in devices or []:
+        device_id = device.get("id")
+        if not device_id:
+            continue
+        issue_id = f"device_reauthentication_{device_id}"
+        state = device.get("reAuthenticationState") or {}
+        if state.get("isEligible"):
+            ir.async_create_issue(
+                hass,
+                DOMAIN,
+                issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="device_reauthentication_required",
+                translation_placeholders={"device": device.get("name") or device_id},
+            )
+        else:
+            ir.async_delete_issue(hass, DOMAIN, issue_id)
+
+
 class OctopusEnergyITDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Fetch and process the data of every account of one Octopus login."""
 
@@ -114,6 +143,9 @@ class OctopusEnergyITDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]
                 self.hass,
                 account_number,
                 processed[account_number].get("has_electricity_tariff", False),
+            )
+            update_device_reauth_issues(
+                self.hass, processed[account_number].get("devices")
             )
             try:
                 await self.statistics.async_import_account(

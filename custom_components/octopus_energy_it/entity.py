@@ -56,6 +56,33 @@ def device_schedule_setting(device: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+CAPABILITY_BOOST = "FlexTriggerBoostChargeCapability"
+CAPABILITY_SUSPEND = "FlexSuspendDeviceCapability"
+CAPABILITY_PREFERENCES = "FlexUpdatePreferencesCapability"
+
+DEFAULT_TIME_WINDOW = ("04:00", "17:00")
+
+
+def device_supports(device: dict[str, Any], capability: str) -> bool | None:
+    """Return whether the device lists *capability*; None if capabilities are unknown."""
+    capabilities = device.get("capabilities")
+    if not isinstance(capabilities, list):
+        return None
+    return any(
+        isinstance(item, dict) and item.get("__typename") == capability
+        for item in capabilities
+    )
+
+
+def device_time_window(device: dict[str, Any] | None) -> tuple[str, str]:
+    """Return the (from, to) HH:MM window allowed for the ready-by time."""
+    setting = device_schedule_setting(device or {}) or {}
+    time_from, time_to = setting.get("timeFrom"), setting.get("timeTo")
+    if not time_from or not time_to:
+        return DEFAULT_TIME_WINDOW
+    return str(time_from)[:5], str(time_to)[:5]
+
+
 def resolve_account_numbers(
     entry: ConfigEntry,
     coordinator,

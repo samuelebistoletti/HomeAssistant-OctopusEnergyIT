@@ -12,8 +12,11 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
 from .entity import (
+    CAPABILITY_PREFERENCES,
     OctopusCoordinatorEntity,
     OctopusDeviceScheduleMixin,
+    device_supports,
+    device_time_window,
     first_device_schedule,
     get_account_data,
     resolve_account_numbers,
@@ -48,6 +51,8 @@ async def async_setup_entry(
             device_id = device.get("id")
             schedule = first_device_schedule(device)
             if not device_id or not schedule:
+                continue
+            if device_supports(device, CAPABILITY_PREFERENCES) is False:
                 continue
 
             entities.append(
@@ -144,6 +149,7 @@ class OctopusDeviceChargeTargetNumber(
             self._device_id,
             target_percentage,
             target_time,
+            time_window=device_time_window(self._current_device()),
         )
         if not success:
             raise HomeAssistantError(

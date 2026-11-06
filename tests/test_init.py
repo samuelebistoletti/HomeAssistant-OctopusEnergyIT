@@ -308,7 +308,9 @@ class TestSetDevicePreferencesService:
 
         await services_mod._async_set_device_preferences(_call(hass))
 
-        api.set_device_preferences.assert_awaited_once_with(DEVICE_ID, 80, "07:00")
+        api.set_device_preferences.assert_awaited_once_with(
+            DEVICE_ID, 80, "07:00", time_window=("04:00", "17:00")
+        )
         runtime.coordinator.async_request_refresh.assert_awaited_once()
 
     async def test_percentage_is_clamped(self):
@@ -358,3 +360,64 @@ class TestSetDevicePreferencesService:
             await services_mod._async_set_device_preferences(_call(hass))
         assert err.value.translation_key == "set_preferences_failed"
         assert not isinstance(err.value, ServiceValidationError)
+
+
+class TestDeviceTimeWindow:
+    def _device(self, time_to="11:00:00"):
+        return [
+            {
+                "id": DEVICE_ID,
+                "preferenceSetting": {
+                    "scheduleSettings": [{"timeFrom": "04:00:00", "timeTo": time_to}]
+                },
+            }
+        ]
+
+    async def test_device_window_is_enforced(self):
+        hass, _ = _service_hass(_api(), devices=self._device())
+        with pytest.raises(ServiceValidationError) as err:
+            await services_mod._async_set_device_preferences(
+                _call(hass, target_time="12:00")
+            )
+        assert err.value.translation_placeholders["end"] == "11:00"
+
+    async def test_time_inside_device_window_is_sent_with_window(self):
+        api = _api()
+        hass, _ = _service_hass(api, devices=self._device())
+        await services_mod._async_set_device_preferences(
+            _call(hass, target_time="10:30")
+        )
+        assert api.set_device_preferences.await_args.kwargs["time_window"] == (
+            "04:00",
+            "11:00",
+        )
+
+
+class TestDeviceReauthIssues:
+    def test_eligible_device_raises_issue_and_others_clear(self):
+        with (
+            patch.object(coord_mod.ir, "async_create_issue") as create,
+            patch.object(coord_mod.ir, "async_delete_issue") as delete,
+        ):
+            coord_mod.update_device_reauth_issues(
+                "hass",
+                [
+                    {
+                        "id": "d1",
+                        "name": "Wallbox",
+                        "reAuthenticationState": {"isEligible": True},
+                    },
+                    {"id": "d2", "reAuthenticationState": {"isEligible": False}},
+                    {"id": "d3"},
+                ],
+            )
+
+        create.assert_called_once()
+        assert create.call_args.args[2] == "device_reauthentication_d1"
+        assert create.call_args.kwargs["translation_placeholders"] == {
+            "device": "Wallbox"
+        }
+        assert [c.args[2] for c in delete.call_args_list] == [
+            "device_reauthentication_d2",
+            "device_reauthentication_d3",
+        ]

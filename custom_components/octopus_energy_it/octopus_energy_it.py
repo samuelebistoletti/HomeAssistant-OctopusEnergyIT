@@ -235,6 +235,12 @@ query ComprehensiveDataQuery($accountNumber: String!) {
       message
       publishedAt
     }
+    capabilities {
+      __typename
+    }
+    reAuthenticationState {
+      isEligible
+    }
     ... on SmartFlexVehicle {
       id
       name
@@ -1471,6 +1477,7 @@ class OctopusEnergyIT:
         device_id: str,
         target_percentage: float,
         target_time: str,
+        time_window: tuple[str, str] = ("04:00", "17:00"),
     ) -> bool:
         """Set device charging preferences using the SmartFlex API."""
         if not await self.ensure_token():
@@ -1488,11 +1495,11 @@ class OctopusEnergyIT:
 
         try:
             formatted_time = self.format_time_to_hh_mm(target_time)
-            hour = int(formatted_time.split(":")[0])
-            if not 4 <= hour <= 17:
+            if not time_window[0] <= formatted_time <= time_window[1]:
                 _LOGGER.error(
-                    "Invalid target time: %s. Must be between 04:00 and 17:00.",
+                    "Invalid target time: %s. Must be between %s and %s.",
                     formatted_time,
+                    *time_window,
                 )
                 return False
         except ValueError as exc:

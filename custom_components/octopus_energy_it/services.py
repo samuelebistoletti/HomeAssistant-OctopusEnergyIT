@@ -12,6 +12,7 @@ import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
 
 from .const import DOMAIN
+from .entity import device_time_window
 
 if TYPE_CHECKING:
     from .coordinator import OctopusEnergyITRuntimeData
@@ -34,8 +35,8 @@ SET_DEVICE_PREFERENCES_SCHEMA = vol.Schema(
 
 def _find_device_owner(
     hass: HomeAssistant, device_id: str
-) -> OctopusEnergyITRuntimeData | None:
-    """Return the runtime data of the loaded entry that owns *device_id*."""
+) -> tuple[OctopusEnergyITRuntimeData, dict] | tuple[None, None]:
+    """Return the runtime data and device dict of the entry owning *device_id*."""
     for entry in hass.config_entries.async_entries(DOMAIN):
         if entry.state is not ConfigEntryState.LOADED:
             continue
@@ -43,8 +44,8 @@ def _find_device_owner(
         for account in (runtime.coordinator.data or {}).values():
             for device in account.get("devices") or []:
                 if device.get("id") == device_id:
-                    return runtime
-    return None
+                    return runtime, device
+    return None, None
 
 
 async def _async_set_device_preferences(call: ServiceCall) -> None:
@@ -55,7 +56,7 @@ async def _async_set_device_preferences(call: ServiceCall) -> None:
     target_percentage = max(10, min(100, round(call.data[ATTR_TARGET_PERCENTAGE])))
     target_time: str = call.data[ATTR_TARGET_TIME]
 
-    runtime = _find_device_owner(hass, device_id)
+    runtime, device = _find_device_owner(hass, device_id)
     if runtime is None:
         raise ServiceValidationError(
             translation_domain=DOMAIN,
@@ -69,17 +70,26 @@ async def _async_set_device_preferences(call: ServiceCall) -> None:
         raise ServiceValidationError(
             translation_domain=DOMAIN,
             translation_key="invalid_target_time",
-            translation_placeholders={"time": str(target_time)},
+            translation_placeholders={
+                "time": str(target_time),
+                "start": "04:00",
+                "end": "17:00",
+            },
         ) from err
-    if not 4 <= int(formatted_time.split(":")[0]) <= 17:
+    window = device_time_window(device)
+    if not window[0] <= formatted_time <= window[1]:
         raise ServiceValidationError(
             translation_domain=DOMAIN,
             translation_key="invalid_target_time",
-            translation_placeholders={"time": formatted_time},
+            translation_placeholders={
+                "time": formatted_time,
+                "start": window[0],
+                "end": window[1],
+            },
         )
 
     if not await runtime.api.set_device_preferences(
-        device_id, target_percentage, formatted_time
+        device_id, target_percentage, formatted_time, time_window=window
     ):
         raise HomeAssistantError(
             translation_domain=DOMAIN, translation_key="set_preferences_failed"

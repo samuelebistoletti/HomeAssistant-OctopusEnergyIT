@@ -880,6 +880,25 @@ class TestSetDevicePreferences:
 
         assert result is False
 
+    async def test_custom_time_window_is_enforced(self):
+        """A device window of 04:00-11:00 rejects 12:00 without calling the API."""
+        api = _make_api()
+        execute = AsyncMock(return_value={"data": {"setDevicePreferences": {}}})
+        with (
+            patch.object(api, "ensure_token", new=AsyncMock(return_value=True)),
+            patch.object(api, "_execute_graphql", new=execute),
+        ):
+            rejected = await api.set_device_preferences(
+                DEVICE_ID, 80, "12:00", time_window=("04:00", "11:00")
+            )
+            accepted = await api.set_device_preferences(
+                DEVICE_ID, 80, "11:00", time_window=("04:00", "11:00")
+            )
+
+        assert rejected is False
+        assert accepted is True
+        execute.assert_awaited_once()
+
     async def test_unparseable_time_returns_false(self):
         """A completely invalid time string should return False."""
         api = _make_api()
