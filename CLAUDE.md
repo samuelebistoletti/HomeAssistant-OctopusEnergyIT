@@ -41,7 +41,7 @@ uv run --with aiohttp scripts/dev-bootstrap  # first start: dev user + ha-mcp to
 
 ## Decisions (do not re-litigate without a new reason)
 
-- `UPDATE_INTERVAL = 1` minute is intentional; the maintainer confirmed there is no rate-limit risk.
+- Two-speed polling: the coordinator runs every `UPDATE_INTERVAL = 30` seconds and only refreshes SmartFlex devices and planned dispatches; the full account query runs every `ACCOUNT_REFRESH` (15 min) and meter readings are cached 30 min. Kraken limits `flexPlannedDispatches` to 5 requests/min per user (shared with the Octopus app), so dispatch requests are capped at `DISPATCH_REQUESTS_PER_MINUTE = 4` in total. Measured cost and limits: see `TECHNICAL_NOTES.md`. The polling interval is not user-configurable (Home Assistant guidance); users can call `homeassistant.update_entity`.
 - The shallow copy in `_update_local_schedule` is the intended coordinator pattern.
 
 ## Release
@@ -50,5 +50,4 @@ Bumping `version` in `custom_components/octopus_energy_it/manifest.json` on `mai
 
 ## Known open items
 
-- Each update cycle makes separate electricity and gas reading calls per meter (possible N+1); needs an API schema review before refactoring.
 - Device lookups are O(N) scans; acceptable at current device counts.

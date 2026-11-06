@@ -222,3 +222,24 @@ Tests explicitly cover:
 ## Breaking Changes
 
 When an entity `unique_id` is changed, document it in `CHANGELOG.md` with instructions for removing orphaned entities from the HA Entity Registry. Do not add migration entries for backwards compatibility — prefer an explicit breaking change with clear user instructions.
+
+---
+
+## Polling and API budget
+
+Kraken limits every account user in two ways (live values from `rateLimitInfo`, also shown in the diagnostics download):
+
+- **Points allowance per hour**: 50,000 by default, scaled with the number of supply points (200,000 measured on an account with electricity and gas).
+- **Per-field limits**, shared with the Octopus app because they apply to the same login, for example `flexPlannedDispatches` 5/min, `Property.measurements` 20/min, `completedDispatches` 300/h, `obtainKrakenToken` 3/min.
+
+The integration polls at two speeds:
+
+| Data | Refresh | Where |
+|---|---|---|
+| SmartFlex devices (status, preferences, capabilities) | every 30 s (`UPDATE_INTERVAL`) | `DEVICES_QUERY` |
+| Planned dispatches | every 30 s, max 4 requests/min in total (`DISPATCH_REQUESTS_PER_MINUTE`) | `fetch_flex_planned_dispatches(min_interval=...)` |
+| Account, balances, tariffs, contracts | every 15 min (`ACCOUNT_REFRESH`), cached otherwise | `COMPREHENSIVE_QUERY` |
+| Electricity and gas readings | cached 30 min (`READINGS_REFRESH`) | `fetch_electricity_measurements`, `fetch_gas_meter_readings` |
+| Last charging session | cached 15 min | `fetch_last_charging_session` |
+
+If the full query fails, the last account data is reused; if planned dispatches are rate-limited, the last plan is kept.

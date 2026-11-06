@@ -109,7 +109,7 @@ class OctopusEnergyITDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]
             _LOGGER,
             config_entry=entry,
             name=f"{DOMAIN}_{primary}",
-            update_interval=timedelta(minutes=UPDATE_INTERVAL),
+            update_interval=timedelta(seconds=UPDATE_INTERVAL),
         )
         self.api = api
         self.account_numbers = account_numbers

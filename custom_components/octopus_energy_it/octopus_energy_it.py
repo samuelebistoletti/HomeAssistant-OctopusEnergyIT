@@ -248,6 +248,20 @@ query ComprehensiveDataQuery($accountNumber: String!) {
 }
 """
 
+# Fast-cycle query: only the SmartFlex devices block of COMPREHENSIVE_QUERY.
+DEVICES_QUERY = (
+    "\nquery DevicesQuery($accountNumber: String!) {\n"
+    + COMPREHENSIVE_QUERY[COMPREHENSIVE_QUERY.index("  devices(accountNumber") :]
+)
+
+# Two-speed polling: account, balances, tariffs and contracts change rarely,
+# so the full query runs at most this often; the other polls only refresh the
+# devices (status, preferences) and their planned dispatches.
+ACCOUNT_REFRESH = 15 * 60  # seconds
+# Kraken allows 5 flexPlannedDispatches requests a minute per user (shared
+# with the Octopus app): stay at 4 a minute in total, whatever the devices.
+DISPATCH_REQUESTS_PER_MINUTE = 4
+
 # Query to get latest gas meter readings
 GAS_METER_READINGS_QUERY = """
 query GasMeterReadings(
@@ -748,6 +762,10 @@ class OctopusEnergyIT:
         self._readings_cache: dict[tuple, tuple[float, list[dict]]] = {}
         # device_id -> last planned dispatches fetched successfully
         self._last_dispatches: dict[str, list[dict]] = {}
+        # device_id -> when its planned dispatches were last requested
+        self._dispatches_requested_at: dict[str, float] = {}
+        # account_number -> (fetched_at, {"account", "products", "gas_products"})
+        self._account_cache: dict[str, tuple[float, dict]] = {}
         # device_id -> (fetched_at timestamp, last charging session or None)
         self._charging_sessions: dict[str, tuple[float, dict | None]] = {}
 
@@ -1060,14 +1078,20 @@ class OctopusEnergyIT:
         to minimize API calls and improve performance.
         """
         variables = {"accountNumber": account_number}
+        now = datetime.now(UTC).timestamp()
+        cached_account = self._account_cache.get(account_number)
+        devices_only = (
+            cached_account is not None and now - cached_account[0] < ACCOUNT_REFRESH
+        )
 
         try:
             _LOGGER.debug(
-                "Making API request to fetch_all_data for account %s",
+                "Making API request to fetch_all_data for account %s (%s)",
                 account_number,
+                "devices only" if devices_only else "full",
             )
             response = await self._execute_graphql(
-                COMPREHENSIVE_QUERY,
+                DEVICES_QUERY if devices_only else COMPREHENSIVE_QUERY,
                 variables=variables,
             )
 
@@ -1097,8 +1121,11 @@ class OctopusEnergyIT:
             if "data" in response:
                 data = response["data"]
 
-                account_payload = data.get("account")
-                if account_payload:
+                account_payload = None if devices_only else data.get("account")
+                if devices_only or (not account_payload and cached_account):
+                    # Reuse the account part of the last full query.
+                    result.update(cached_account[1])
+                elif account_payload:
                     self.normalise_account_properties(account_payload)
                     result["account"] = account_payload
 
@@ -1118,6 +1145,14 @@ class OctopusEnergyIT:
                             "Extracted %d gas products from account data",
                             len(gas_products),
                         )
+                    self._account_cache[account_number] = (
+                        now,
+                        {
+                            "account": result["account"],
+                            "products": result["products"],
+                            "gas_products": result["gas_products"],
+                        },
+                    )
                 else:
                     _LOGGER.debug("No account payload returned in response")
 
@@ -1138,7 +1173,12 @@ class OctopusEnergyIT:
                     )
                     dispatch_results = await asyncio.gather(
                         *[
-                            self.fetch_flex_planned_dispatches(did)
+                            self.fetch_flex_planned_dispatches(
+                                did,
+                                min_interval=60
+                                * len(device_entries)
+                                / DISPATCH_REQUESTS_PER_MINUTE,
+                            )
                             for did, _ in device_entries
                         ],
                         return_exceptions=True,
@@ -1693,8 +1733,23 @@ class OctopusEnergyIT:
         )
         return vehicle_devices
 
-    async def fetch_flex_planned_dispatches(self, device_id: str):
-        """Fetch planned dispatches for a SmartFlex device."""
+    async def fetch_flex_planned_dispatches(
+        self, device_id: str, *, min_interval: float = 0
+    ):
+        """Fetch planned dispatches for a SmartFlex device.
+
+        Within *min_interval* seconds of the previous request the last known
+        dispatches are returned without calling the API.
+        """
+        now = datetime.now(UTC).timestamp()
+        last_request = self._dispatches_requested_at.get(device_id)
+        if (
+            last_request is not None
+            and now - last_request < min_interval
+            and device_id in self._last_dispatches
+        ):
+            return self._last_dispatches[device_id]
+        self._dispatches_requested_at[device_id] = now
         response = await self._execute_graphql(
             FLEX_PLANNED_DISPATCHES_QUERY,
             variables={"deviceId": device_id},

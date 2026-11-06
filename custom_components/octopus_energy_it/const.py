@@ -5,8 +5,9 @@ DOMAIN = "octopus_energy_it"
 CONF_EMAIL = "email"
 CONF_PASSWORD = "password"  # nosec B105 — config key name, not a hardcoded credential
 
-# Debug interval settings
-UPDATE_INTERVAL = 1  # Update interval in minutes
+# Fast polling cycle (devices and planned dispatches); the account, tariffs
+# and readings are refreshed less often, see octopus_energy_it.py.
+UPDATE_INTERVAL = 30  # seconds
 
 # Token management
 TOKEN_REFRESH_MARGIN = (

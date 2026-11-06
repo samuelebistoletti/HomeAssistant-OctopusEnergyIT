@@ -1049,7 +1049,7 @@ class TestFetchAllData:
         ):
             result = await api.fetch_all_data(ACCOUNT_NUMBER)
 
-        flex_mock.assert_called_once_with(DEVICE_ID)
+        flex_mock.assert_called_once_with(DEVICE_ID, min_interval=15.0)
         assert len(result["plannedDispatches"]) == 1
 
     async def test_returns_none_on_network_error(self):

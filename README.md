@@ -182,6 +182,15 @@ Le entità dei dispositivi smart (switch, number, select) vengono create solo se
 
 Da **Impostazioni → Dispositivi e servizi → Octopus Energy Italy → ⋮ → Scarica diagnostica** si ottiene un file con dati personali, credenziali, POD/PDR e numeri di account oscurati, le ultime letture grezze del contatore e il consumo dei punti API orari. Allegalo alle segnalazioni di problemi.
 
+## Frequenza di aggiornamento
+
+- Stato di auto e caricatore e ricariche pianificate: ogni **30 secondi**.
+- Account, saldi, tariffe e contratti: ogni **15 minuti**.
+- Letture del contatore luce e gas: ogni **30 minuti** (Octopus le pubblica una volta al giorno o al mese).
+- Ultima sessione di ricarica: ogni **15 minuti**.
+
+Octopus limita le richieste per utente, e i limiti sono condivisi con l'app Octopus: per questo l'intervallo non è configurabile. Per un aggiornamento immediato usa l'azione `homeassistant.update_entity` su un'entità dell'integrazione. Il consumo dei limiti è visibile nella diagnostica.
+
 ## Statistiche per la Dashboard Energia
 
 Le letture del contatore arrivano all'API con qualche giorno di ritardo, quindi i sensori cambiano valore nel giorno del polling e non in quello del consumo reale. Per avere i giorni corretti nella Dashboard Energia l'integrazione importa anche delle **statistiche esterne**, con il consumo attribuito al giorno a cui appartiene:
