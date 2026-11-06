@@ -421,3 +421,51 @@ class TestDeviceReauthIssues:
             "device_reauthentication_d2",
             "device_reauthentication_d3",
         ]
+
+
+class TestBoostChargeService:
+    def _call(self, hass, **data):
+        return SimpleNamespace(hass=hass, data={"device_id": DEVICE_ID, **data})
+
+    async def test_boost_with_target_and_end_time(self):
+        from datetime import UTC, datetime, timedelta
+
+        api = _api(update_boost_charge=AsyncMock(return_value=DEVICE_ID))
+        hass, runtime = _service_hass(api)
+        end = datetime.now(UTC) + timedelta(hours=2)
+
+        await services_mod._async_boost_charge(
+            self._call(hass, target_percentage=80, end_time=end)
+        )
+
+        api.update_boost_charge.assert_awaited_once_with(
+            DEVICE_ID, "BOOST", target_percentage=80, end_time=end
+        )
+        runtime.coordinator.async_request_refresh.assert_awaited_once()
+
+    async def test_end_time_in_the_past_is_rejected(self):
+        from datetime import UTC, datetime, timedelta
+
+        api = _api(update_boost_charge=AsyncMock(return_value=DEVICE_ID))
+        hass, _ = _service_hass(api)
+        with pytest.raises(ServiceValidationError) as err:
+            await services_mod._async_boost_charge(
+                self._call(hass, end_time=datetime.now(UTC) - timedelta(minutes=1))
+            )
+        assert err.value.translation_key == "boost_end_in_past"
+        api.update_boost_charge.assert_not_awaited()
+
+    async def test_rejected_boost_raises(self):
+        api = _api(update_boost_charge=AsyncMock(return_value=None))
+        hass, _ = _service_hass(api)
+        with pytest.raises(HomeAssistantError) as err:
+            await services_mod._async_boost_charge(self._call(hass))
+        assert err.value.translation_key == "boost_charge_failed"
+
+    def test_schema_bounds_target(self):
+        import voluptuous as vol
+
+        with pytest.raises(vol.Invalid):
+            services_mod.BOOST_CHARGE_SCHEMA(
+                {"device_id": DEVICE_ID, "target_percentage": 5}
+            )

@@ -81,6 +81,9 @@
     },
     "device_unavailable": {
       "message": "The data of this Octopus smart device is not available right now."
+    },
+    "boost_end_in_past": {
+      "message": "The boost end time must be in the future."
     }
   },
   "issues": {
@@ -273,6 +276,24 @@
         "target_time": {
           "name": "Ready-by time",
           "description": "Time the charge must be completed by, within the window allowed by the device (usually 04:00–11:00 or 04:00–17:00)."
+        }
+      }
+    },
+    "boost_charge": {
+      "name": "Boost charge",
+      "description": "Starts an immediate (boost) charge of an Octopus smart device, optionally up to a target state of charge or until a given time.",
+      "fields": {
+        "device_id": {
+          "name": "Device ID",
+          "description": "Kraken ID of the smart device (shown in the device attributes)."
+        },
+        "target_percentage": {
+          "name": "Target state of charge",
+          "description": "Stop the boost at this state of charge (10–100%)."
+        },
+        "end_time": {
+          "name": "End time",
+          "description": "Stop the boost at this time."
         }
       }
     }

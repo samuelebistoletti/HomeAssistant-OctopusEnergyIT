@@ -1692,15 +1692,28 @@ class OctopusEnergyIT:
         )
         return dispatches
 
-    async def update_boost_charge(self, device_id: str, action: str) -> str | None:
+    async def update_boost_charge(
+        self,
+        device_id: str,
+        action: str,
+        *,
+        target_percentage: int | None = None,
+        end_time: datetime | None = None,
+    ) -> str | None:
         """Trigger or cancel a boost charge for a device.
 
-        *action* should be ``"BOOST"`` or ``"CANCEL"``.
+        *action* should be ``"BOOST"`` or ``"CANCEL"``. A boost can stop at
+        *target_percentage* (state of charge) or at *end_time*.
         Returns the device id on success, ``None`` on failure.
         """
+        boost_input: dict = {"deviceId": device_id, "action": action}
+        if target_percentage is not None:
+            boost_input["targetSocPercentage"] = int(target_percentage)
+        if end_time is not None:
+            boost_input["endTime"] = end_time.isoformat()
         response = await self._execute_graphql(
             BOOST_CHARGE_MUTATION,
-            variables={"input": {"deviceId": device_id, "action": action}},
+            variables={"input": boost_input},
         )
 
         if not isinstance(response, dict):

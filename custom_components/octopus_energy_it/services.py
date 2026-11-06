@@ -9,6 +9,7 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 import homeassistant.helpers.config_validation as cv
+from homeassistant.util import dt as dt_util
 import voluptuous as vol
 
 from .const import DOMAIN
@@ -23,6 +24,19 @@ SERVICE_SET_DEVICE_PREFERENCES = "set_device_preferences"
 ATTR_DEVICE_ID = "device_id"
 ATTR_TARGET_PERCENTAGE = "target_percentage"
 ATTR_TARGET_TIME = "target_time"
+
+SERVICE_BOOST_CHARGE = "boost_charge"
+ATTR_END_TIME = "end_time"
+
+BOOST_CHARGE_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_DEVICE_ID): cv.string,
+        vol.Optional(ATTR_TARGET_PERCENTAGE): vol.All(
+            vol.Coerce(int), vol.Range(min=10, max=100)
+        ),
+        vol.Optional(ATTR_END_TIME): cv.datetime,
+    }
+)
 
 SET_DEVICE_PREFERENCES_SCHEMA = vol.Schema(
     {
@@ -104,6 +118,35 @@ async def _async_set_device_preferences(call: ServiceCall) -> None:
     await runtime.coordinator.async_request_refresh()
 
 
+async def _async_boost_charge(call: ServiceCall) -> None:
+    """Start a boost charge, optionally up to a target or until a time."""
+    device_id: str = call.data[ATTR_DEVICE_ID]
+    runtime, _device = _find_device_owner(call.hass, device_id)
+    if runtime is None:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="device_not_found",
+            translation_placeholders={"device_id": device_id},
+        )
+    end_time = call.data.get(ATTR_END_TIME)
+    if end_time is not None:
+        end_time = dt_util.as_utc(end_time)
+        if end_time <= dt_util.utcnow():
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="boost_end_in_past"
+            )
+    if not await runtime.api.update_boost_charge(
+        device_id,
+        "BOOST",
+        target_percentage=call.data.get(ATTR_TARGET_PERCENTAGE),
+        end_time=end_time,
+    ):
+        raise HomeAssistantError(
+            translation_domain=DOMAIN, translation_key="boost_charge_failed"
+        )
+    await runtime.coordinator.async_request_refresh()
+
+
 @callback
 def async_setup_services(hass: HomeAssistant) -> None:
     """Register the integration's service actions."""
@@ -112,4 +155,10 @@ def async_setup_services(hass: HomeAssistant) -> None:
         SERVICE_SET_DEVICE_PREFERENCES,
         _async_set_device_preferences,
         schema=SET_DEVICE_PREFERENCES_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_BOOST_CHARGE,
+        _async_boost_charge,
+        schema=BOOST_CHARGE_SCHEMA,
     )

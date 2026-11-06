@@ -137,3 +137,37 @@ def test_sensor_reads_the_device_session():
     assert sensor.native_value == 21.4
     assert sensor.extra_state_attributes["cost"] == 2.97
     assert sensor.extra_state_attributes["session_type"] == "SMART"
+
+
+async def test_boost_input_includes_target_and_end_time():
+    from datetime import UTC, datetime
+
+    api = _api()
+    execute = AsyncMock(return_value={"data": {"updateBoostCharge": {"id": "dev-1"}}})
+    end = datetime(2026, 11, 7, 6, 30, tzinfo=UTC)
+    with patch.object(api, "_execute_graphql", new=execute):
+        assert (
+            await api.update_boost_charge(
+                "dev-1", "BOOST", target_percentage=80, end_time=end
+            )
+            == "dev-1"
+        )
+
+    assert execute.await_args.kwargs["variables"] == {
+        "input": {
+            "deviceId": "dev-1",
+            "action": "BOOST",
+            "targetSocPercentage": 80,
+            "endTime": "2026-11-07T06:30:00+00:00",
+        }
+    }
+
+
+async def test_plain_boost_input_is_unchanged():
+    api = _api()
+    execute = AsyncMock(return_value={"data": {"updateBoostCharge": {"id": "dev-1"}}})
+    with patch.object(api, "_execute_graphql", new=execute):
+        await api.update_boost_charge("dev-1", "CANCEL")
+    assert execute.await_args.kwargs["variables"] == {
+        "input": {"deviceId": "dev-1", "action": "CANCEL"}
+    }

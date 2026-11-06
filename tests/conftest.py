@@ -253,6 +253,9 @@ def _install_stubs() -> None:
     _cv = _stub("homeassistant.helpers.config_validation")
     if not hasattr(_cv, "string"):
         _cv.string = str
+        _cv.datetime = lambda value: (
+            value if isinstance(value, datetime) else datetime.fromisoformat(value)
+        )
         _cv.config_entry_only_config_schema = lambda domain: None
     sys.modules["homeassistant.helpers"].config_validation = _cv
 

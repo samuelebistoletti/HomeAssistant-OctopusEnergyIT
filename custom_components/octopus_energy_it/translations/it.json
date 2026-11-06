@@ -81,6 +81,9 @@
     },
     "device_unavailable": {
       "message": "I dati di questo dispositivo smart Octopus non sono disponibili al momento."
+    },
+    "boost_end_in_past": {
+      "message": "L'orario di fine del boost deve essere nel futuro."
     }
   },
   "issues": {
@@ -273,6 +276,24 @@
         "target_time": {
           "name": "Orario di fine ricarica",
           "description": "Orario entro cui la ricarica deve terminare, entro la finestra consentita dal dispositivo (di solito 04:00–11:00 o 04:00–17:00)."
+        }
+      }
+    },
+    "boost_charge": {
+      "name": "Ricarica boost",
+      "description": "Avvia una ricarica immediata (boost) di un dispositivo smart Octopus, facoltativamente fino a un livello di carica o fino a un orario.",
+      "fields": {
+        "device_id": {
+          "name": "ID dispositivo",
+          "description": "ID Kraken del dispositivo smart (visibile negli attributi del dispositivo)."
+        },
+        "target_percentage": {
+          "name": "Livello di carica obiettivo",
+          "description": "Ferma il boost a questo livello di carica (10–100%)."
+        },
+        "end_time": {
+          "name": "Orario di fine",
+          "description": "Ferma il boost a questo orario."
         }
       }
     }
