@@ -42,3 +42,25 @@ boost_charge:
       required: false
       selector:
         datetime:
+
+submit_gas_reading:
+  fields:
+    reading:
+      required: true
+      example: 1234
+      selector:
+        number:
+          min: 0
+          max: 99999999
+          step: 1
+          mode: box
+          unit_of_measurement: "m³"
+    reading_date:
+      required: false
+      selector:
+        date:
+    account_number:
+      required: false
+      example: "A-1234ABCD"
+      selector:
+        text:

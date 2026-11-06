@@ -111,13 +111,13 @@ Nota: `electricity_last_reading` è la lettura cumulativa del contatore (adatta 
 
 - `sensor.octopus_<account>_electricity_balance`, `sensor.octopus_<account>_gas_balance`, `sensor.octopus_<account>_heat_balance` e `sensor.octopus_<account>_<ledger>_balance` riportano i saldi monetari forniti dall'API.
 - `sensor.octopus_<account>_electricity_contract_start`, `_electricity_contract_end` e `_electricity_contract_days_until_expiry` espongono rispettivamente data di attivazione, data di termine e giorni residui del contratto luce (equivalenti disponibili per il gas).
-- `sensor.octopus_<account>_vehicle_battery_size` indica la capacità stimata dell'accumulatore e fornisce gli attributi `account_number`, `device_id`, `device_name`, `vehicle_model`, `device_provider`.
+- `sensor.octopus_<account>_vehicle_battery_size` indica la capacità stimata dell'accumulatore e fornisce gli attributi `account_number`, `device_id`, `device_name`, `vehicle_model`.
 
 **SmartFlex e dispatch**
 
 | Entità | Unità | Attributi extra |
 | --- | --- | --- |
-| `sensor.octopus_<account>_ev_charge_status` | testo | `account_number`, `device_id`, `device_name`, `device_model`, `device_provider`, `battery_capacity_kwh`, `status_current_state`, `status_connection_state`, `status_is_suspended`, `preferences_mode`, `preferences_unit`, `preferences_target_type`, `allow_grid_export`, `schedules`, `target_day_of_week`, `target_time`, `target_percentage`, `boost_active`, `boost_available`, `last_synced_at` |
+| `sensor.octopus_<account>_ev_charge_status` | testo | `account_number`, `device_id`, `device_name`, `device_model`, `battery_capacity_kwh`, `status_current_state`, `status_connection_state`, `status_is_suspended`, `preferences_mode`, `preferences_unit`, `preferences_target_type`, `allow_grid_export`, `schedules`, `target_day_of_week`, `target_time`, `target_percentage`, `boost_active`, `boost_available`, `last_synced_at` |
 | `sensor.octopus_<account>_ev_next_dispatch_start` | timestamp | `end`, `energy_kwh`, `type` — orario di inizio della prossima finestra di carica pianificata |
 | `sensor.octopus_<account>_ev_next_dispatch_end` | timestamp | `start`, `energy_kwh`, `type` — orario di fine della prossima finestra di carica pianificata |
 | `sensor.octopus_<account>_ev_planned_dispatches` | numero | `dispatches` (lista completa), `current_start`, `current_end` — conteggio delle finestre future; espone anche la finestra attiva corrente |
@@ -166,6 +166,11 @@ I prezzi vengono aggiornati ogni ora. Se il sito delle tariffe non risponde, il 
   - `device_id`: ID del dispositivo (obbligatorio)
   - `target_percentage`: ferma il boost a questo livello di carica, 10–100 (facoltativo)
   - `end_time`: ferma il boost a questo orario (facoltativo)
+
+- `octopus_energy_it.submit_gas_reading` – invia l'autolettura del contatore gas
+  - `reading`: valore del contatore in m³ interi, solo le cifre nere (obbligatorio)
+  - `reading_date`: data della lettura, oggi se omessa (facoltativo)
+  - `account_number`: serve solo con più account Octopus con fornitura gas (facoltativo)
 
 Le entità dei dispositivi smart (switch, number, select) vengono create solo se il dispositivo supporta la funzione corrispondente secondo Kraken (`capabilities`). Se il collegamento tra Octopus e l'auto o il caricatore scade, compare una segnalazione in **Impostazioni → Sistema → Riparazioni**: va ricollegato dall'app Octopus.
 

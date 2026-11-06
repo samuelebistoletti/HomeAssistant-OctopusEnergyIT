@@ -6,7 +6,7 @@ managing devices, and retrieving electricity usage and tariff data.
 
 import asyncio
 import copy
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 import json
 import logging
 
@@ -199,7 +199,6 @@ query ComprehensiveDataQuery($accountNumber: String!) {
       currentState
       isSuspended
     }
-    provider
     preferences {
       mode
       schedules {
@@ -488,6 +487,14 @@ query LastChargingSession($accountNumber: String!, $deviceId: String!) {{
 # Charging sessions change rarely: refresh them at most this often.
 CHARGING_SESSION_REFRESH = 15 * 60  # seconds
 
+SUBMIT_GAS_SELF_READING_MUTATION = """
+mutation SubmitGasSelfReading($input: SubmitGasSelfReadingInput!) {
+  submitGasSelfReading(input: $input) {
+    submitted
+  }
+}
+"""
+
 RATE_LIMIT_INFO_QUERY = """
 query RateLimitInfo {
   rateLimitInfo {
@@ -513,6 +520,15 @@ class OctopusEnergyITAuthError(OctopusEnergyITError):
 
 class OctopusEnergyITConnectionError(OctopusEnergyITError):
     """The API could not be reached or answered unexpectedly."""
+
+
+class OctopusEnergyITRequestError(OctopusEnergyITError):
+    """The API rejected a request; ``code`` holds the Kraken error code."""
+
+    def __init__(self, code: str | None, message: str) -> None:
+        """Store the Kraken error *code* next to the message."""
+        super().__init__(message)
+        self.code = code
 
 
 class TokenManager:
@@ -1975,6 +1991,33 @@ class OctopusEnergyIT:
             "soc_change": cls.to_float_or_none(node.get("stateOfChargeChange")),
             "soc_final": cls.to_float_or_none(node.get("stateOfChargeFinal")),
         }
+
+    async def submit_gas_self_reading(
+        self, pdr: str, consumption_value: int, reading_date: date | None = None
+    ) -> None:
+        """Submit a gas meter self-reading (cubic metres) for *pdr*.
+
+        Raises ``OctopusEnergyITRequestError`` when Kraken rejects the reading
+        (for example ``KT-IT-6410`` invalid value, ``KT-IT-6411`` reading not
+        needed) and ``OctopusEnergyITConnectionError`` when it cannot be sent.
+        """
+        reading: dict = {"pdr": pdr, "consumptionValue": int(consumption_value)}
+        if reading_date is not None:
+            reading["readingDate"] = reading_date.isoformat()
+        response = await self._execute_graphql(
+            SUBMIT_GAS_SELF_READING_MUTATION, variables={"input": reading}
+        )
+        if not isinstance(response, dict):
+            raise OctopusEnergyITConnectionError("Gas reading could not be sent")
+        if errors := response.get("errors"):
+            first = errors[0] or {}
+            raise OctopusEnergyITRequestError(
+                (first.get("extensions") or {}).get("errorCode"),
+                first.get("message") or "Gas reading rejected",
+            )
+        result = (response.get("data") or {}).get("submitGasSelfReading") or {}
+        if not result.get("submitted"):
+            raise OctopusEnergyITRequestError(None, "Gas reading not accepted")
 
     async def fetch_rate_limit_info(self) -> dict | None:
         """Return the hourly points allowance of the logged-in user, if available."""

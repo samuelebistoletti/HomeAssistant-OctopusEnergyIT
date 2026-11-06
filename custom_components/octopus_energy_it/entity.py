@@ -229,6 +229,5 @@ class OctopusPublicProductsEntity(CoordinatorEntity):
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, device_identifier)},
             manufacturer="Octopus Energy Italy",
-            name="Octopus Energy Public Tariffs",
-            model="Octopus Energy Public Tariffs",
+            translation_key="public_tariffs",
         )

@@ -6,12 +6,15 @@
 - Energy dashboard statistics with the real reading dates: electricity consumption (kWh), electricity cost (EUR, single-rate tariffs only) and gas consumption (m³) are imported as external statistics, booked on the day the energy was used instead of the day Home Assistant polled the API. See the README section "Statistiche per la Dashboard Energia". (Fixes #19, #21; based on the idea in #20, thanks @riccardorossi92)
 - Reauthentication: when Octopus rejects the stored password (for example after a password change), Home Assistant now shows a "Reauthentication required" prompt and asks only for the new password, instead of the integration silently failing to load.
 - The same Octopus login can no longer be added twice.
+- New action `octopus_energy_it.submit_gas_reading`: sends a gas meter self-reading (whole m³, optional date) to Octopus. Readings lower than the last registered one are rejected before sending, and Octopus answers such as "reading not needed" are shown as translated errors.
 - New action `octopus_energy_it.boost_charge`: starts a boost charge that can stop at a target state of charge (`target_percentage`) or at a given time (`end_time`). The boost switch keeps working as before.
 - New sensor **Last charging session** for each EV or charger: energy added (kWh), with start, end, session type (smart/boost), state of charge change and, when Kraken provides it, cost as attributes. Refreshed every 15 minutes to keep API usage low.
 - Repair issue when the link between Octopus and a smart device (car or charger) has expired and must be renewed in the Octopus app; it clears itself once reconnected.
 - Diagnostics download (Settings → Devices & services → Octopus Energy Italy → ⋮ → Download diagnostics) with credentials, tokens, account numbers, POD/PDR and addresses redacted. It includes the latest raw electricity register readings, so please attach it to bug reports about readings.
 
 ### Changed
+- The `device_provider` attribute is removed from the EV charging status and vehicle battery sensors: Kraken deprecated the `provider` field (removal from 2027-04-15) and the integration now relies on device capabilities instead. Update any template or automation that read it.
+- The public tariffs device name is translated ("Tariffe pubbliche Octopus Energy" in Italian) instead of a fixed English name.
 - Smart-device entities follow the device capabilities reported by Kraken: the smart-control switch, the boost switch and the charge target/ready-by entities are only created when the device supports suspension, boost or preference updates (devices without capability data keep the previous behaviour).
 - The ready-by time is validated against the window of the device (for example 04:00–11:00 on some chargers) instead of a fixed 04:00–17:00, in the entities and in the `set_device_preferences` action.
 - Access tokens are renewed with the Kraken refresh token, so the password is sent to the API only for the first login or when the refresh token is rejected.

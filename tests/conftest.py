@@ -7,7 +7,7 @@ real HA installation.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date as _date_type, datetime
 import os
 import sys
 import types
@@ -253,6 +253,9 @@ def _install_stubs() -> None:
     _cv = _stub("homeassistant.helpers.config_validation")
     if not hasattr(_cv, "string"):
         _cv.string = str
+        _cv.date = lambda value: (
+            value if isinstance(value, _date_type) else _date_type.fromisoformat(value)
+        )
         _cv.datetime = lambda value: (
             value if isinstance(value, datetime) else datetime.fromisoformat(value)
         )

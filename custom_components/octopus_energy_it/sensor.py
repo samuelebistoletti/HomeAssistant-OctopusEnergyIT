@@ -1591,7 +1591,6 @@ class OctopusEVChargeStatusSensor(OctopusCoordinatorEntity, SensorEntity):
             "device_id": None,
             "device_name": None,
             "device_model": None,
-            "device_provider": None,
             "battery_capacity_kwh": None,
             "status_current_state": "Unknown",
             "status_normalized": "unknown",
@@ -1647,7 +1646,6 @@ class OctopusEVChargeStatusSensor(OctopusCoordinatorEntity, SensorEntity):
             "device_id": device.get("id"),
             "device_name": device.get("name"),
             "device_model": device_model(device),
-            "device_provider": device.get("provider"),
             "battery_capacity_kwh": device_battery_size_kwh(device),
             "status_current_state": current_state,
             "status_normalized": _normalize_ev_status(current_state),
@@ -1731,7 +1729,6 @@ class OctopusVehicleBatterySizeSensor(OctopusCoordinatorEntity, SensorEntity):
                         "device_id": device.get("id"),
                         "device_name": device.get("name"),
                         "vehicle_model": device_model(device),
-                        "device_provider": device.get("provider"),
                     }
                 )
                 break

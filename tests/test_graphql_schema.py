@@ -27,10 +27,7 @@ _SCHEMA = _ROOT / "tests" / "fixtures" / "oeit_graphql_schema.json"
 
 # Deprecated fields still in use on purpose, with the planned removal date.
 # Remove an entry as soon as the code stops using the field.
-_ALLOWED_DEPRECATED = {
-    # SmartFlex `provider`: replace with `capabilities` (removal >= 2027-04-15).
-    "provider",
-}
+_ALLOWED_DEPRECATED: set[str] = set()
 
 
 def _operations() -> dict[str, str]:

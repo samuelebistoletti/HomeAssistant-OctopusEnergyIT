@@ -39,6 +39,11 @@
       "wrong_account": "The email belongs to a different Octopus account than the one configured. Add it as a new integration instead."
     }
   },
+  "device": {
+    "public_tariffs": {
+      "name": "Octopus Energy public tariffs"
+    }
+  },
   "exceptions": {
     "charge_target_update_failed": {
       "message": "Unable to update the charge target. Check the log for details."
@@ -84,6 +89,24 @@
     },
     "boost_end_in_past": {
       "message": "The boost end time must be in the future."
+    },
+    "gas_account_ambiguous": {
+      "message": "No single Octopus gas supply found: set account_number when more than one account has gas."
+    },
+    "gas_account_not_found": {
+      "message": "No gas supply found for that Octopus account."
+    },
+    "gas_reading_below_last": {
+      "message": "The reading {reading} m³ is lower than the last registered reading ({last} m³). Check the value."
+    },
+    "gas_reading_invalid": {
+      "message": "Octopus rejected the reading as not valid."
+    },
+    "gas_reading_not_needed": {
+      "message": "Octopus does not need a reading at the moment."
+    },
+    "gas_reading_failed": {
+      "message": "The gas reading could not be sent to Octopus. Check the log for details."
     }
   },
   "issues": {
@@ -294,6 +317,24 @@
         "end_time": {
           "name": "End time",
           "description": "Stop the boost at this time."
+        }
+      }
+    },
+    "submit_gas_reading": {
+      "name": "Submit gas reading",
+      "description": "Sends a gas meter self-reading (whole cubic metres) to Octopus Energy Italy.",
+      "fields": {
+        "reading": {
+          "name": "Meter reading",
+          "description": "Value shown by the gas meter, in whole cubic metres (black digits only)."
+        },
+        "reading_date": {
+          "name": "Reading date",
+          "description": "Day the meter was read; today if omitted."
+        },
+        "account_number": {
+          "name": "Account number",
+          "description": "Only needed when more than one Octopus account has a gas supply."
         }
       }
     }

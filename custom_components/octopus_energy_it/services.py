@@ -14,6 +14,10 @@ import voluptuous as vol
 
 from .const import DOMAIN
 from .entity import device_time_window
+from .octopus_energy_it import (
+    OctopusEnergyITConnectionError,
+    OctopusEnergyITRequestError,
+)
 
 if TYPE_CHECKING:
     from .coordinator import OctopusEnergyITRuntimeData
@@ -37,6 +41,25 @@ BOOST_CHARGE_SCHEMA = vol.Schema(
         vol.Optional(ATTR_END_TIME): cv.datetime,
     }
 )
+
+SERVICE_SUBMIT_GAS_READING = "submit_gas_reading"
+ATTR_ACCOUNT_NUMBER = "account_number"
+ATTR_READING = "reading"
+ATTR_READING_DATE = "reading_date"
+
+SUBMIT_GAS_READING_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_READING): vol.All(vol.Coerce(int), vol.Range(min=0)),
+        vol.Optional(ATTR_READING_DATE): cv.date,
+        vol.Optional(ATTR_ACCOUNT_NUMBER): cv.string,
+    }
+)
+
+# Kraken error codes of submitGasSelfReading mapped to translation keys.
+_GAS_READING_ERRORS = {
+    "KT-IT-6410": "gas_reading_invalid",
+    "KT-IT-6411": "gas_reading_not_needed",
+}
 
 SET_DEVICE_PREFERENCES_SCHEMA = vol.Schema(
     {
@@ -147,6 +170,65 @@ async def _async_boost_charge(call: ServiceCall) -> None:
     await runtime.coordinator.async_request_refresh()
 
 
+def _find_gas_account(
+    hass: HomeAssistant, account_number: str | None
+) -> tuple[OctopusEnergyITRuntimeData, dict] | tuple[None, None]:
+    """Return the runtime data and account data of the gas supply to use."""
+    matches = []
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        if entry.state is not ConfigEntryState.LOADED:
+            continue
+        runtime = entry.runtime_data
+        for number, account in (runtime.coordinator.data or {}).items():
+            if account.get("gas_pdr") and account_number in (None, number):
+                matches.append((runtime, account))
+    if len(matches) == 1:
+        return matches[0]
+    return None, None
+
+
+async def _async_submit_gas_reading(call: ServiceCall) -> None:
+    """Send a gas meter self-reading to Octopus."""
+    reading: int = call.data[ATTR_READING]
+    account_number = call.data.get(ATTR_ACCOUNT_NUMBER)
+    runtime, account = _find_gas_account(call.hass, account_number)
+    if runtime is None:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="gas_account_not_found"
+            if account_number
+            else "gas_account_ambiguous",
+        )
+
+    last = (account.get("gas_last_reading") or {}).get("value")
+    if last is not None and reading < last:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="gas_reading_below_last",
+            translation_placeholders={"reading": str(reading), "last": f"{last:g}"},
+        )
+
+    try:
+        await runtime.api.submit_gas_self_reading(
+            account["gas_pdr"], reading, call.data.get(ATTR_READING_DATE)
+        )
+    except OctopusEnergyITRequestError as err:
+        key = _GAS_READING_ERRORS.get(err.code or "")
+        if key:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key=key
+            ) from err
+        raise HomeAssistantError(
+            translation_domain=DOMAIN, translation_key="gas_reading_failed"
+        ) from err
+    except OctopusEnergyITConnectionError as err:
+        raise HomeAssistantError(
+            translation_domain=DOMAIN, translation_key="gas_reading_failed"
+        ) from err
+
+    await runtime.coordinator.async_request_refresh()
+
+
 @callback
 def async_setup_services(hass: HomeAssistant) -> None:
     """Register the integration's service actions."""
@@ -161,4 +243,10 @@ def async_setup_services(hass: HomeAssistant) -> None:
         SERVICE_BOOST_CHARGE,
         _async_boost_charge,
         schema=BOOST_CHARGE_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SUBMIT_GAS_READING,
+        _async_submit_gas_reading,
+        schema=SUBMIT_GAS_READING_SCHEMA,
     )

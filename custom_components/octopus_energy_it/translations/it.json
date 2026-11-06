@@ -39,6 +39,11 @@
       }
     }
   },
+  "device": {
+    "public_tariffs": {
+      "name": "Tariffe pubbliche Octopus Energy"
+    }
+  },
   "exceptions": {
     "charge_target_update_failed": {
       "message": "Impossibile aggiornare il target di carica. Controlla i log per i dettagli."
@@ -84,6 +89,24 @@
     },
     "boost_end_in_past": {
       "message": "L'orario di fine del boost deve essere nel futuro."
+    },
+    "gas_account_ambiguous": {
+      "message": "Nessuna fornitura gas Octopus univoca: indica account_number se più account hanno il gas."
+    },
+    "gas_account_not_found": {
+      "message": "Nessuna fornitura gas trovata per quell'account Octopus."
+    },
+    "gas_reading_below_last": {
+      "message": "La lettura {reading} m³ è inferiore all'ultima registrata ({last} m³). Controlla il valore."
+    },
+    "gas_reading_invalid": {
+      "message": "Octopus ha rifiutato la lettura perché non valida."
+    },
+    "gas_reading_not_needed": {
+      "message": "Al momento Octopus non ha bisogno di una lettura."
+    },
+    "gas_reading_failed": {
+      "message": "Non è stato possibile inviare la lettura gas a Octopus. Controlla i log per i dettagli."
     }
   },
   "issues": {
@@ -294,6 +317,24 @@
         "end_time": {
           "name": "Orario di fine",
           "description": "Ferma il boost a questo orario."
+        }
+      }
+    },
+    "submit_gas_reading": {
+      "name": "Invia autolettura gas",
+      "description": "Invia a Octopus Energy Italy l'autolettura del contatore gas (metri cubi interi).",
+      "fields": {
+        "reading": {
+          "name": "Lettura contatore",
+          "description": "Valore indicato dal contatore gas in metri cubi interi (solo le cifre nere)."
+        },
+        "reading_date": {
+          "name": "Data lettura",
+          "description": "Giorno della lettura; oggi se non indicato."
+        },
+        "account_number": {
+          "name": "Numero account",
+          "description": "Serve solo se più account Octopus hanno una fornitura gas."
         }
       }
     }
