@@ -1,0 +1,25 @@
+# GitHub Pages (Jekyll) settings for https://octopusenergy-ha.bistoletti.me
+title: HACS
+description: "Integrazione gratuita per Home Assistant: tariffe, consumi, letture del contatore e ricarica Intelligent Octopus di Octopus Energy Italia."
+url: https://octopusenergy-ha.bistoletti.me
+lang: it-IT
+
+# Publish only the documentation, never repo tooling or working notes
+exclude:
+  - CLAUDE.md
+  - CLAUDE.local.md
+  - Daily Notes
+  - Scratchpad.md
+  - Task Board.md
+  - TECHNICAL_NOTES.md
+  - CONTRIBUTING.md
+  - SECURITY.md
+  - custom_components
+  - tests
+  - scripts
+  - config
+  - docker-compose.yml
+  - requirements.txt
+  - requirements_test.txt
+  - pytest.ini
+  - hacs.json
