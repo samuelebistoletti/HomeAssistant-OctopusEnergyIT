@@ -8,9 +8,7 @@ lang: it-IT
 exclude:
   - CLAUDE.md
   - CLAUDE.local.md
-  - Daily Notes
-  - Scratchpad.md
-  - Task Board.md
+  - docs
   - TECHNICAL_NOTES.md
   - CONTRIBUTING.md
   - SECURITY.md
