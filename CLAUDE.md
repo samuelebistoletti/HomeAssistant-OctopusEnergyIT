@@ -4,6 +4,12 @@ Custom Home Assistant integration (HACS) for Octopus Energy Italy. It polls the 
 
 This file is shared with every contributor and with any automated agent working on the repo. Keep it short, factual and free of personal or machine-specific content. Deep architecture notes live in `TECHNICAL_NOTES.md`: read it before changing the coordinator, token handling, entities or tests.
 
+## Sessions
+
+- **Start**: read `docs/dev/MEMORY.md` (where the work stands, the next step, operating facts). Open work lives in GitHub issues.
+- **Checkpoint**: when a piece of work closes or the owner says they are stopping, rewrite "Now" in `docs/dev/MEMORY.md` and commit it with the work. The repo is public: project facts only, nothing personal or secret.
+- Claude Code's own configuration stays on each machine and out of git: `.claude/`, `CLAUDE.local.md`, `.mcp.json`.
+
 ## Commands
 
 ```bash
@@ -37,6 +43,7 @@ uv run --with aiohttp scripts/dev-bootstrap  # first start: dev user + ha-mcp to
 - All user-facing strings, including exception messages, go through translation keys in `strings.json` and both translation files. Code, comments and docstrings are in English.
 - Tests: in test modules use `sys.modules.setdefault(...)`, never direct assignment, so the conftest stubs are not overwritten. Add or update tests for any logic change.
 - Changing an entity `unique_id` is a breaking change: document it in `CHANGELOG.md` with orphan-entity cleanup steps. No backwards-compatibility migrations.
+- Changing a sensor's `state_class` or unit (for example `total` to `measurement`, or a custom unit to one HA cannot convert) makes HA raise one statistics repair per change per entity (`units_changed`, `mean_type_changed`; the latter is fixed only by deleting the old statistics). List every such repair in `CHANGELOG.md` with the fix.
 - Debug flags in `const.py` (`DEBUG_ENABLED`, `LOG_API_RESPONSES`, `LOG_TOKEN_RESPONSES`) must be `False` in any commit.
 
 ## Decisions (do not re-litigate without a new reason)
@@ -51,3 +58,17 @@ Bumping `version` in `custom_components/octopus_energy_it/manifest.json` on `mai
 ## Known open items
 
 - Device lookups are O(N) scans; acceptable at current device counts.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in this repo's GitHub Issues (`gh` CLI). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root, created only when needed. See `docs/agents/domain.md`.

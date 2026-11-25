@@ -22,18 +22,10 @@ coverage.xml
 config/*
 !config/configuration.yaml
 
-# Claude Code / Claudify (local only; this repo is public)
-# Shared AI instructions live in CLAUDE.md, which IS tracked.
+# Claude Code's configuration is machine-local by decision: settings and permissions (.claude/),
+# personal notes (*.local.md) and the MCP server list (.mcp.json). What sessions share is in
+# CLAUDE.md and docs/dev/.
 .claude/
-.claude.backup*/
-.claude/update-review/
 CLAUDE.local.md
-memory/
-playbooks/
-design-runs/
-handoffs/
-Daily Notes/
-Task Board.md
-Scratchpad.md
-SETUP.md
-WHATS-NEW.md
+*.local.md
+.mcp.json

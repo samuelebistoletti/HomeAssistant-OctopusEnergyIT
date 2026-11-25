@@ -243,3 +243,14 @@ The integration polls at two speeds:
 | Last charging session | cached 15 min | `fetch_last_charging_session` |
 
 If the full query fails, the last account data is reused; if planned dispatches are rate-limited, the last plan is kept.
+
+---
+
+## Kraken quirks
+
+- **Boost end time**: `updateBoostCharge` refuses an `endTime` that is not on :00 or :30, so `round_up_to_half_hour` rounds it up (`octopus_energy_it.py`).
+- **Rate-limited dispatches**: past 5 `flexPlannedDispatches` requests per minute Kraken answers `KT-CT-1199`; the integration caps itself at 4/min and keeps the last plan (see "Polling and API budget").
+
+## Dev stack
+
+`scripts/dev-bootstrap` sets the core config to IT / it / Europe/Rome / EUR. Without it entity names come out in English and HA raises a country repair.
