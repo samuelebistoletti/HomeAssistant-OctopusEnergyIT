@@ -10,9 +10,10 @@ personal data, credentials, account numbers or machine paths. "Now" is rewritten
 - **#26**: the reporter runs the beta. The 4 statistics repairs they saw are the 2 contract-expiry sensors times
   `units_changed` + `mean_type_changed` (fix: delete the old statistics); CHANGELOG and release notes corrected
   (a65c627). Waiting for their diagnostics if negative deltas recur.
-- **Next**: when the beta is confirmed, release 1.3.0 final: `manifest.json` to `1.3.0`, rename the CHANGELOG section
+- **Next** (#30): when the beta is confirmed, release 1.3.0 final: `manifest.json` to `1.3.0`, rename the CHANGELOG section
   `[1.3.0b1]` to `[1.3.0]`, preview, push to `main`.
-- Open work is tracked in GitHub issues (labels in `docs/agents/triage-labels.md`).
+- Open work is tracked in GitHub issues (labels in `docs/agents/triage-labels.md`): #30 release 1.3.0,
+  #31 GitHub agent for issues, #32 GitHub MCP plugin auth.
 
 ## Operating facts
 
