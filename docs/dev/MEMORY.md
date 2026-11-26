@@ -9,11 +9,11 @@ personal data, credentials, account numbers or machine paths. "Now" is rewritten
 - **1.3.0** released (final; it includes the fixes for the beta's production outages: 403s until restart from the
   shared session's ALB stickiness cookies, public tariffs lost on a product republish, login storm on HTTP 4xx,
   stale account sensors). #26, #28, #30 closed.
-- #31: `.github/workflows/claude.yaml` runs the Claude Code action on issues labelled `ready-for-agent` or on
-  owner `@claude` mentions, PR-only. Still needed: the `CLAUDE_CODE_OAUTH_TOKEN` secret and the Claude GitHub App
-  (`/install-github-app`). The "Protect main" ruleset requires a PR, with a bypass for repo admins.
-- #32: the GitHub MCP plugin reads `GITHUB_PERSONAL_ACCESS_TOKEN`; the owner's shell exports it from `gh auth token`.
-  Close once the plugin connects after a Claude Code restart.
+- #31 closed: the Claude GitHub agent (`.github/workflows/claude.yaml`) is active. It runs on issues labelled
+  `ready-for-agent` and on owner `@claude` mentions and works only through PRs; Claude Code Review also reviews its
+  PRs. First end-to-end run: #34 → #35 (TECHNICAL_NOTES now describes the per-entry API session), merged.
+- #32 closed: the GitHub MCP plugin connects (it reads `GITHUB_PERSONAL_ACCESS_TOKEN`, exported from `gh auth token`).
+- No open issues. Next step: pick new work from user reports or the roadmap.
 
 ## Operating facts
 
