@@ -411,3 +411,58 @@ class TestOctopusElectricityLastReadingSensor:
         # Reading dict has no end_register_value key at all
         sensor = self._sensor({"value": "42.0"})
         assert sensor.native_value is None
+
+
+# ---------------------------------------------------------------------------
+# OctopusPublicTariffSensor — a new product version keeps the sensor available
+# ---------------------------------------------------------------------------
+
+
+def _public_product(code, name="Octopus Fissa 12M", charge="0.1958"):
+    return {
+        "code": code,
+        "fullName": name,
+        "params": {"consumptionCharge": charge},
+    }
+
+
+class TestOctopusPublicTariffSensor:
+    def _sensor(self, data):
+        from custom_components.octopus_energy_it.sensor import OctopusPublicTariffSensor
+
+        coordinator = MagicMock()
+        coordinator.data = data
+        return OctopusPublicTariffSensor(
+            coordinator,
+            product_code="000129ESFML88XXXXXXXXOCTOFIXv187",
+            source="electricity",
+            device_identifier="octopus_public_tariffs",
+            product_name="Octopus Fissa 12M",
+        )
+
+    def test_matches_the_code_it_was_created_with(self):
+        sensor = self._sensor(
+            {"electricity": [_public_product("000129ESFML88XXXXXXXXOCTOFIXv187")]}
+        )
+        assert sensor.available is True
+        assert sensor.native_value == 0.1958
+
+    def test_follows_a_new_version_of_the_same_product(self):
+        # Octopus publishes a new version (new code) when the price changes:
+        # the sensor must not stay unavailable until Home Assistant restarts.
+        sensor = self._sensor(
+            {
+                "electricity": [
+                    _public_product("000129ESFML88XXXXXXXXOCTOFIXv188", charge="0.18")
+                ]
+            }
+        )
+        assert sensor.available is True
+        assert sensor.native_value == 0.18
+        assert sensor.extra_state_attributes["code"].endswith("v188")
+
+    def test_unavailable_when_the_product_is_gone(self):
+        sensor = self._sensor(
+            {"electricity": [_public_product("OTHER", name="Octopus Flex Mono")]}
+        )
+        assert sensor.available is False

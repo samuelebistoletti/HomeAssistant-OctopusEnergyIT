@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import logging
 
+import aiohttp
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import issue_registry as ir
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.aiohttp_client import (
+    async_create_clientsession,
+    async_get_clientsession,
+)
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
@@ -80,8 +84,16 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: OctopusEnergyITConfigEntry
 ) -> bool:
     """Set up Octopus Energy Italy from a config entry."""
-    session = async_get_clientsession(hass)
-    api = OctopusEnergyIT(entry.data["email"], entry.data["password"], session)
+    # The API is token-based and needs no cookies. Home Assistant's shared
+    # session keeps every cookie for the whole run, including the AWS load
+    # balancer stickiness cookies Kraken sets (AWSALB, AWSALBTG) and renews on
+    # each response, so the client stays pinned to one backend. In production
+    # every request (login included) started failing with 403 and only a Home
+    # Assistant restart, which empties the jar, brought it back. A dedicated
+    # session without a cookie jar keeps connection reuse (issue #22) without
+    # that state.
+    api_session = async_create_clientsession(hass, cookie_jar=aiohttp.DummyCookieJar())
+    api = OctopusEnergyIT(entry.data["email"], entry.data["password"], api_session)
 
     # Log in once; the token (and refresh token) is reused afterwards.
     try:
@@ -96,8 +108,10 @@ async def async_setup_entry(
         ) from err
 
     account_numbers = await _async_account_numbers(hass, entry, api)
+    # The public-tariffs coordinator outlives any single entry: it scrapes the
+    # website with the shared session, which is never closed on unload.
     public_products_coordinator = await async_get_public_products_coordinator(
-        hass, session
+        hass, async_get_clientsession(hass)
     )
 
     coordinator = OctopusEnergyITDataUpdateCoordinator(

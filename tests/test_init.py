@@ -469,3 +469,27 @@ class TestBoostChargeService:
             services_mod.BOOST_CHARGE_SCHEMA(
                 {"device_id": DEVICE_ID, "target_percentage": 5}
             )
+
+
+class TestSetupEntrySession:
+    """The API client gets its own cookie-less session (production outage)."""
+
+    async def test_api_session_has_no_cookie_jar_and_tariffs_use_shared(
+        self, setup_patches
+    ):
+        own_session, shared_session = object(), object()
+        with (
+            patch.object(
+                init_mod, "async_create_clientsession", return_value=own_session
+            ) as create,
+            patch.object(
+                init_mod, "async_get_clientsession", return_value=shared_session
+            ),
+        ):
+            await init_mod.async_setup_entry(_hass(), _entry())
+
+        cookie_jar = create.call_args.kwargs["cookie_jar"]
+        assert isinstance(cookie_jar, init_mod.aiohttp.DummyCookieJar)
+        assert init_mod.OctopusEnergyIT.call_args.args[2] is own_session
+        public_call = init_mod.async_get_public_products_coordinator.call_args
+        assert public_call.args[1] is shared_session

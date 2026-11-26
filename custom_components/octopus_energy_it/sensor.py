@@ -1919,6 +1919,7 @@ class OctopusPublicTariffSensor(OctopusPublicProductsEntity, SensorEntity):
         self._attr_icon = icon
         self._attr_native_unit_of_measurement = unit
         slug = _slugify_product_name(product_name, product_code.lower())
+        self._slug = slug
         self._attr_unique_id = f"octopus_{device_identifier}_{slug}"
 
     def _parse_decimal(self, value: Any) -> Decimal | None:
@@ -1934,9 +1935,21 @@ class OctopusPublicTariffSensor(OctopusPublicProductsEntity, SensorEntity):
     def _raw_product(self) -> dict[str, Any] | None:
         if not self.coordinator:
             return None
-        available = (self.coordinator.data or {}).get(self._source) or []
+        available = [
+            product
+            for product in (self.coordinator.data or {}).get(self._source) or []
+            if isinstance(product, dict)
+        ]
         for product in available:
-            if isinstance(product, dict) and product.get("code") == self._product_code:
+            if product.get("code") == self._product_code:
+                return product
+        # The code carries a version (e.g. ``...OCTOFIXv188``) that changes
+        # whenever Octopus republishes the product with a new price: fall back
+        # to the product name, which the unique_id is built from.
+        for product in available:
+            name = product.get("fullName") or product.get("displayName")
+            code = str(product.get("code") or "")
+            if _slugify_product_name(name, code.lower()) == self._slug:
                 return product
         return None
 

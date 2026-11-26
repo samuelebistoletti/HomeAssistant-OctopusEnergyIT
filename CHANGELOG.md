@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+- After some hours the integration could stop working until Home Assistant was restarted: every request, including the login, was answered `403 Forbidden` and the log filled with `GraphQL request failed: 403` and `All 5 login attempts failed`. Regression of 1.3.0b1: the shared Home Assistant HTTP session (introduced for #22) keeps cookies for the whole run, including the load-balancer stickiness cookies Kraken sets and renews on every response, so the integration most likely stayed pinned to one backend that had started refusing requests, and only a restart cleared that state. The API client now uses its own session without cookies (the API is token-based), keeping the connection reuse of #22.
+- Public tariff sensors became unavailable until a restart whenever Octopus republished a product with a new price: the product code carries a version (for example `...OCTOFIXv188`) and the sensor only looked for the code it was created with. It now follows the new version of the same product.
+
 ## [1.3.0b1] - 2026-11-06
 
 > Beta: install it from HACS with "Show beta versions" enabled. Feedback welcome in the issues before the final 1.3.0.

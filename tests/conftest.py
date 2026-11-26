@@ -170,6 +170,11 @@ def _install_stubs() -> None:
         _aiohttp.ClientResponseError = _ClientResponseError
         _aiohttp.ClientConnectionError = _ClientConnectionError
 
+        class _DummyCookieJar:
+            """Stand-in for aiohttp's cookie jar that stores nothing."""
+
+        _aiohttp.DummyCookieJar = _DummyCookieJar
+
         class _ClientTimeout:
             def __init__(
                 self, *, total=None, connect=None, sock_read=None, sock_connect=None
@@ -390,6 +395,8 @@ def _install_stubs() -> None:
     _ac = _stub("homeassistant.helpers.aiohttp_client")
     if not hasattr(_ac, "async_get_clientsession"):
         _ac.async_get_clientsession = MagicMock(return_value=None)
+    if not hasattr(_ac, "async_create_clientsession"):
+        _ac.async_create_clientsession = MagicMock(return_value=None)
 
     _diag = _stub("homeassistant.components.diagnostics")
     if not hasattr(_diag, "async_redact_data"):
