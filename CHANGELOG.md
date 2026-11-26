@@ -5,6 +5,8 @@
 ### Fixed
 - After some hours the integration could stop working until Home Assistant was restarted: every request, including the login, was answered `403 Forbidden` and the log filled with `GraphQL request failed: 403` and `All 5 login attempts failed`. Regression of 1.3.0b1: the shared Home Assistant HTTP session (introduced for #22) keeps cookies for the whole run, including the load-balancer stickiness cookies Kraken sets and renews on every response, so the integration most likely stayed pinned to one backend that had started refusing requests, and only a restart cleared that state. The API client now uses its own session without cookies (the API is token-based), keeping the connection reuse of #22.
 - Public tariff sensors became unavailable until a restart whenever Octopus republished a product with a new price: the product code carries a version (for example `...OCTOFIXv188`) and the sensor only looked for the code it was created with. It now follows the new version of the same product.
+- When the API refused the connection, the integration retried the login 5 times at every 30-second update (thousands of logins in a few hours). A login refused with a plain HTTP error (for example `403`) is no longer retried at once: the next attempt comes after 5 minutes. A refused refresh token is kept instead of being discarded.
+- During an outage the electricity price, the current tariff sensors and the last charging session kept showing their last value as if it were current. They now become unavailable when an update fails, like the other account sensors.
 
 ## [1.3.0b1] - 2026-11-06
 

@@ -9,6 +9,7 @@ import copy
 from datetime import UTC, date, datetime, timedelta
 import json
 import logging
+import time
 
 import aiohttp
 from homeassistant.exceptions import ConfigEntryNotReady
@@ -30,6 +31,10 @@ GRAPH_QL_ENDPOINT = "https://api.oeit-kraken.energy/v1/graphql/"
 GRAPHQL_REQUEST_TIMEOUT = 30  # seconds, per request
 TRANSPORT_ATTEMPTS = 2  # one retry on network/DNS errors
 TRANSPORT_RETRY_DELAY = 2  # seconds
+# After the API refuses the login with a plain HTTP 4xx (not a GraphQL error),
+# do not try to log in again for this long: retrying at every 30-second update
+# only adds load while the block lasts.
+LOGIN_BLOCKED_COOLDOWN = 5 * 60  # seconds
 ELECTRICITY_LEDGER = "ELECTRICITY_LEDGER"
 
 # Global token manager to prevent redundant token requests
@@ -654,6 +659,11 @@ class TokenManager:
         self._refresh_expiry = None
 
 
+def _is_http_refusal(status: int | None) -> bool:
+    """Return True for a 4xx status other than 429 (too many requests)."""
+    return status is not None and 400 <= status < 500 and status != 429
+
+
 class _GraphQLClient:
     """Minimal async GraphQL client backed by aiohttp.
 
@@ -674,7 +684,7 @@ class _GraphQLClient:
     ) -> None:
         """Store the GraphQL *endpoint*, default *headers* and HTTP *session*.
 
-        Pass Home Assistant's shared session (``async_get_clientsession``):
+        Pass a long-lived session (the integration creates one per entry):
         opening a new session per request re-resolves DNS and re-does the TLS
         handshake every time, which caused the intermittent "Timeout while
         contacting DNS servers" failures (issue #22). Without a session a
@@ -745,8 +755,8 @@ class OctopusEnergyIT:
         Args:
             email: The email address for the Octopus Energy Italy account
             password: The password for the Octopus Energy Italy account
-            session: Shared aiohttp session (Home Assistant's
-                ``async_get_clientsession``); recommended outside tests
+            session: Long-lived aiohttp session without a cookie jar;
+                recommended outside tests
 
         """
         self._email = email
@@ -768,6 +778,10 @@ class OctopusEnergyIT:
         self._account_cache: dict[str, tuple[float, dict]] = {}
         # device_id -> (fetched_at timestamp, last charging session or None)
         self._charging_sessions: dict[str, tuple[float, dict | None]] = {}
+        # HTTP status of the last request that failed with a plain 4xx response
+        self._last_http_error: int | None = None
+        # time.monotonic() before which login() does not contact the API
+        self._login_blocked_until = 0.0
 
     @property
     def _token(self):
@@ -802,6 +816,7 @@ class OctopusEnergyIT:
 
         client = self._get_graphql_client(use_auth=require_auth)
         response = None
+        self._last_http_error = None
         for attempt in range(1, TRANSPORT_ATTEMPTS + 1):
             try:
                 response = await client.execute_async(
@@ -809,6 +824,18 @@ class OctopusEnergyIT:
                     variables=variables or {},
                 )
                 break
+            except aiohttp.ClientResponseError as exc:
+                if _is_http_refusal(exc.status):
+                    # A refusal (e.g. 403 from the load balancer) is not a
+                    # network blip: retrying at once would only be refused again.
+                    self._last_http_error = exc.status
+                    _LOGGER.error("GraphQL request refused: HTTP %s", exc.status)
+                    return None
+                if attempt < TRANSPORT_ATTEMPTS:
+                    await asyncio.sleep(TRANSPORT_RETRY_DELAY)
+                    continue
+                _LOGGER.error("GraphQL request failed: %s", exc)
+                return None
             except (aiohttp.ClientError, TimeoutError) as exc:
                 if attempt < TRANSPORT_ATTEMPTS:
                     # One quick retry absorbs transient DNS/network blips
@@ -980,6 +1007,10 @@ class OctopusEnergyIT:
             if self._store_token_data(token_data):
                 _LOGGER.debug("Access token renewed with the refresh token")
                 return True
+        if response is None:
+            # The request itself failed, so the refresh token was not judged:
+            # keep it for the next attempt.
+            return False
         _LOGGER.debug("Refresh token rejected; falling back to a password login")
         self._token_manager.clear_refresh_token()
         return False
@@ -1003,9 +1034,16 @@ class OctopusEnergyIT:
                 _LOGGER.debug("Token still valid after lock, skipping login")
                 return True
 
+            if time.monotonic() < self._login_blocked_until:
+                _LOGGER.debug("Login refused by the API recently; not retrying yet")
+                return False
+
+            self._last_http_error = None
             if await self._refresh_access_token():
                 self.auth_failed = False
                 return True
+            if self._refused_by_api():
+                return False
 
             self.auth_failed = False
             variables = {"email": self._email, "password": self._password}
@@ -1018,7 +1056,7 @@ class OctopusEnergyIT:
                     )
                     if success:
                         return True
-                    if abort:
+                    if abort or self._refused_by_api():
                         return False
                 except Exception as e:  # noqa: BLE001 - retried with backoff
                     _LOGGER.error("Error during login attempt %s: %s", attempt, e)
@@ -1027,6 +1065,18 @@ class OctopusEnergyIT:
 
             _LOGGER.error("All %s login attempts failed.", LOGIN_RETRIES)
             return False
+
+    def _refused_by_api(self) -> bool:
+        """Start the login cooldown if the last request got a plain HTTP 4xx."""
+        if self._last_http_error is None:
+            return False
+        _LOGGER.error(
+            "Octopus API refused the login (HTTP %s); next attempt in %s minutes",
+            self._last_http_error,
+            LOGIN_BLOCKED_COOLDOWN // 60,
+        )
+        self._login_blocked_until = time.monotonic() + LOGIN_BLOCKED_COOLDOWN
+        return True
 
     async def ensure_token(self):
         """Ensure a valid token is available, refreshing if necessary."""

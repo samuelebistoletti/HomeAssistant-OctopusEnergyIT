@@ -576,6 +576,82 @@ class TestExecuteGraphqlTransportRetry:
         assert mock_client.execute_async.await_count == 1
 
 
+class TestHttpRefusal:
+    """A plain HTTP 4xx (e.g. 403 from the load balancer) is not retried."""
+
+    @staticmethod
+    def _refusing_client(status=403):
+        client = MagicMock()
+        client.execute_async = AsyncMock(
+            side_effect=_mod.aiohttp.ClientResponseError(status=status)
+        )
+        return client
+
+    async def test_refused_request_is_not_retried(self):
+        api = _make_api()
+        api._token_manager.set_token(_VALID_TOKEN, expiry=_FUTURE_EXP)
+        client = self._refusing_client()
+
+        with patch.object(api, "_get_graphql_client", return_value=client):
+            assert await api._execute_graphql("query { ok }") is None
+
+        assert client.execute_async.await_count == 1
+        assert api._last_http_error == 403
+
+    async def test_too_many_requests_is_retried(self):
+        api = _make_api()
+        api._token_manager.set_token(_VALID_TOKEN, expiry=_FUTURE_EXP)
+        client = self._refusing_client(status=429)
+
+        with (
+            patch.object(api, "_get_graphql_client", return_value=client),
+            patch.object(_mod.asyncio, "sleep", new=AsyncMock()),
+        ):
+            assert await api._execute_graphql("query { ok }") is None
+
+        assert client.execute_async.await_count == _mod.TRANSPORT_ATTEMPTS
+        assert api._last_http_error is None
+
+    async def test_refused_login_stops_and_cools_down(self):
+        api = _make_api()
+        client = self._refusing_client()
+
+        with (
+            patch.object(api, "_get_graphql_client", return_value=client),
+            patch.object(_mod.asyncio, "sleep", new=AsyncMock()),
+        ):
+            assert await api.login() is False
+            # Within the cooldown the API is not contacted again.
+            assert await api.login() is False
+
+        assert client.execute_async.await_count == 1
+
+    async def test_login_retried_after_cooldown(self):
+        api = _make_api()
+        client = self._refusing_client()
+
+        with (
+            patch.object(api, "_get_graphql_client", return_value=client),
+            patch.object(_mod.asyncio, "sleep", new=AsyncMock()),
+        ):
+            await api.login()
+            api._login_blocked_until = 0.0
+            await api.login()
+
+        assert client.execute_async.await_count == 2
+
+    async def test_refused_refresh_keeps_token_and_skips_password(self):
+        api = _make_api()
+        api._token_manager.set_refresh_token("refresh-1", _REFRESH_EXP)
+        client = self._refusing_client()
+
+        with patch.object(api, "_get_graphql_client", return_value=client):
+            assert await api.login() is False
+
+        assert client.execute_async.await_count == 1
+        assert api._token_manager.refresh_token == "refresh-1"
+
+
 class TestGraphQLClient:
     async def test_execute_async_posts_query_and_parses_json(self):
         rec = {}

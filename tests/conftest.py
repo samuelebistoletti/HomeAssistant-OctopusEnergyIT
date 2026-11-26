@@ -329,6 +329,13 @@ def _install_stubs() -> None:
             def __init__(self, coordinator):
                 self.coordinator = coordinator
 
+            @property
+            def available(self):
+                # Mirrors CoordinatorEntity: unavailable after a failed update.
+                return (
+                    getattr(self.coordinator, "last_update_success", True) is not False
+                )
+
             async def async_update(self):
                 pass
 

@@ -4,14 +4,15 @@ Where the work stands, the next step and the operating facts no other file state
 personal data, credentials, account numbers or machine paths. "Now" is rewritten at every checkpoint (`CLAUDE.md`
 "Sessions").
 
-## Now (2026-11-25)
+## Now (2026-11-26)
 
-- **1.3.0b1** is out as a pre-release; v1.2.5 stays Latest.
-- **#26**: the reporter runs the beta. The 4 statistics repairs they saw are the 2 contract-expiry sensors times
-  `units_changed` + `mean_type_changed` (fix: delete the old statistics); CHANGELOG and release notes corrected
-  (a65c627). Waiting for their diagnostics if negative deltas recur.
-- **Next** (#30): when the beta is confirmed, release 1.3.0 final: `manifest.json` to `1.3.0`, rename the CHANGELOG section
-  `[1.3.0b1]` to `[1.3.0]`, preview, push to `main`.
+- **1.3.0b1** is out as a pre-release; v1.2.5 stays Latest. `main` has the fixes for the beta's production outages
+  (CHANGELOG `[Unreleased]`): 403s until restart (the shared HA session kept the AWS ALB stickiness cookies; the API
+  client now has its own cookie-less session), public tariffs lost on a product republish (versioned product code),
+  login storm on HTTP 4xx (5-minute cooldown), stale account sensors staying available.
+- #26 and #28 closed (beta working for the reporter; `deltaKwh` no longer requested).
+- **Next** (#30): release 1.3.0 final once the fixes have run in production: `manifest.json` to `1.3.0`, merge
+  `[Unreleased]` and `[1.3.0b1]` into `[1.3.0]`, preview, push to `main`.
 - Open work is tracked in GitHub issues (labels in `docs/agents/triage-labels.md`): #30 release 1.3.0,
   #31 GitHub agent for issues, #32 GitHub MCP plugin auth.
 

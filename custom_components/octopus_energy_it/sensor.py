@@ -466,7 +466,7 @@ class OctopusElectricityPriceSensor(OctopusCoordinatorEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
-        return self.native_value is not None
+        return super().available and self.native_value is not None
 
 
 class OctopusElectricityPriceF2Sensor(OctopusElectricityPriceSensor):
@@ -1167,7 +1167,7 @@ class OctopusElectricityProductInfoSensor(OctopusCoordinatorEntity, SensorEntity
 
     @property
     def available(self) -> bool:
-        return self._current_product() is not None
+        return super().available and self._current_product() is not None
 
 
 class OctopusLedgerBalanceSensor(OctopusCoordinatorEntity, SensorEntity):
@@ -1504,7 +1504,7 @@ class OctopusGasProductInfoSensor(OctopusCoordinatorEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
-        return self._current_product() is not None
+        return super().available and self._current_product() is not None
 
 
 class OctopusGasStandingChargeSensor(OctopusCoordinatorEntity, SensorEntity):
@@ -2001,7 +2001,7 @@ class OctopusPublicTariffSensor(OctopusPublicProductsEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
-        return self._formatted_product() is not None
+        return super().available and self._formatted_product() is not None
 
 
 class OctopusLastChargingSessionSensor(OctopusCoordinatorEntity, SensorEntity):

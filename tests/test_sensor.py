@@ -130,6 +130,7 @@ from custom_components.octopus_energy_it.entity import OctopusCoordinatorEntity
 from custom_components.octopus_energy_it.sensor import (
     OctopusElectricityLastDailyReadingSensor,
     OctopusElectricityLastReadingSensor,
+    OctopusElectricityPriceSensor,
     OctopusEvNextDispatchEndSensor,
     OctopusEvNextDispatchStartSensor,
     _effective_dispatch_window,
@@ -466,3 +467,22 @@ class TestOctopusPublicTariffSensor:
             {"electricity": [_public_product("OTHER", name="Octopus Flex Mono")]}
         )
         assert sensor.available is False
+
+
+class TestStaleAccountData:
+    """After a failed update the price shows unavailable, not the last value."""
+
+    def _sensor(self, last_update_success):
+        coordinator = _make_coordinator(
+            {"current_electricity_product": {"pricing": {"base": "0,12"}}}
+        )
+        coordinator.last_update_success = last_update_success
+        return _make_sensor(OctopusElectricityPriceSensor, coordinator)
+
+    def test_available_after_successful_update(self):
+        sensor = self._sensor(True)
+        assert sensor.native_value == 0.12
+        assert sensor.available is True
+
+    def test_unavailable_after_failed_update(self):
+        assert self._sensor(False).available is False
