@@ -34,7 +34,7 @@ Per saperne di più sui miei progetti vai su https://samuele.bistoletti.me/.
 ## Prerequisiti
 
 - Account cliente Octopus Energy Italy con accesso al portale clienti.
-- Home Assistant 2025.4.0 o successivo.
+- Home Assistant 2025.11.0 o successivo.
 - Facoltativo: attivare il debug in `configuration.yaml` per indagare eventuali problemi API.
 
 ```yaml

@@ -1,6 +1,6 @@
 {
   "name": "Octopus Energy Italy",
-  "homeassistant": "2025.4.0",
+  "homeassistant": "2025.11.0",
   "hacs": "2.0.5",
   "country": ["IT"],
   "render_readme": true,

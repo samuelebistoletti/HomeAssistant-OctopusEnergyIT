@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+- Minimum Home Assistant version raised to 2025.11.0 (was 2025.4.0): the energy statistics import added in 1.3.0 uses the `unit_class` statistics metadata field, which exists only from Home Assistant 2025.11.
+
 ## [1.3.0] - 2026-11-26
 
 > Upgrading from the 1.3.0b1 beta: this release also fixes the beta's `403 Forbidden` errors that lasted until Home Assistant was restarted (the shared HTTP session kept the load-balancer cookies Kraken sets, pinning the integration to one backend).
