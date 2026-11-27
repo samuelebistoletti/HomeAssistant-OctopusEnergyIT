@@ -6,14 +6,16 @@ personal data, credentials, account numbers or machine paths. "Now" is rewritten
 
 ## Now (2026-11-27)
 
-- **1.3.0** released. Unreleased on `main` (not yet versioned): minimum HA 2025.11.0 (needed by the statistics
-  `unit_class` field), `claude-code-action` pinned to a commit SHA (CodeQL alerts #15-#17), `.build/` removed, the
-  migration off the Kraken fields deprecated in November 2026 (`status.current`, ledger `balance`), and #36: charging
-  session history (smart / boost kWh) and the estimated Intelligent Octopus saving as external statistics, with a
-  discount number entity. Verified live on the dev HA.
+- **1.4.0b1** (beta) prepared on `main` (manifest bumped, CHANGELOG section written); pushing it publishes a GitHub
+  pre-release that HACS offers only with betas enabled. It holds:
+  #36 (charging session history and estimated Intelligent Octopus saving as external statistics, discount number
+  entity, verified live on the dev HA), minimum HA 2025.11.0 (statistics `unit_class`), the migration off the Kraken
+  fields deprecated in November 2026 (`status.current`, ledger `balance`; `status_connection_state` attribute removed).
+  Also on `main`: `claude-code-action` pinned to a commit SHA (CodeQL #15-#17), `.build/` removed.
 - Kraken deprecated the OCPP onboarding API (`ocppDetails`, `ocppConnection`, `ocppAuthentication`; removal from
   2027-01-23): do not build on it.
-- No open issues. Next step: decide the next release (1.4.0, with #36), or pick new work.
+- No open issues after #36. Next step: watch the 1.4.0b1 release run, collect beta feedback (a user who asked about
+  the savings shown in the app was pointed to it), then release 1.4.0.
 
 ## Operating facts
 
