@@ -12,7 +12,7 @@ personal data, credentials, account numbers or machine paths. "Now" is rewritten
   was refreshed on 2026-11-27.
 - Kraken deprecated the OCPP onboarding API (`ocppDetails`, `ocppConnection`, `ocppAuthentication`; removal from
   2027-01-23): do not build on it.
-- Next step (proposed, no issue yet): import the per-device `chargingSessions` history (SMART vs BOOST kWh) as external
+- Next step: #36, import the per-device `chargingSessions` history (SMART vs BOOST kWh) as external
   statistics, plus an estimated Intelligent Octopus saving (smart kWh x energy price x discount; the discount is not in
   the API, 30 % in the July 2026 rules). Asked for by a user who wants the savings the app shows.
 
