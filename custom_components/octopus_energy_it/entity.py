@@ -62,7 +62,8 @@ CAPABILITY_PREFERENCES = "FlexUpdatePreferencesCapability"
 
 DEFAULT_TIME_WINDOW = ("04:00", "17:00")
 
-# Device states in which Kraken accepts a boost charge (if LIVE, not suspended).
+# Device states in which Kraken accepts a boost charge (if not suspended). Each
+# one implies the device has completed onboarding.
 BOOSTABLE_STATES = {"SMART_CONTROL_CAPABLE", "SMART_CONTROL_IN_PROGRESS", "BOOSTING"}
 
 
@@ -71,11 +72,7 @@ def boost_flags(device: dict[str, Any]) -> tuple[bool, bool]:
     status = device.get("status") or {}
     state = (status.get("currentState") or "").upper()
     active = "BOOST" in state
-    available = (
-        status.get("current") == "LIVE"
-        and not status.get("isSuspended", False)
-        and state in BOOSTABLE_STATES
-    )
+    available = not status.get("isSuspended", False) and state in BOOSTABLE_STATES
     return active, available
 
 

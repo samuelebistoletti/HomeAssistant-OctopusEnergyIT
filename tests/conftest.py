@@ -545,8 +545,14 @@ def sample_account_data():
         "account": {
             "id": "acc-001",
             "ledgers": [
-                {"balance": 4250, "ledgerType": "ELECTRICITY_LEDGER"},
-                {"balance": 900, "ledgerType": "GAS_LEDGER"},
+                {
+                    "balanceDetails": {"amountAsMinorUnits": 4250},
+                    "ledgerType": "ELECTRICITY_LEDGER",
+                },
+                {
+                    "balanceDetails": {"amountAsMinorUnits": 900},
+                    "ledgerType": "GAS_LEDGER",
+                },
             ],
             "properties": [
                 {
@@ -728,7 +734,6 @@ def sample_account_data():
                 "integrationDeviceId": "ext-device-001",
                 "provider": "TEST_PROVIDER",
                 "status": {
-                    "current": "SMART_CONTROL_CAPABLE",
                     "currentState": "SMART_CONTROL_CAPABLE",
                     "isSuspended": False,
                 },

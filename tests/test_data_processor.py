@@ -210,7 +210,12 @@ class TestProcessApiDataLedgers:
     async def test_electricity_balance_extracted(self):
         api = _make_api()
         data = _minimal_account_data(
-            ledgers=[{"balance": 4250, "ledgerType": "ELECTRICITY_LEDGER"}]
+            ledgers=[
+                {
+                    "balanceDetails": {"amountAsMinorUnits": 4250},
+                    "ledgerType": "ELECTRICITY_LEDGER",
+                }
+            ]
         )
         result = await process_api_data(data, ACCOUNT, api, {})
         assert result[ACCOUNT]["electricity_balance"] == pytest.approx(42.50)
@@ -219,7 +224,12 @@ class TestProcessApiDataLedgers:
     async def test_gas_balance_extracted(self):
         api = _make_api()
         data = _minimal_account_data(
-            ledgers=[{"balance": 900, "ledgerType": "GAS_LEDGER"}]
+            ledgers=[
+                {
+                    "balanceDetails": {"amountAsMinorUnits": 900},
+                    "ledgerType": "GAS_LEDGER",
+                }
+            ]
         )
         result = await process_api_data(data, ACCOUNT, api, {})
         assert result[ACCOUNT]["gas_balance"] == pytest.approx(9.00)
@@ -228,7 +238,12 @@ class TestProcessApiDataLedgers:
     async def test_heat_balance_extracted(self):
         api = _make_api()
         data = _minimal_account_data(
-            ledgers=[{"balance": 600, "ledgerType": "HEAT_LEDGER"}]
+            ledgers=[
+                {
+                    "balanceDetails": {"amountAsMinorUnits": 600},
+                    "ledgerType": "HEAT_LEDGER",
+                }
+            ]
         )
         result = await process_api_data(data, ACCOUNT, api, {})
         assert result[ACCOUNT]["heat_balance"] == pytest.approx(6.00)
@@ -238,8 +253,14 @@ class TestProcessApiDataLedgers:
         api = _make_api()
         data = _minimal_account_data(
             ledgers=[
-                {"balance": 4250, "ledgerType": "ELECTRICITY_LEDGER"},
-                {"balance": 900, "ledgerType": "GAS_LEDGER"},
+                {
+                    "balanceDetails": {"amountAsMinorUnits": 4250},
+                    "ledgerType": "ELECTRICITY_LEDGER",
+                },
+                {
+                    "balanceDetails": {"amountAsMinorUnits": 900},
+                    "ledgerType": "GAS_LEDGER",
+                },
             ]
         )
         result = await process_api_data(data, ACCOUNT, api, {})
@@ -247,10 +268,32 @@ class TestProcessApiDataLedgers:
         assert result[ACCOUNT]["gas_balance"] == pytest.approx(9.00)
 
     @pytest.mark.asyncio
+    async def test_balance_minor_units_as_string_or_missing(self):
+        """BigInt amounts may arrive as strings; a missing amount counts as zero."""
+        api = _make_api()
+        data = _minimal_account_data(
+            ledgers=[
+                {
+                    "balanceDetails": {"amountAsMinorUnits": "-1234"},
+                    "ledgerType": "ELECTRICITY_LEDGER",
+                },
+                {"balanceDetails": None, "ledgerType": "GAS_LEDGER"},
+            ]
+        )
+        result = await process_api_data(data, ACCOUNT, api, {})
+        assert result[ACCOUNT]["electricity_balance"] == pytest.approx(-12.34)
+        assert result[ACCOUNT]["gas_balance"] == pytest.approx(0.0)
+
+    @pytest.mark.asyncio
     async def test_other_ledger_goes_to_other_ledgers(self):
         api = _make_api()
         data = _minimal_account_data(
-            ledgers=[{"balance": 100, "ledgerType": "REWARDS_LEDGER"}]
+            ledgers=[
+                {
+                    "balanceDetails": {"amountAsMinorUnits": 100},
+                    "ledgerType": "REWARDS_LEDGER",
+                }
+            ]
         )
         result = await process_api_data(data, ACCOUNT, api, {})
         assert "REWARDS_LEDGER" in result[ACCOUNT]["other_ledgers"]

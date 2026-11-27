@@ -246,7 +246,6 @@ class TestBoostChargeSwitchAvailable:
         device = {
             "id": DEVICE_ID_1,
             "status": {
-                "current": "LIVE",
                 "currentState": "SMART_CONTROL_CAPABLE",
                 "isSuspended": False,
             },
@@ -261,13 +260,12 @@ class TestBoostChargeSwitchAvailable:
         device = {
             "id": DEVICE_ID_1,
             "status": {
-                "current": "PENDING",
-                "currentState": "SMART_CONTROL_CAPABLE",
+                "currentState": "AUTHENTICATION_COMPLETE",
                 "isSuspended": False,
             },
         }
         switch = self._switch_with_device(device)
-        # boost_available=False (not LIVE), fallback: not isSuspended → True
+        # boost_available=False (still onboarding), fallback: not isSuspended → True
         assert switch.available is True
 
     def test_not_live_and_suspended_is_unavailable(self):
@@ -275,13 +273,12 @@ class TestBoostChargeSwitchAvailable:
         device = {
             "id": DEVICE_ID_1,
             "status": {
-                "current": "PENDING",
-                "currentState": "",
+                "currentState": "AUTHENTICATION_COMPLETE",
                 "isSuspended": True,
             },
         }
         switch = self._switch_with_device(device)
-        # boost_available=False (not LIVE), fallback: not isSuspended → False
+        # boost_available=False (still onboarding), fallback: not isSuspended → False
         assert switch.available is False
 
     def test_live_with_no_capabilities_but_boost_charging_is_available(self):
@@ -289,7 +286,6 @@ class TestBoostChargeSwitchAvailable:
         device = {
             "id": DEVICE_ID_1,
             "status": {
-                "current": "LIVE",
                 "currentState": "BOOST_CHARGING",
                 "isSuspended": False,
             },
@@ -301,7 +297,6 @@ class TestBoostChargeSwitchAvailable:
         device = {
             "id": DEVICE_ID_1,
             "status": {
-                "current": "LIVE",
                 "currentState": "BOOST",
                 "isSuspended": False,
             },
@@ -314,7 +309,6 @@ class TestBoostChargeSwitchAvailable:
         device = {
             "id": DEVICE_ID_1,
             "status": {
-                "current": "LIVE",
                 "currentState": "",
                 "isSuspended": True,
             },
@@ -334,7 +328,6 @@ class TestBoostChargeSwitchAvailable:
         other_device = {
             "id": "other-device-999",
             "status": {
-                "current": "LIVE",
                 "currentState": "SMART_CONTROL_CAPABLE",
                 "isSuspended": False,
             },
@@ -559,7 +552,6 @@ class TestBoostChargeSwitchIsOn:
         device = {
             "id": DEVICE_ID_1,
             "status": {
-                "current": "LIVE",
                 "currentState": current_state,
                 "isSuspended": False,
             },
@@ -617,7 +609,6 @@ class TestBoostChargeSwitchTurnOnOff:
         device = {
             "id": DEVICE_ID_1,
             "status": {
-                "current": "LIVE",
                 "currentState": current_state,
                 "isSuspended": False,
             },

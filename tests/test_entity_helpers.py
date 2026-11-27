@@ -50,7 +50,6 @@ from custom_components.octopus_energy_it.entity import boost_flags
     [
         (
             {
-                "current": "LIVE",
                 "currentState": "SMART_CONTROL_CAPABLE",
                 "isSuspended": False,
             },
@@ -59,19 +58,17 @@ from custom_components.octopus_energy_it.entity import boost_flags
         # A smart charge in progress can be boosted (was reported unavailable).
         (
             {
-                "current": "LIVE",
                 "currentState": "SMART_CONTROL_IN_PROGRESS",
                 "isSuspended": False,
             },
             (False, True),
         ),
         (
-            {"current": "LIVE", "currentState": "BOOSTING", "isSuspended": False},
+            {"currentState": "BOOSTING", "isSuspended": False},
             (True, True),
         ),
         (
             {
-                "current": "LIVE",
                 "currentState": "SMART_CONTROL_CAPABLE",
                 "isSuspended": True,
             },
@@ -79,18 +76,14 @@ from custom_components.octopus_energy_it.entity import boost_flags
         ),
         (
             {
-                "current": "LIVE",
                 "currentState": "LOST_CONNECTION",
                 "isSuspended": False,
             },
             (False, False),
         ),
+        # Still onboarding: not boostable.
         (
-            {
-                "current": "ONBOARDING",
-                "currentState": "SMART_CONTROL_CAPABLE",
-                "isSuspended": False,
-            },
+            {"currentState": "AUTHENTICATION_COMPLETE", "isSuspended": False},
             (False, False),
         ),
         ({}, (False, False)),

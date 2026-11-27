@@ -83,7 +83,11 @@ def test_unused_completed_dispatches_are_not_requested():
 # ---------------------------------------------------------------------------
 
 ACCOUNT = {"id": "1", "ledgers": [], "properties": []}
-DEVICE = {"id": "dev", "deviceType": "ELECTRIC_VEHICLES", "status": {"current": "LIVE"}}
+DEVICE = {
+    "id": "dev",
+    "deviceType": "ELECTRIC_VEHICLES",
+    "status": {"currentState": "SMART_CONTROL_CAPABLE"},
+}
 
 
 def _full(account=ACCOUNT, devices=(DEVICE,)):

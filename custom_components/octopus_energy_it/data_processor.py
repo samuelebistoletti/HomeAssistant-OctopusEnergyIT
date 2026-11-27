@@ -245,8 +245,8 @@ async def process_api_data(  # noqa: C901 - sequential extraction steps
 
     for ledger in ledgers:
         ledger_type = ledger.get("ledgerType")
-        balance_cents = ledger.get("balance", 0)
-        balance_eur = balance_cents / 100
+        minor_units = (ledger.get("balanceDetails") or {}).get("amountAsMinorUnits")
+        balance_eur = int(minor_units or 0) / 100
         normalized_type = (ledger_type or "").upper()
 
         if normalized_type.endswith("ELECTRICITY_LEDGER"):

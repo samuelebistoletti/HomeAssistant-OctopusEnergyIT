@@ -44,7 +44,9 @@ query ComprehensiveDataQuery($accountNumber: String!) {
   account(accountNumber: $accountNumber) {
     id
     ledgers {
-      balance
+      balanceDetails {
+        amountAsMinorUnits
+      }
       ledgerType
     }
     properties {
@@ -191,7 +193,6 @@ query ComprehensiveDataQuery($accountNumber: String!) {
   }
   devices(accountNumber: $accountNumber) {
     status {
-      current
       currentState
       isSuspended
     }
@@ -240,7 +241,6 @@ query ComprehensiveDataQuery($accountNumber: String!) {
       id
       name
       status {
-        current
         currentState
         isSuspended
       }
@@ -385,10 +385,6 @@ query {
   viewer {
     accounts {
       number
-      ledgers {
-        balance
-        ledgerType
-      }
     }
   }
 }

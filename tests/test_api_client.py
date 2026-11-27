@@ -1052,7 +1052,12 @@ class TestFetchAllData:
             "data": {
                 "account": {
                     "id": "acc-001",
-                    "ledgers": [{"balance": 1000, "ledgerType": "ELECTRICITY_LEDGER"}],
+                    "ledgers": [
+                        {
+                            "balanceDetails": {"amountAsMinorUnits": 1000},
+                            "ledgerType": "ELECTRICITY_LEDGER",
+                        }
+                    ],
                     "properties": [],
                 },
                 "devices": devices if devices is not None else [],

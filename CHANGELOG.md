@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### Changed
+- Migrated off Kraken API fields deprecated in November 2026: the device lifecycle status `status.current` (removal from 2027-05-17) and the ledger `balance` (removal from 2027-12-01, now read from `balanceDetails`). Without this, the main data query would start failing once Kraken removes them. Balances and boost availability are unchanged.
+- The `status_connection_state` attribute is removed from the EV charging status sensor: it carried the deprecated lifecycle status (`LIVE`, `ONBOARDING`…). Use `status_current_state`, which is more detailed. Update any template or automation that read it.
 - Minimum Home Assistant version raised to 2025.11.0 (was 2025.4.0): the energy statistics import added in 1.3.0 uses the `unit_class` statistics metadata field, which exists only from Home Assistant 2025.11.
 
 ## [1.3.0] - 2026-11-26

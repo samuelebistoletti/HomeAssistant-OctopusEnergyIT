@@ -121,7 +121,7 @@ Nota: `electricity_last_reading` è la lettura cumulativa del contatore (adatta 
 
 | Entità | Unità | Attributi extra |
 | --- | --- | --- |
-| `sensor.octopus_<account>_ev_charge_status` | testo | `account_number`, `device_id`, `device_name`, `device_model`, `battery_capacity_kwh`, `status_current_state`, `status_connection_state`, `status_is_suspended`, `preferences_mode`, `preferences_unit`, `preferences_target_type`, `allow_grid_export`, `schedules`, `target_day_of_week`, `target_time`, `target_percentage`, `boost_active`, `boost_available`, `last_synced_at` |
+| `sensor.octopus_<account>_ev_charge_status` | testo | `account_number`, `device_id`, `device_name`, `device_model`, `battery_capacity_kwh`, `status_current_state`, `status_is_suspended`, `preferences_mode`, `preferences_unit`, `preferences_target_type`, `allow_grid_export`, `schedules`, `target_day_of_week`, `target_time`, `target_percentage`, `boost_active`, `boost_available`, `last_synced_at` |
 | `sensor.octopus_<account>_ev_next_dispatch_start` | timestamp | `end`, `energy_kwh`, `type` — orario di inizio della prossima finestra di carica pianificata |
 | `sensor.octopus_<account>_ev_next_dispatch_end` | timestamp | `start`, `energy_kwh`, `type` — orario di fine della prossima finestra di carica pianificata |
 | `sensor.octopus_<account>_ev_planned_dispatches` | numero | `dispatches` (lista completa), `current_start`, `current_end` — conteggio delle finestre future; espone anche la finestra attiva corrente |

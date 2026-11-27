@@ -1595,7 +1595,6 @@ class OctopusEVChargeStatusSensor(OctopusCoordinatorEntity, SensorEntity):
             "status_current_state": "Unknown",
             "status_normalized": "unknown",
             "status_raw": None,
-            "status_connection_state": None,
             "status_is_suspended": False,
             "preferences_mode": None,
             "preferences_unit": None,
@@ -1627,7 +1626,6 @@ class OctopusEVChargeStatusSensor(OctopusCoordinatorEntity, SensorEntity):
 
         status = device.get("status", {})
         current_state = status.get("currentState", "")
-        current = status.get("current", "")
         is_suspended = status.get("isSuspended", False)
         boost_charge_active, boost_charge_available = boost_flags(device)
 
@@ -1640,7 +1638,6 @@ class OctopusEVChargeStatusSensor(OctopusCoordinatorEntity, SensorEntity):
             "status_current_state": current_state,
             "status_normalized": _normalize_ev_status(current_state),
             "status_raw": current_state or None,
-            "status_connection_state": current,
             "status_is_suspended": is_suspended,
             "preferences_mode": preferences.get("mode"),
             "preferences_unit": preferences.get("unit"),
