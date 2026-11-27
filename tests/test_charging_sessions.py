@@ -23,17 +23,24 @@ NODE = {
 }
 
 
-def _response(nodes):
+def _response(nodes, has_previous=False):
     return {
         "data": {
             "devices": [
                 {
                     "id": "dev-1",
-                    "chargingSessions": {"edges": [{"node": n} for n in nodes]},
+                    "chargingSessions": {
+                        "pageInfo": {"hasPreviousPage": has_previous},
+                        "edges": [{"node": n} for n in nodes],
+                    },
                 }
             ]
         }
     }
+
+
+def _node(start):
+    return {**NODE, "start": start}
 
 
 def _api():
@@ -47,49 +54,108 @@ async def test_session_is_flattened():
     with patch.object(
         api, "_execute_graphql", new=AsyncMock(return_value=_response([NODE]))
     ):
-        session = await api.fetch_last_charging_session("A-1", "dev-1")
+        sessions = await api.fetch_charging_sessions("A-1", "dev-1")
 
-    assert session == {
-        "start": NODE["start"],
-        "end": NODE["end"],
-        "energy_kwh": 21.4,
-        "cost": 2.97,
-        "currency": "EUR",
-        "type": "SMART",
-        "soc_change": 35.0,
-        "soc_final": 80.0,
-    }
+    assert sessions == [
+        {
+            "start": NODE["start"],
+            "end": NODE["end"],
+            "energy_kwh": 21.4,
+            "cost": 2.97,
+            "currency": "EUR",
+            "type": "SMART",
+            "soc_change": 35.0,
+            "soc_final": 80.0,
+        }
+    ]
 
 
-async def test_session_is_cached_for_fifteen_minutes():
+async def test_first_fetch_reads_the_whole_history_in_pages():
     api = _api()
-    execute = AsyncMock(return_value=_response([NODE]))
+    execute = AsyncMock(
+        side_effect=[
+            _response([_node("2026-11-10T00:00:00Z")], has_previous=True),
+            _response([_node("2026-11-01T00:00:00Z")], has_previous=False),
+        ]
+    )
     with patch.object(api, "_execute_graphql", new=execute):
-        await api.fetch_last_charging_session("A-1", "dev-1")
-        await api.fetch_last_charging_session("A-1", "dev-1")
-        execute.assert_awaited_once()
+        sessions = await api.fetch_charging_sessions("A-1", "dev-1")
 
-        api._charging_sessions["dev-1"] = (0.0, None)  # expire the cache
-        await api.fetch_last_charging_session("A-1", "dev-1")
-        assert execute.await_count == 2
+    assert [s["start"] for s in sessions] == [
+        "2026-11-01T00:00:00Z",
+        "2026-11-10T00:00:00Z",
+    ]
+    first, second = (call.kwargs["variables"] for call in execute.await_args_list)
+    assert first["last"] == client_mod.CHARGING_SESSION_PAGE
+    assert first["before"] is None
+    # ``before`` is a DateTime: the start of the oldest session read so far.
+    assert second["before"] == "2026-11-10T00:00:00Z"
 
 
-async def test_no_sessions_returns_none_and_errors_keep_cache():
+async def test_history_paging_stops_at_the_page_cap():
+    api = _api()
+    execute = AsyncMock(
+        side_effect=[
+            _response([_node(f"2026-10-{30 - i:02d}T00:00:00Z")], has_previous=True)
+            for i in range(client_mod.CHARGING_SESSION_MAX_PAGES)
+        ]
+    )
+    with patch.object(api, "_execute_graphql", new=execute):
+        sessions = await api.fetch_charging_sessions("A-1", "dev-1")
+
+    assert execute.await_count == client_mod.CHARGING_SESSION_MAX_PAGES
+    assert len(sessions) == client_mod.CHARGING_SESSION_MAX_PAGES
+
+
+async def test_later_fetches_read_only_recent_sessions_after_the_cache():
+    api = _api()
+    execute = AsyncMock(return_value=_response([NODE], has_previous=True))
+    with patch.object(api, "_execute_graphql", new=execute):
+        await api.fetch_charging_sessions("A-1", "dev-1")  # history: 10 pages
+        calls = execute.await_count
+        await api.fetch_charging_sessions("A-1", "dev-1")  # cached
+        assert execute.await_count == calls
+
+        api._charging_sessions["dev-1"] = (0.0, [])  # expire the cache
+        await api.fetch_charging_sessions("A-1", "dev-1")
+
+    assert execute.await_count == calls + 1
+    variables = execute.await_args.kwargs["variables"]
+    assert variables["last"] == client_mod.CHARGING_SESSION_RECENT
+    assert variables["before"] is None
+
+
+async def test_no_sessions_returns_empty_and_errors_keep_cache():
     api = _api()
     with patch.object(
         api, "_execute_graphql", new=AsyncMock(return_value=_response([]))
     ):
-        assert await api.fetch_last_charging_session("A-1", "dev-1") is None
+        assert await api.fetch_charging_sessions("A-1", "dev-1") == []
 
-    api._charging_sessions["dev-1"] = (0.0, {"energy_kwh": 5.0})
+    api._charging_sessions["dev-1"] = (0.0, [{"energy_kwh": 5.0}])
     with patch.object(
         api,
         "_execute_graphql",
         new=AsyncMock(return_value={"errors": [{"message": "x"}]}),
     ):
-        assert await api.fetch_last_charging_session("A-1", "dev-1") == {
-            "energy_kwh": 5.0
-        }
+        assert await api.fetch_charging_sessions("A-1", "dev-1") == [
+            {"energy_kwh": 5.0}
+        ]
+
+
+async def test_error_during_history_keeps_pages_and_retries_later():
+    api = _api()
+    execute = AsyncMock(
+        side_effect=[
+            _response([_node("2026-11-10T00:00:00Z")], has_previous=True),
+            {"errors": [{"message": "rate limited"}]},
+        ]
+    )
+    with patch.object(api, "_execute_graphql", new=execute):
+        sessions = await api.fetch_charging_sessions("A-1", "dev-1")
+
+    assert [s["start"] for s in sessions] == ["2026-11-10T00:00:00Z"]
+    assert "dev-1" not in api._sessions_backfilled
 
 
 async def test_sessions_attached_only_to_ev_and_charge_points():
@@ -98,20 +164,26 @@ async def test_sessions_attached_only_to_ev_and_charge_points():
         {"id": "ev", "deviceType": "ELECTRIC_VEHICLES"},
         {"id": "hp", "deviceType": "HEAT_PUMPS"},
     ]
+    sessions = [{"energy_kwh": 1.0}, {"energy_kwh": 2.0}]
     with patch.object(
-        api,
-        "fetch_last_charging_session",
-        new=AsyncMock(return_value={"energy_kwh": 1.0}),
+        api, "fetch_charging_sessions", new=AsyncMock(return_value=sessions)
     ) as fetch:
         await api._attach_charging_sessions("A-1", devices)
 
     fetch.assert_awaited_once_with("A-1", "ev")
-    assert devices[0]["lastChargingSession"] == {"energy_kwh": 1.0}
+    assert devices[0]["chargingSessions"] == sessions
+    assert devices[0]["lastChargingSession"] == {"energy_kwh": 2.0}
     assert "lastChargingSession" not in devices[1]
 
 
-def test_query_requests_only_the_last_session():
-    assert "chargingSessions(last: 1)" in client_mod.LAST_CHARGING_SESSION_QUERY
+async def test_device_without_sessions_has_no_last_session():
+    api = _api()
+    devices = [{"id": "ev", "deviceType": "CHARGE_POINTS"}]
+    with patch.object(api, "fetch_charging_sessions", new=AsyncMock(return_value=[])):
+        await api._attach_charging_sessions("A-1", devices)
+
+    assert devices[0]["chargingSessions"] == []
+    assert devices[0]["lastChargingSession"] is None
 
 
 def test_sensor_reads_the_device_session():

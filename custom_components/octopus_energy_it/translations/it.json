@@ -275,6 +275,9 @@
     "number": {
       "ev_charge_target_number": {
         "name": "Carica da aggiungere a EV"
+      },
+      "smart_charging_discount": {
+        "name": "Sconto Intelligent Octopus"
       }
     },
     "select": {

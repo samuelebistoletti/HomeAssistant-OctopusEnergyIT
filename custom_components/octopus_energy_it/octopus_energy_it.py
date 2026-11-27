@@ -451,7 +451,10 @@ mutation krakenTokenRefresh($refreshToken: String!) {
 
 
 CHARGING_SESSION_FIELDS = """
-chargingSessions(last: 1) {
+chargingSessions(last: $last, before: $before) {
+  pageInfo {
+    hasPreviousPage
+  }
   edges {
     node {
       start
@@ -476,8 +479,10 @@ chargingSessions(last: 1) {
 }
 """
 
-LAST_CHARGING_SESSION_QUERY = f"""
-query LastChargingSession($accountNumber: String!, $deviceId: String!) {{
+CHARGING_SESSIONS_QUERY = f"""
+query ChargingSessions(
+  $accountNumber: String!, $deviceId: String!, $last: Int!, $before: DateTime
+) {{
   devices(accountNumber: $accountNumber, deviceId: $deviceId) {{
     id
     ... on SmartFlexChargePoint {{
@@ -495,6 +500,14 @@ READINGS_REFRESH = 30 * 60  # seconds
 
 # Charging sessions change rarely: refresh them at most this often.
 CHARGING_SESSION_REFRESH = 15 * 60  # seconds
+# Sessions requested on each refresh; a session lasts hours, so a handful is
+# enough between two refreshes 15 minutes apart.
+CHARGING_SESSION_RECENT = 10
+# Once per device and Home Assistant run, the whole history is read in pages
+# (``before`` is a DateTime, not a cursor), so the statistics can be backfilled
+# after a first install or a long downtime.
+CHARGING_SESSION_PAGE = 50
+CHARGING_SESSION_MAX_PAGES = 10
 
 SUBMIT_GAS_SELF_READING_MUTATION = """
 mutation SubmitGasSelfReading($input: SubmitGasSelfReadingInput!) {
@@ -772,8 +785,10 @@ class OctopusEnergyIT:
         self._dispatches_requested_at: dict[str, float] = {}
         # account_number -> (fetched_at, {"account", "products", "gas_products"})
         self._account_cache: dict[str, tuple[float, dict]] = {}
-        # device_id -> (fetched_at timestamp, last charging session or None)
-        self._charging_sessions: dict[str, tuple[float, dict | None]] = {}
+        # device_id -> (fetched_at timestamp, charging sessions, oldest first)
+        self._charging_sessions: dict[str, tuple[float, list[dict]]] = {}
+        # devices whose whole session history was read in this run
+        self._sessions_backfilled: set[str] = set()
         # HTTP status of the last request that failed with a plain 4xx response
         self._last_http_error: int | None = None
         # time.monotonic() before which login() does not contact the API
@@ -1334,7 +1349,7 @@ class OctopusEnergyIT:
     async def _attach_charging_sessions(
         self, account_number: str, devices: list[dict]
     ) -> None:
-        """Add ``lastChargingSession`` to every EV / charge point device."""
+        """Add ``chargingSessions`` and ``lastChargingSession`` to EVs and chargers."""
         targets = [
             device
             for device in devices
@@ -1343,20 +1358,21 @@ class OctopusEnergyIT:
         ]
         results = await asyncio.gather(
             *[
-                self.fetch_last_charging_session(account_number, device["id"])
+                self.fetch_charging_sessions(account_number, device["id"])
                 for device in targets
             ],
             return_exceptions=True,
         )
-        for device, session in zip(targets, results, strict=True):
-            if isinstance(session, Exception):
+        for device, sessions in zip(targets, results, strict=True):
+            if isinstance(sessions, Exception):
                 _LOGGER.warning(
                     "Failed to fetch charging sessions for device %s: %s",
                     device["id"],
-                    session,
+                    sessions,
                 )
                 continue
-            device["lastChargingSession"] = session
+            device["chargingSessions"] = sessions
+            device["lastChargingSession"] = sessions[-1] if sessions else None
 
     @staticmethod
     def flatten_connection(connection):
@@ -2130,35 +2146,69 @@ class OctopusEnergyIT:
 
         return measurements
 
-    async def fetch_last_charging_session(
+    async def fetch_charging_sessions(
         self, account_number: str, device_id: str
-    ) -> dict | None:
-        """Return the latest charging session of a device (cached for 15 minutes).
+    ) -> list[dict]:
+        """Return the charging sessions of a device, oldest first (cached 15 min).
 
-        The session is flattened to ``start``, ``end``, ``energy_kwh``,
-        ``cost``, ``currency``, ``type``, ``soc_change`` and ``soc_final``.
+        The first call for a device reads its whole history in pages; later
+        calls only the latest ``CHARGING_SESSION_RECENT`` sessions. Each session
+        is flattened by ``_flatten_charging_session``. On an error the cached
+        sessions are returned.
         """
         now = datetime.now(UTC).timestamp()
         cached = self._charging_sessions.get(device_id)
         if cached and now - cached[0] < CHARGING_SESSION_REFRESH:
             return cached[1]
 
-        response = await self._execute_graphql(
-            LAST_CHARGING_SESSION_QUERY,
-            variables={"accountNumber": account_number, "deviceId": device_id},
-        )
-        if not isinstance(response, dict) or response.get("errors"):
-            _LOGGER.debug("No charging sessions for device %s: %s", device_id, response)
-            return cached[1] if cached else None
+        backfill = device_id not in self._sessions_backfilled
+        nodes: list[dict] = []
+        before = None
+        for _page in range(CHARGING_SESSION_MAX_PAGES if backfill else 1):
+            response = await self._execute_graphql(
+                CHARGING_SESSIONS_QUERY,
+                variables={
+                    "accountNumber": account_number,
+                    "deviceId": device_id,
+                    "last": CHARGING_SESSION_PAGE
+                    if backfill
+                    else CHARGING_SESSION_RECENT,
+                    "before": before,
+                },
+            )
+            if not isinstance(response, dict) or response.get("errors"):
+                _LOGGER.debug(
+                    "No charging sessions for device %s: %s", device_id, response
+                )
+                if not nodes:
+                    return cached[1] if cached else []
+                backfill = False  # keep what was read, retry the history later
+                break
+            page, has_previous = self._session_page(response)
+            nodes = page + nodes
+            if not (backfill and has_previous and page and page[0].get("start")):
+                break
+            before = page[0]["start"]
 
-        session = None
+        if backfill:
+            self._sessions_backfilled.add(device_id)
+        sessions = [self._flatten_charging_session(node) for node in nodes]
+        self._charging_sessions[device_id] = (now, sessions)
+        return sessions
+
+    @staticmethod
+    def _session_page(response: dict) -> tuple[list[dict], bool]:
+        """Return the session nodes of a response and whether older ones exist."""
         for device in (response.get("data") or {}).get("devices") or []:
-            edges = ((device or {}).get("chargingSessions") or {}).get("edges") or []
+            connection = (device or {}).get("chargingSessions") or {}
+            edges = connection.get("edges") or []
             nodes = [edge["node"] for edge in edges if edge and edge.get("node")]
             if nodes:
-                session = self._flatten_charging_session(nodes[-1])
-        self._charging_sessions[device_id] = (now, session)
-        return session
+                has_previous = bool(
+                    (connection.get("pageInfo") or {}).get("hasPreviousPage")
+                )
+                return nodes, has_previous
+        return [], False
 
     @classmethod
     def _flatten_charging_session(cls, node: dict) -> dict:

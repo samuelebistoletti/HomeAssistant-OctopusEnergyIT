@@ -5,6 +5,12 @@ DOMAIN = "octopus_energy_it"
 CONF_EMAIL = "email"
 CONF_PASSWORD = "password"  # nosec B105 — config key name, not a hardcoded credential
 
+# Intelligent Octopus discount on the energy price of smart charges, in %.
+# Kept in the entry options and set with a number entity; the API does not
+# expose it (30 % in the July 2026 rules).
+CONF_SMART_CHARGING_DISCOUNT = "smart_charging_discount"
+DEFAULT_SMART_CHARGING_DISCOUNT = 30
+
 # Fast polling cycle (devices and planned dispatches); the account, tariffs
 # and readings are refreshed less often, see octopus_energy_it.py.
 UPDATE_INTERVAL = 30  # seconds

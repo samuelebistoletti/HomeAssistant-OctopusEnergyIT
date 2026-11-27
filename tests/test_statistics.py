@@ -13,8 +13,10 @@ from custom_components.octopus_energy_it import statistics as stats_mod
 from custom_components.octopus_energy_it.statistics import (
     Cursor,
     StatisticsImporter,
+    hourly_rows,
     period_rows,
     readings_to_points,
+    session_hours,
     statistic_id,
 )
 
@@ -237,4 +239,204 @@ class TestStatisticsImporter:
 
     async def test_nothing_to_import_without_readings(self, recorder):
         await StatisticsImporter(_hass()).async_import_account("A-1", {})
+        assert recorder.added == []
+
+
+# ---------------------------------------------------------------------------
+# Charging sessions (issue #36)
+# ---------------------------------------------------------------------------
+
+NOW = datetime(2026, 11, 27, 12, 0, tzinfo=UTC)
+
+
+def _utc(day, hour, minute=0):
+    return datetime(2026, 11, day, hour, minute, tzinfo=UTC)
+
+
+def _session(start, end, kwh, kind="SMART"):
+    return {
+        "start": start.isoformat(),
+        "end": end.isoformat() if end else None,
+        "energy_kwh": kwh,
+        "type": kind,
+    }
+
+
+class TestSessionHours:
+    def test_energy_is_spread_over_the_hours_in_proportion(self):
+        # 22:30-00:30: a quarter, a half and a quarter of the time.
+        sessions = [_session(_utc(5, 22, 30), _utc(6, 0, 30), 8.0)]
+        assert session_hours(sessions, "SMART", None, now=NOW) == {
+            _utc(5, 22): pytest.approx(2.0),
+            _utc(5, 23): pytest.approx(4.0),
+            _utc(6, 0): pytest.approx(2.0),
+        }
+
+    def test_session_ending_on_the_hour_does_not_touch_the_next_hour(self):
+        sessions = [_session(_utc(5, 1), _utc(5, 3), 4.0)]
+        assert session_hours(sessions, "SMART", None, now=NOW) == {
+            _utc(5, 1): pytest.approx(2.0),
+            _utc(5, 2): pytest.approx(2.0),
+        }
+
+    def test_only_finished_sessions_of_the_type_count(self):
+        sessions = [
+            _session(_utc(5, 1), _utc(5, 2), 1.0, kind="BOOST"),
+            _session(_utc(5, 3), None, 5.0),  # still charging
+            _session(_utc(27, 11), _utc(27, 13), 5.0),  # ends after now
+            {"start": None, "end": None, "energy_kwh": 1.0, "type": "SMART"},
+            _session(_utc(5, 4), _utc(5, 5), None),
+            _session(_utc(5, 6), _utc(5, 7), 2.0),
+        ]
+        assert session_hours(sessions, "SMART", None, now=NOW) == {
+            _utc(5, 6): pytest.approx(2.0)
+        }
+        assert session_hours(sessions, "BOOST", None, now=NOW) == {
+            _utc(5, 1): pytest.approx(1.0)
+        }
+
+    def test_sessions_already_stored_are_skipped(self):
+        sessions = [
+            _session(_utc(5, 1), _utc(5, 3), 4.0),  # last hour 02:00, stored
+            _session(_utc(5, 4), _utc(5, 5), 3.0),
+        ]
+        assert session_hours(sessions, "SMART", _utc(5, 2), now=NOW) == {
+            _utc(5, 4): pytest.approx(3.0)
+        }
+
+    def test_share_before_the_cursor_moves_to_the_first_free_hour(self):
+        # Stored up to 02:00; a new session started at 02:30.
+        sessions = [_session(_utc(5, 2, 30), _utc(5, 3, 30), 2.0)]
+        assert session_hours(sessions, "SMART", _utc(5, 2), now=NOW) == {
+            _utc(5, 3): pytest.approx(2.0)
+        }
+
+    def test_sessions_in_the_same_hour_add_up(self):
+        sessions = [
+            _session(_utc(5, 3, 0), _utc(5, 3, 30), 1.0),
+            _session(_utc(5, 3, 32), _utc(5, 4, 0), 0.5),
+        ]
+        assert session_hours(sessions, "SMART", None, now=NOW) == {
+            _utc(5, 3): pytest.approx(1.5)
+        }
+
+    def test_zero_length_session_books_its_energy(self):
+        sessions = [_session(_utc(5, 3, 10), _utc(5, 3, 10), 0.4)]
+        assert session_hours(sessions, "SMART", None, now=NOW) == {
+            _utc(5, 3): pytest.approx(0.4)
+        }
+
+
+class TestHourlyRows:
+    def test_rows_are_cumulative_from_the_cursor(self):
+        rows, cursor = hourly_rows(
+            {_utc(5, 2): 1.0, _utc(5, 1): 2.0}, Cursor(_utc(5, 0), 10.0)
+        )
+        assert rows == [
+            {"start": _utc(5, 1), "sum": 12.0},
+            {"start": _utc(5, 2), "sum": 13.0},
+        ]
+        assert cursor == Cursor(_utc(5, 2), 13.0)
+
+    def test_hours_up_to_the_cursor_are_not_rewritten(self):
+        rows, cursor = hourly_rows({_utc(5, 1): 2.0}, Cursor(_utc(5, 1), 10.0))
+        assert rows == []
+        assert cursor == Cursor(_utc(5, 1), 10.0)
+
+    def test_multiplier_turns_kwh_into_money(self):
+        rows, _ = hourly_rows({_utc(5, 1): 10.0}, Cursor(), multiplier=0.04)
+        assert rows == [{"start": _utc(5, 1), "sum": pytest.approx(0.4)}]
+
+
+def _charging_account(price=0.2, time_of_use=False):
+    return {
+        "electricity_consumption_charge": price,
+        "current_electricity_product": {"isTimeOfUse": time_of_use},
+        "devices": [
+            {
+                "id": "00000000-AB",
+                "name": "Trydan",
+                "chargingSessions": [
+                    _session(_utc(5, 1), _utc(5, 3), 10.0),
+                    _session(_utc(5, 4), _utc(5, 5), 1.0, kind="BOOST"),
+                ],
+            }
+        ],
+    }
+
+
+class TestChargingStatistics:
+    async def test_smart_boost_and_saving_series(self, recorder):
+        with patch.object(stats_mod.dt_util, "utcnow", return_value=NOW):
+            await StatisticsImporter(_hass()).async_import_account(
+                "A-1", _charging_account(), smart_charging_discount=0.3
+            )
+
+        series = {meta["statistic_id"]: (meta, rows) for meta, rows in recorder.added}
+        prefix = "octopus_energy_it:a_1_00000000_ab_"
+        smart_meta, smart_rows = series[prefix + "smart_charging"]
+        assert smart_meta["name"] == "Octopus Trydan smart charging"
+        assert smart_meta["unit_of_measurement"] == "kWh"
+        assert smart_meta["unit_class"] == "energy"
+        assert [row["sum"] for row in smart_rows] == [5.0, 10.0]
+
+        _boost_meta, boost_rows = series[prefix + "boost_charging"]
+        assert [row["sum"] for row in boost_rows] == [1.0]
+
+        saving_meta, saving_rows = series[prefix + "smart_charging_saving"]
+        assert saving_meta["unit_of_measurement"] == "EUR"
+        assert saving_meta["unit_class"] is None
+        # 10 kWh x 0.20 EUR/kWh x 30 %
+        assert saving_rows[-1]["sum"] == pytest.approx(0.6)
+
+    async def test_no_saving_without_a_single_rate_price(self, recorder):
+        with patch.object(stats_mod.dt_util, "utcnow", return_value=NOW):
+            await StatisticsImporter(_hass()).async_import_account(
+                "A-1",
+                _charging_account(time_of_use=True),
+                smart_charging_discount=0.3,
+            )
+
+        ids = [meta["statistic_id"] for meta, _ in recorder.added]
+        assert not any(i.endswith("smart_charging_saving") for i in ids)
+        assert any(i.endswith("smart_charging") for i in ids)
+
+    async def test_no_saving_with_a_zero_discount(self, recorder):
+        with patch.object(stats_mod.dt_util, "utcnow", return_value=NOW):
+            await StatisticsImporter(_hass()).async_import_account(
+                "A-1", _charging_account(), smart_charging_discount=0.0
+            )
+
+        ids = [meta["statistic_id"] for meta, _ in recorder.added]
+        assert not any(i.endswith("smart_charging_saving") for i in ids)
+
+    async def test_second_poll_imports_only_new_sessions(self, recorder):
+        importer = StatisticsImporter(_hass())
+        account = _charging_account()
+        with patch.object(stats_mod.dt_util, "utcnow", return_value=NOW):
+            await importer.async_import_account(
+                "A-1", account, smart_charging_discount=0.3
+            )
+            recorder.added.clear()
+            await importer.async_import_account(
+                "A-1", account, smart_charging_discount=0.3
+            )
+            assert recorder.added == []
+
+            account["devices"][0]["chargingSessions"].append(
+                _session(_utc(6, 1), _utc(6, 2), 4.0)
+            )
+            await importer.async_import_account(
+                "A-1", account, smart_charging_discount=0.3
+            )
+
+        series = {meta["statistic_id"]: rows for meta, rows in recorder.added}
+        smart = series["octopus_energy_it:a_1_00000000_ab_smart_charging"]
+        assert smart == [{"start": _utc(6, 1), "sum": 14.0}]
+
+    async def test_devices_without_sessions_are_ignored(self, recorder):
+        account = {"devices": [{"id": "hp", "chargingSessions": []}, {"id": None}]}
+        await StatisticsImporter(_hass()).async_import_account(
+            "A-1", account, smart_charging_discount=0.3
+        )
         assert recorder.added == []

@@ -197,6 +197,10 @@ def _install_stubs() -> None:
     _const = _stub("homeassistant.const")
     if not hasattr(_const, "UnitOfTime"):
         _const.UnitOfTime = types.SimpleNamespace(DAYS="d", HOURS="h", MINUTES="min")
+    if not hasattr(_const, "EntityCategory"):
+        _const.EntityCategory = types.SimpleNamespace(
+            CONFIG="config", DIAGNOSTIC="diagnostic"
+        )
     if not hasattr(_const, "Platform"):
         _const.Platform = types.SimpleNamespace(
             BINARY_SENSOR="binary_sensor",

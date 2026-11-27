@@ -2,7 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+- Charging session history as energy statistics (#36): for each EV or charger, the kWh of smart charges and of "Ricarica adesso" (boost) charges are imported as external statistics, spread over the hours each session lasted, from the day the device was linked. They match the app's *Analisi di ricarica* screen.
+- Estimated Intelligent Octopus saving statistic: smart kWh × the current energy price × the discount, for single-rate tariffs. The discount is not in the Kraken API, so a new **Intelligent Octopus discount** number entity (default 30 %) sets it. It is an estimate: Octopus bills the lower of the device and meter kWh.
+
 ### Changed
+- The charging sessions request now reads the latest 10 sessions every 15 minutes (was 1), and the whole history once per device after each Home Assistant start.
 - Migrated off Kraken API fields deprecated in November 2026: the device lifecycle status `status.current` (removal from 2027-05-17) and the ledger `balance` (removal from 2027-12-01, now read from `balanceDetails`). Without this, the main data query would start failing once Kraken removes them. Balances and boost availability are unchanged.
 - The `status_connection_state` attribute is removed from the EV charging status sensor: it carried the deprecated lifecycle status (`LIVE`, `ONBOARDING`…). Use `status_current_state`, which is more detailed. Update any template or automation that read it.
 - Minimum Home Assistant version raised to 2025.11.0 (was 2025.4.0): the energy statistics import added in 1.3.0 uses the `unit_class` statistics metadata field, which exists only from Home Assistant 2025.11.

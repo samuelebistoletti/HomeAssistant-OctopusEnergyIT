@@ -84,6 +84,10 @@ The `TokenManager` class in `octopus_energy_it.py` handles the full token lifecy
 - Tokens are stored **in memory only** — never persisted to disk or config entry
 - Never call `_get_graphql_client()` directly from platform code — always use the public API methods (e.g. `api.update_boost_charge()`) which handle automatic token refresh
 
+### Charging statistics
+
+`StatisticsImporter.async_import_charging` (`statistics.py`) books each device's finished sessions as hourly external statistics: smart kWh, boost kWh and, for single-rate tariffs, the estimated saving (smart kWh × energy price × discount). A session's energy is spread over the hours it lasted; a session counts as new when its last hour is after the stored cursor, and any share falling on an already stored hour moves to the next free one. The discount (%) is kept in the entry options (`CONF_SMART_CHARGING_DISCOUNT`, default 30) and set by a `number` entity; there is no update listener, so changing it does not reload the entry.
+
 ### Localization and Entities
 
 All entities expose `_attr_translation_key`. Translation files are at `translations/it.json` and `translations/en.json`. The helper functions `_normalize_supply_status` and `_normalize_ev_status` convert raw Kraken backend states into human-readable slugs.
@@ -240,13 +244,15 @@ The integration polls at two speeds:
 | Planned dispatches | every 30 s, max 4 requests/min in total (`DISPATCH_REQUESTS_PER_MINUTE`) | `fetch_flex_planned_dispatches(min_interval=...)` |
 | Account, balances, tariffs, contracts | every 15 min (`ACCOUNT_REFRESH`), cached otherwise | `COMPREHENSIVE_QUERY` |
 | Electricity and gas readings | cached 30 min (`READINGS_REFRESH`) | `fetch_electricity_measurements`, `fetch_gas_meter_readings` |
-| Last charging session | cached 15 min | `fetch_last_charging_session` |
+| Charging sessions (last session sensor, charging statistics) | cached 15 min: the latest `CHARGING_SESSION_RECENT` (10); the first fetch per device and run reads the whole history in pages of 50 (max 10) | `fetch_charging_sessions` |
 
 If the full query fails, the last account data is reused; if planned dispatches are rate-limited, the last plan is kept.
 
 ---
 
 ## Kraken quirks
+
+- **Charging sessions**: `chargingSessions(before:, after:)` take a **DateTime**, not a cursor; page back with `before: <start of the oldest session>`. `cost` is `null` and `stateOfChargeChange` is unreliable (often `null`, sometimes negative) on Italian accounts, and smart sessions are split at the ready-by time.
 
 - **Boost end time**: `updateBoostCharge` refuses an `endTime` that is not on :00 or :30, so `round_up_to_half_hour` rounds it up (`octopus_energy_it.py`).
 - **Rate-limited dispatches**: past 5 `flexPlannedDispatches` requests per minute Kraken answers `KT-CT-1199`; the integration caps itself at 4/min and keeps the last plan (see "Polling and API budget").

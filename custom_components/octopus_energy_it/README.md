@@ -146,6 +146,7 @@ I prezzi vengono aggiornati ogni ora. Se il sito delle tariffe non risponde, il 
 ### Number
 
 - `number.octopus_<account>_<device_id>_charge_target` – imposta il target di ricarica SmartFlex (10–100%, passi da 1). L'aggiornamento viene propagato al coordinatore condiviso, che mantiene coerenti sensori e controlli.
+- `number.octopus_<account>_smart_charging_discount` – sconto Intelligent Octopus (%, predefinito 30) usato per stimare il risparmio delle ricariche smart (vedi "Statistiche per la Dashboard Energia"). L'API non lo fornisce: allinealo al regolamento in vigore o alla bolletta. Creato solo se l'account ha un'auto o un caricatore.
 
 ### Select
 
@@ -183,7 +184,7 @@ Da **Impostazioni → Dispositivi e servizi → Octopus Energy Italy → ⋮ →
 - Stato di auto e caricatore e ricariche pianificate: ogni **30 secondi**.
 - Account, saldi, tariffe e contratti: ogni **15 minuti**.
 - Letture del contatore luce e gas: ogni **30 minuti** (Octopus le pubblica una volta al giorno o al mese).
-- Ultima sessione di ricarica: ogni **15 minuti**.
+- Sessioni di ricarica: ogni **15 minuti** (le ultime 10); al primo avvio viene letto tutto lo storico disponibile.
 
 Octopus limita le richieste per utente, e i limiti sono condivisi con l'app Octopus: per questo l'intervallo non è configurabile. Per un aggiornamento immediato usa l'azione `homeassistant.update_entity` su un'entità dell'integrazione. Il consumo dei limiti è visibile nella diagnostica.
 
@@ -196,8 +197,13 @@ Le letture del contatore arrivano all'API con qualche giorno di ritardo, quindi 
 | `octopus_energy_it:<account>_electricity_consumption` | kWh | Consumo elettrico giornaliero dalle letture del contatore |
 | `octopus_energy_it:<account>_electricity_cost` | EUR | Consumo × prezzo attuale; solo per tariffe monorarie (con le letture giornaliere non si può ripartire il consumo per fascia F1/F2/F3) |
 | `octopus_energy_it:<account>_gas_consumption` | m³ | Consumo gas tra due letture, attribuito al giorno della lettura precedente |
+| `octopus_energy_it:<account>_<dispositivo>_smart_charging` | kWh | Energia delle ricariche smart di un'auto o caricatore, distribuita sulle ore della sessione |
+| `octopus_energy_it:<account>_<dispositivo>_boost_charging` | kWh | Energia delle ricariche "Ricarica adesso" (boost), a prezzo pieno |
+| `octopus_energy_it:<account>_<dispositivo>_smart_charging_saving` | EUR | Risparmio **stimato**: kWh smart × prezzo attuale × sconto Intelligent Octopus; solo per tariffe monorarie |
 
 Per usarle: **Impostazioni → Dashboard → Energia**, aggiungi la statistica *Octopus … electricity consumption* come consumo dalla rete (e, se vuoi, *… electricity cost* come costo), e *Octopus … gas consumption* per il gas. L'import è incrementale: al primo avvio vengono recuperati gli ultimi giorni disponibili, poi solo i periodi nuovi.
+
+Le statistiche di ricarica riportano gli stessi dati della schermata *Analisi di ricarica* dell'app Octopus, a partire dal giorno in cui il dispositivo è stato collegato. Si possono mostrare con la card *Grafico statistiche*. Il risparmio è una stima: Octopus applica lo sconto in bolletta solo alla componente materia prima delle ricariche programmate dall'app e conteggia il minimo tra i kWh misurati dal dispositivo e quelli del contatore. L'API non fornisce né il costo delle sessioni né il risparmio. Cambiare lo sconto modifica solo il risparmio calcolato da quel momento in poi.
 
 ## Sviluppo locale
 

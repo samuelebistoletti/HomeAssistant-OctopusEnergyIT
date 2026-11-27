@@ -6,6 +6,9 @@ Energy dashboard the right days, the cumulative readings are imported as
 external statistics: the consumption between two readings is booked at the
 start of the period it belongs to (local midnight of the earlier reading).
 
+Charging sessions of EVs and chargers are imported the same way, as hourly
+rows: smart and boost kWh, and an estimated Intelligent Octopus saving.
+
 Imports are incremental and idempotent: only periods after the last stored
 statistic are written, continuing from its ``sum``. Home Assistant updates,
 rather than duplicates, a statistic written again for the same start.
@@ -13,9 +16,10 @@ rather than duplicates, a statistic written again for the same start.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 import itertools
 import logging
 import re
@@ -41,12 +45,23 @@ _LOGGER = logging.getLogger(__name__)
 ELECTRICITY = "electricity_consumption"
 ELECTRICITY_COST = "electricity_cost"
 GAS = "gas_consumption"
+SMART_CHARGING = "smart_charging"
+BOOST_CHARGING = "boost_charging"
+SMART_CHARGING_SAVING = "smart_charging_saving"
 
 _NAMES = {
     ELECTRICITY: "Octopus {account} electricity consumption",
     ELECTRICITY_COST: "Octopus {account} electricity cost",
     GAS: "Octopus {account} gas consumption",
+    SMART_CHARGING: "Octopus {account} smart charging",
+    BOOST_CHARGING: "Octopus {account} boost charging",
+    SMART_CHARGING_SAVING: "Octopus {account} estimated smart charging saving",
 }
+
+# Session types of SmartFlexChargingSession.type
+_SESSION_TYPES = {SMART_CHARGING: "SMART", BOOST_CHARGING: "BOOST"}
+
+_HOUR = timedelta(hours=1)
 
 
 @dataclass(frozen=True)
@@ -57,10 +72,81 @@ class Cursor:
     sum: float = 0.0
 
 
+def _object_id(value: str) -> str:
+    return re.sub(r"[^a-z0-9_]+", "_", value.lower()).strip("_")
+
+
 def statistic_id(account_number: str, kind: str) -> str:
     """Return the external statistic ID, e.g. ``octopus_energy_it:a_1234_gas_consumption``."""
-    account = re.sub(r"[^a-z0-9_]+", "_", account_number.lower()).strip("_")
-    return f"{DOMAIN}:{account}_{kind}"
+    return f"{DOMAIN}:{_object_id(account_number)}_{kind}"
+
+
+def device_series(account_number: str, device_id: str) -> str:
+    """Return the series prefix of a device, used in place of an account number."""
+    return f"{_object_id(account_number)}_{_object_id(device_id)}"
+
+
+def _floor_hour(moment: datetime) -> datetime:
+    return moment.replace(minute=0, second=0, microsecond=0)
+
+
+def session_hours(
+    sessions: Iterable[dict[str, Any]],
+    session_type: str,
+    after: datetime | None,
+    *,
+    now: datetime | None = None,
+) -> dict[datetime, float]:
+    """Spread the kWh of finished sessions over the UTC hours they lasted.
+
+    Only sessions of *session_type* that ended (and are not already stored,
+    i.e. whose last hour is after *after*) count. Each session's energy is
+    split in proportion to its overlap with every hour. The share of a new
+    session that falls on or before *after* (already written) moves to the
+    first free hour, so no energy is lost.
+    """
+    now = now or dt_util.utcnow()
+    hours: dict[datetime, float] = defaultdict(float)
+    for session in sessions:
+        if session.get("type") != session_type:
+            continue
+        start = dt_util.parse_datetime(session.get("start") or "")
+        end = dt_util.parse_datetime(session.get("end") or "")
+        energy = session.get("energy_kwh")
+        if start is None or end is None or energy is None or end > now:
+            continue
+        start, end = dt_util.as_utc(start), dt_util.as_utc(end)
+        last_hour = _floor_hour(max(start, end - timedelta(microseconds=1)))
+        if after is not None and last_hour <= after:
+            continue  # imported on an earlier run
+        first_free = after + _HOUR if after is not None else None
+        duration = (end - start).total_seconds()
+        hour = _floor_hour(start)
+        while hour <= last_hour:
+            if duration > 0:
+                overlap = min(end, hour + _HOUR) - max(start, hour)
+                share = float(energy) * overlap.total_seconds() / duration
+            else:
+                share = float(energy)
+            target = max(hour, first_free) if first_free is not None else hour
+            hours[target] += share
+            hour += _HOUR
+    return dict(hours)
+
+
+def hourly_rows(
+    hours: dict[datetime, float], cursor: Cursor, *, multiplier: float = 1.0
+) -> tuple[list[dict[str, Any]], Cursor]:
+    """Turn per-hour amounts into cumulative statistic rows after *cursor*."""
+    rows: list[dict[str, Any]] = []
+    running = cursor.sum
+    for hour in sorted(hours):
+        if cursor.start is not None and hour <= cursor.start:
+            continue
+        running += hours[hour] * multiplier
+        rows.append({"start": hour, "sum": round(running, 4)})
+    last_start = rows[-1]["start"] if rows else cursor.start
+    return rows, Cursor(last_start, running)
 
 
 def period_rows(
@@ -153,12 +239,31 @@ class StatisticsImporter:
         rows, cursor = period_rows(
             points, await self._cursor(stat_id), multiplier=multiplier
         )
+        return self._write(
+            stat_id,
+            _NAMES[kind].format(account=account_number),
+            rows,
+            cursor,
+            unit=unit,
+            unit_class=unit_class,
+        )
+
+    def _write(
+        self,
+        stat_id: str,
+        name: str,
+        rows: list[dict[str, Any]],
+        cursor: Cursor,
+        *,
+        unit: str,
+        unit_class: str | None,
+    ) -> int:
         if not rows:
             return 0
         metadata = StatisticMetaData(
             mean_type=StatisticMeanType.NONE,
             has_sum=True,
-            name=_NAMES[kind].format(account=account_number),
+            name=name,
             source=DOMAIN,
             statistic_id=stat_id,
             unit_class=unit_class,
@@ -171,10 +276,70 @@ class StatisticsImporter:
         _LOGGER.debug("Imported %d rows into %s", len(rows), stat_id)
         return len(rows)
 
-    async def async_import_account(
-        self, account_number: str, account: dict[str, Any]
+    async def async_import_charging(
+        self,
+        account_number: str,
+        device: dict[str, Any],
+        *,
+        price: float | None,
+        discount: float,
     ) -> None:
-        """Import electricity, electricity cost and gas statistics of an account."""
+        """Import smart and boost kWh of a device and the estimated saving.
+
+        The saving is smart kWh x energy price x *discount* (a fraction): an
+        estimate, since Octopus bills the lower of the device and meter kWh.
+        It needs a single-rate *price*; no saving is imported without one.
+        """
+        sessions = device.get("chargingSessions") or []
+        if not sessions:
+            return
+        series = device_series(account_number, device["id"])
+        label = device.get("name") or account_number
+        for kind, session_type in _SESSION_TYPES.items():
+            stat_id = statistic_id(series, kind)
+            cursor = await self._cursor(stat_id)
+            rows, cursor = hourly_rows(
+                session_hours(sessions, session_type, cursor.start), cursor
+            )
+            self._write(
+                stat_id,
+                _NAMES[kind].format(account=label),
+                rows,
+                cursor,
+                unit="kWh",
+                unit_class="energy",
+            )
+
+        if price is None or discount <= 0:
+            return
+        stat_id = statistic_id(series, SMART_CHARGING_SAVING)
+        cursor = await self._cursor(stat_id)
+        rows, cursor = hourly_rows(
+            session_hours(sessions, "SMART", cursor.start),
+            cursor,
+            multiplier=price * discount,
+        )
+        self._write(
+            stat_id,
+            _NAMES[SMART_CHARGING_SAVING].format(account=label),
+            rows,
+            cursor,
+            unit=self._hass.config.currency,
+            unit_class=None,
+        )
+
+    async def async_import_account(
+        self,
+        account_number: str,
+        account: dict[str, Any],
+        *,
+        smart_charging_discount: float = 0.0,
+    ) -> None:
+        """Import the electricity, gas and charging statistics of an account.
+
+        *smart_charging_discount* is the Intelligent Octopus discount as a
+        fraction (0.3 for 30 %).
+        """
         electricity = readings_to_points(
             account.get("electricity_readings") or [], date_key="readAt"
         )
@@ -204,6 +369,16 @@ class StatisticsImporter:
             await self.async_import(
                 account_number, GAS, gas, unit="m³", unit_class="volume"
             )
+
+        price = _flat_electricity_price(account)
+        for device in account.get("devices") or []:
+            if isinstance(device, dict) and device.get("id"):
+                await self.async_import_charging(
+                    account_number,
+                    device,
+                    price=price,
+                    discount=smart_charging_discount,
+                )
 
 
 def _flat_electricity_price(account: dict[str, Any]) -> float | None:

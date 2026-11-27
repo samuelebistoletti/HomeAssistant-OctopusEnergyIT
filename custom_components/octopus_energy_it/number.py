@@ -6,11 +6,12 @@ from typing import Any
 
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from .const import CONF_SMART_CHARGING_DISCOUNT, DEFAULT_SMART_CHARGING_DISCOUNT, DOMAIN
 from .entity import (
     CAPABILITY_PREFERENCES,
     OctopusCoordinatorEntity,
@@ -34,7 +35,8 @@ async def async_setup_entry(
         entry, coordinator, entry.runtime_data.account_number
     )
 
-    entities: list[OctopusDeviceChargeTargetNumber] = []
+    entities: list[NumberEntity] = []
+    discount_added = False
 
     for account_number in account_numbers:
         account_data = get_account_data(coordinator, account_number)
@@ -44,6 +46,17 @@ async def async_setup_entry(
         devices = account_data.get("devices") or []
         if not isinstance(devices, list):
             continue
+
+        if not discount_added and any(
+            isinstance(device, dict)
+            and device.get("deviceType") in ("ELECTRIC_VEHICLES", "CHARGE_POINTS")
+            for device in devices
+        ):
+            # One per login: the discount is a setting of the config entry.
+            entities.append(
+                OctopusSmartChargingDiscountNumber(account_number, coordinator, entry)
+            )
+            discount_added = True
 
         for device in devices:
             if not isinstance(device, dict):
@@ -161,3 +174,41 @@ class OctopusDeviceChargeTargetNumber(
             target_percentage=target_percentage, target_time=f"{target_time}:00"
         )
         await self.coordinator.async_request_refresh()
+
+
+class OctopusSmartChargingDiscountNumber(OctopusCoordinatorEntity, NumberEntity):
+    """Intelligent Octopus discount used for the estimated saving statistics.
+
+    The API does not expose it, so the user aligns it with the Octopus rules
+    or bill. The value lives in the config entry options; changing it only
+    affects the saving booked from then on.
+    """
+
+    _attr_translation_key = "smart_charging_discount"
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_native_unit_of_measurement = "%"
+    _attr_native_min_value = 0
+    _attr_native_max_value = 100
+    _attr_native_step = 1
+    _attr_mode = NumberMode.BOX
+    _attr_icon = "mdi:sale"
+
+    def __init__(self, account_number: str, coordinator, entry: ConfigEntry) -> None:
+        super().__init__(account_number, coordinator)
+        self._entry = entry
+        self._attr_unique_id = f"octopus_{account_number}_smart_charging_discount"
+
+    @property
+    def native_value(self) -> float:
+        return float(
+            self._entry.options.get(
+                CONF_SMART_CHARGING_DISCOUNT, DEFAULT_SMART_CHARGING_DISCOUNT
+            )
+        )
+
+    async def async_set_native_value(self, value: float) -> None:
+        self.hass.config_entries.async_update_entry(
+            self._entry,
+            options={**self._entry.options, CONF_SMART_CHARGING_DISCOUNT: int(value)},
+        )
+        self.async_write_ha_state()

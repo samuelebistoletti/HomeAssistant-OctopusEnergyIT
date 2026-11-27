@@ -14,7 +14,12 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import DOMAIN, UPDATE_INTERVAL
+from .const import (
+    CONF_SMART_CHARGING_DISCOUNT,
+    DEFAULT_SMART_CHARGING_DISCOUNT,
+    DOMAIN,
+    UPDATE_INTERVAL,
+)
 from .data_processor import process_api_data
 from .octopus_energy_it import OctopusEnergyIT
 from .statistics import StatisticsImporter
@@ -116,6 +121,14 @@ class OctopusEnergyITDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]
         self.public_products_coordinator = public_products_coordinator
         self.statistics = StatisticsImporter(hass)
 
+    @property
+    def smart_charging_discount(self) -> float:
+        """Return the Intelligent Octopus discount in % from the entry options."""
+        options = self.config_entry.options if self.config_entry else {}
+        return float(
+            options.get(CONF_SMART_CHARGING_DISCOUNT, DEFAULT_SMART_CHARGING_DISCOUNT)
+        )
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data for all accounts; failing accounts are skipped."""
         if self.public_products_coordinator.data is None:
@@ -149,7 +162,9 @@ class OctopusEnergyITDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]
             )
             try:
                 await self.statistics.async_import_account(
-                    account_number, processed[account_number]
+                    account_number,
+                    processed[account_number],
+                    smart_charging_discount=self.smart_charging_discount / 100,
                 )
             except Exception:
                 # Statistics are a best-effort extra: never fail the update.

@@ -7,14 +7,13 @@ personal data, credentials, account numbers or machine paths. "Now" is rewritten
 ## Now (2026-11-27)
 
 - **1.3.0** released. Unreleased on `main` (not yet versioned): minimum HA 2025.11.0 (needed by the statistics
-  `unit_class` field), `claude-code-action` pinned to a commit SHA (CodeQL alerts #15-#17), `.build/` removed, and the
-  migration off the Kraken fields deprecated in November 2026 (`status.current`, ledger `balance`); the schema fixture
-  was refreshed on 2026-11-27.
+  `unit_class` field), `claude-code-action` pinned to a commit SHA (CodeQL alerts #15-#17), `.build/` removed, the
+  migration off the Kraken fields deprecated in November 2026 (`status.current`, ledger `balance`), and #36: charging
+  session history (smart / boost kWh) and the estimated Intelligent Octopus saving as external statistics, with a
+  discount number entity. Verified live on the dev HA.
 - Kraken deprecated the OCPP onboarding API (`ocppDetails`, `ocppConnection`, `ocppAuthentication`; removal from
   2027-01-23): do not build on it.
-- Next step: #36, import the per-device `chargingSessions` history (SMART vs BOOST kWh) as external
-  statistics, plus an estimated Intelligent Octopus saving (smart kWh x energy price x discount; the discount is not in
-  the API, 30 % in the July 2026 rules). Asked for by a user who wants the savings the app shows.
+- No open issues. Next step: decide the next release (1.4.0, with #36), or pick new work.
 
 ## Operating facts
 
